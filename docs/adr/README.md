@@ -11,6 +11,7 @@ aplica (em `policies/`) tenha uma origem revisável.
 | --- | --- | --- | --- |
 | [0001](0001-dotnet8-fora-do-lote-padrao.md) | `dotnet8` fora do lote padrão, sem sair do catálogo | Proposto | `policies/operations/health.json` → `exceptions`; lint `scripts/pipeline/catalog/default_batch.py` |
 | [0002](0002-sigstore-trust-model.md) | Modelo de confiança Sigstore e decisão de uso corporativo | PROPOSED — decisão corporativa EXTERNAL / PENDING | Documenta signing/verification existentes; não altera controles |
+| [0003](0003-controles-seguranca-workflows-federados.md) | Controles de segurança da fábrica em workflows federados | Premissa de autoria definida; PROPOSED para requisitos/aceites externos | Documenta controles e responsabilidades; nenhuma mudança de gates |
 
 Estado: **Proposto** enquanto o PR que introduz o ADR aguarda revisão de code
 owner; **Aceito** com a aprovação e o merge; **Substituído** quando outro ADR
@@ -33,6 +34,7 @@ diretório, link simbólico em qualquer componente do caminho (`docs`,
 `docs/adr` ou o arquivo), arquivo que não resolva fisicamente para dentro
 deste diretório na raiz canônica do repositório, ou arquivo sem esse título.
 
-Decisões previstas pelo roadmap consolidado e ainda sem ADR: papel do scanner
-corporativo (AppSec), destino e SLA de alerta (Containers Products).
+Decisões previstas pelo roadmap consolidado e ainda sem ADR: destino e SLA
+de alerta (Containers Products). Requisitos de segurança/scanner da fábrica
+federada permanecem a confirmar no ADR-0003.
 A aceitação corporativa do Sigstore público permanece pendente no ADR-0002.

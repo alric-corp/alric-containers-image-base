@@ -128,6 +128,12 @@ Referências: [contratos e limites de reuso](https://docs.github.com/en/actions/
 
 **Migração futura para o modelo corporativo — Veracode SCA — 10/09/2026**
 
+**Nota de escopo de 13/09/2026:** a direção e os checklists abaixo são
+hipóteses históricas anteriores ao [ADR-0003 / P1-06](adr/0003-controles-seguranca-workflows-federados.md).
+Não constituem backlog obrigatório de migração para workflows governados ou
+Veracode. Autoria/sustentação, aplicabilidade dos requisitos e uso limitado
+dos levantamentos seguem o ADR canônico; o registro original fica preservado.
+
 **Status: planejamento para a adoção corporativa; integração ainda não implementada nem homologada.** A avaliação parte do levantamento de SCA Container fornecido pelo responsável, reconstruído a partir de capturas de tela. Os YAML/scripts executáveis e a versão homologada da esteira corporativa ainda precisam ser conferidos. Os requisitos abaixo registram o contrato desejado para esta fábrica; não constituem uma auditoria do serviço corporativo. Identificadores de infraestrutura, credenciais e o levantamento interno não são reproduzidos neste repositório.
 
 **Direção proposta:** aproveitar os workflows/actions corporativos de segurança e sua gestão de credenciais, política e observabilidade, adaptando a entrega do candidato e a interpretação das evidências. Preservar Melange/Apko, o build OCI único, os contratos funcionais, a publicação sem rebuild e o controle de `stable`. A adaptação da orquestração parece moderada; a compatibilidade e a cobertura do scanner são a principal incerteza e podem exigir uma mudança maior no serviço de scan. A segregação de M09/M12 já implementada não equivale à conclusão desta migração.

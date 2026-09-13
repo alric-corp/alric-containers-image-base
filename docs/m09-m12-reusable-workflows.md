@@ -5,6 +5,11 @@ compartilhável para `alric-corp/alric-containers-reusable-workflows` e mantém 
 de release no produto. O primeiro pacote tem contrato Apko/OCI explícito;
 não promete suportar qualquer pipeline Docker sem adaptação.
 
+Autoria/sustentação e requisitos corporativos aplicáveis são tratados no
+[ADR-0003 / P1-06](adr/0003-controles-seguranca-workflows-federados.md).
+O reuso técnico descrito aqui não transfere a manutenção da fábrica a Pipelines
+nem homologa seus controles corporativamente.
+
 | Componente | Destino | Motivo |
 | --- | --- | --- |
 | Melange + Apko + scan amd64/arm64 + artifact aprovado | Reusable `validate-apko-images.yml` | Sequência reaproveitável para produtos que implementem o contrato Apko |

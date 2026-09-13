@@ -18,13 +18,17 @@ from tools.check_ai_context import link_targets
 ROOT = Path(__file__).resolve().parents[4]
 CONTRACT = ROOT / "docs/consumer-verification-contract.md"
 TRUST_ADR = ROOT / "docs/adr/0002-sigstore-trust-model.md"
+FEDERATED_ADR = ROOT / "docs/adr/0003-controles-seguranca-workflows-federados.md"
 SPEC = ROOT / "specs/2026-09-13-consumer-contract-rfc-refresh"
 TRUST_SPEC = ROOT / "specs/2026-09-13-sigstore-trust-model-adr"
+FEDERATED_SPEC = ROOT / "specs/2026-09-13-federated-factory-security-controls"
 DOCUMENTS = [ROOT / name for name in (
     "README.md", "RFC-013-Image-Base-Completa-com-Mermaid.md", "docs/README.md",
     "docs/repository-architecture.md", "docs/m09-m12-reusable-workflows.md",
     "docs/adr/README.md",
-)] + [CONTRACT, TRUST_ADR] + [directory / name for directory in (SPEC, TRUST_SPEC) for name in (
+)] + [CONTRACT, TRUST_ADR, FEDERATED_ADR] + [directory / name for directory in (
+    SPEC, TRUST_SPEC, FEDERATED_SPEC,
+) for name in (
     "spec.md", "acceptance.md", "plan.md", "tasks.md", "evidence.md", "handoff.md",
 )]
 

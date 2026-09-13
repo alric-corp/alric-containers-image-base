@@ -12,6 +12,7 @@
 | Certificados, aquisição e pins | [scripts/certificates](../../scripts/certificates/) |
 | Políticas revisadas | [policies](../../policies/README.md) |
 | Decisões pontuais (ADR) e seu estado | [docs/adr](../adr/README.md) |
+| Premissa de autoria/sustentação e requisitos da fábrica federada | [ADR-0003 / P1-06](../adr/0003-controles-seguranca-workflows-federados.md) |
 | Contrato com a biblioteca | [Workflows reutilizáveis](../m09-m12-reusable-workflows.md) |
 
 Composição fica em frameworks/, distroless/ e melange/. Regras de domínio

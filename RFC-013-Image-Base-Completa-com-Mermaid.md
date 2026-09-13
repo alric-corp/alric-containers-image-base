@@ -187,7 +187,7 @@ histórica permanece limitada ao commit/run em que foi obtida.
 | M15 | Recovery | IMPLEMENTED | Verificação, re-scan e read-back sem bypass; quarentena exige PR explícito |
 | M16 | Hardening / revisão | PARTIAL | Lint e CODEOWNERS; sem alegar enforcement contra administrador no sandbox |
 | M09/M12 | Reusable workflows | IMPLEMENTED | SHA atual dos chamadores: 7a9b055a462eeb8552d3404c26538b44e8ccd83f; integração verifica checkout e permissões |
-| — | Scanner / Veracode | EXTERNAL | Decisão de AppSec; Trivy continua o gate vigente |
+| — | Requisitos de segurança / scanner | EXTERNAL — a confirmar | [P1-06](docs/adr/0003-controles-seguranca-workflows-federados.md); Trivy continua o gate vigente; aplicabilidade de integração adicional não presumida |
 
 ### Fatias recentes da RFC-013
 
@@ -197,6 +197,7 @@ histórica permanece limitada ao commit/run em que foi obtida.
 | P1-02 — partial retry | IMPLEMENTED; merge PR #55 | PENDING — requer rerun real com evidence anterior e mesmo digest |
 | P1-03 — Wolfi defense-in-depth | IMPLEMENTED; merge PR #54 | PENDING — caminho mínimo Go observado no run 34735740791; aceite formal não declarado |
 | P1-05 — Sigstore Trust Model ADR | [ADR-0002](docs/adr/0002-sigstore-trust-model.md) PROPOSED; documenta o modelo existente | Decisão corporativa EXTERNAL / PENDING; sem novo controle ou aceite hospedado |
+| P1-06 — controles em workflows federados | [ADR-0003](docs/adr/0003-controles-seguranca-workflows-federados.md); premissa de autoria/sustentação separada dos requisitos externos | Requisitos e primeiro aceite corporativo pendentes; somente documentação |
 | P1-09 / P1-10 — contrato e estado da RFC | Documentação proposta nesta revisão | Revisão independente posterior; nenhum enforcement novo |
 
 As specs originais conservam seus snapshots pré-merge. Para P1-03, a consulta
@@ -246,7 +247,7 @@ os nomes de destino nesta RFC são planejamento, não infraestrutura implantada.
 | Corporate ECR | EXTERNAL — pendente | Cloud: registry, resource/lifecycle policies, Org IDs e imutabilidade, testes autenticados |
 | Corporate egress/mirror | EXTERNAL — pendente | Cloud/Network/Security, P0-03: boundary aprovada; isolamento Wolfi quando requerido |
 | Sigstore decision | EXTERNAL — pendente | Segurança/AppSec: [ADR-0002 PROPOSED](docs/adr/0002-sigstore-trust-model.md), raízes/identidades, metadados públicos e processamento externo de SPDX, ou alternativa aprovada |
-| Scanner/Veracode decision | EXTERNAL — pendente | AppSec: cobertura Wolfi/multiarch, policy, re-scan e formato de evidence |
+| Scanner/Veracode decision | EXTERNAL — pendente | AppSec/Segurança: adequação de Trivy e aplicabilidade de integração adicional à fábrica federada, conforme [P1-06](docs/adr/0003-controles-seguranca-workflows-federados.md); política das aplicações é separada |
 | External alert destination | EXTERNAL — pendente | Containers Products: canal/owner/escalonamento; external_destination permanece null |
 | Corporate SLA | EXTERNAL — pendente | Containers Products: medir correção upstream até stable e pactuar prazo |
 | First corporate E2E run | EXTERNAL — pendente | Owners conjuntos: build → scan/contrato → publish/attest → promote/read-back → consumo/recovery |
@@ -255,6 +256,11 @@ No sandbox, `enforce_admins` permanece desligado por decisão explícita;
 a exigência de habilitá-lo pertence ao P0-03. Ver
 [Capability Matrix](docs/ai/CAPABILITY-MATRIX.md). Não há alegação de merge
 sem bypass administrativo no ambiente pessoal.
+
+A premissa de autoria/sustentação e as perguntas corporativas do P1-06 estão
+no [ADR-0003](docs/adr/0003-controles-seguranca-workflows-federados.md).
+Levantamentos de outros fluxos são referências de interfaces e práticas;
+não estabelecem requisitos obrigatórios nem comprovam homologação da fábrica.
 
 ### 3. Operação, cobertura e evidence
 
