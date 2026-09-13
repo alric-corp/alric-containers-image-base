@@ -112,7 +112,7 @@ flowchart TD
     WRITE --> READBACK["ECR read-back: observado == candidato"]
     READBACK --> STABLE["promoted=true"]
     REC["recover-stable.yml (manual)"] --> RV["Assinatura/provenance + re-scan<br/>retag + read-back + evidence de recovery"]
-    HEALTH["pipeline-health.yml (diário)"] --> ALERT["idade de stable, cron real,<br/>fila, disponibilidade dos pins"]
+    HEALTH["pipeline-health.yml (diário)"] --> ALERT["proxies de publicação/stable, lacunas de cron,<br/>intervalo criação/início, disponibilidade dos pins"]
 ```
 
 Todo framework precisa do próprio artifact validado e do gate comum de trust.
@@ -198,6 +198,7 @@ histórica permanece limitada ao commit/run em que foi obtida.
 | P1-03 — Wolfi defense-in-depth | IMPLEMENTED; merge PR #54 | PENDING — caminho mínimo Go observado no run 34735740791; aceite formal não declarado |
 | P1-05 — Sigstore Trust Model ADR | [ADR-0002](docs/adr/0002-sigstore-trust-model.md) PROPOSED; documenta o modelo existente | Decisão corporativa EXTERNAL / PENDING; sem novo controle ou aceite hospedado |
 | P1-06 — controles em workflows federados | [ADR-0003](docs/adr/0003-controles-seguranca-workflows-federados.md); premissa de autoria/sustentação separada dos requisitos externos | Requisitos e primeiro aceite corporativo pendentes; somente documentação |
+| P1-08 — contrato operacional, alertas e proposta de SLO/SLA | [Contrato operacional](docs/m11-m04-operational-health.md) proposto nesta fatia; mecanismos existentes preservados | Operação observada em amostra datada na [evidence](specs/2026-09-13-operational-readiness-slo/evidence.md); entrega externa, responsáveis e SLA corporativos pendentes; não encerra o P1-08 completo |
 | P1-09 / P1-10 — contrato e estado da RFC | Documentação proposta nesta revisão | Revisão independente posterior; nenhum enforcement novo |
 
 As specs originais conservam seus snapshots pré-merge. Para P1-03, a consulta
@@ -249,7 +250,7 @@ os nomes de destino nesta RFC são planejamento, não infraestrutura implantada.
 | Sigstore decision | EXTERNAL — pendente | Segurança/AppSec: [ADR-0002 PROPOSED](docs/adr/0002-sigstore-trust-model.md), raízes/identidades, metadados públicos e processamento externo de SPDX, ou alternativa aprovada |
 | Scanner/Veracode decision | EXTERNAL — pendente | AppSec/Segurança: adequação de Trivy e aplicabilidade de integração adicional à fábrica federada, conforme [P1-06](docs/adr/0003-controles-seguranca-workflows-federados.md); política das aplicações é separada |
 | External alert destination | EXTERNAL — pendente | Containers Products: canal/owner/escalonamento; external_destination permanece null |
-| Corporate SLA | EXTERNAL — pendente | Containers Products: medir correção upstream até stable e pactuar prazo |
+| Corporate SLA | EXTERNAL — pendente | Containers Products e responsáveis/consumidores: avaliar indicadores, cobertura e dependências conforme [P1-08](docs/m11-m04-operational-health.md); metas e prazo de atualização a negociar, sem garantia de correção upstream |
 | First corporate E2E run | EXTERNAL — pendente | Owners conjuntos: build → scan/contrato → publish/attest → promote/read-back → consumo/recovery |
 
 No sandbox, `enforce_admins` permanece desligado por decisão explícita;
@@ -266,7 +267,10 @@ não estabelecem requisitos obrigatórios nem comprovam homologação da fábric
 
 Renovate está configurado, mas sua instalação/ativação depende do administrador.
 Monitor de saúde e drift são implementados; não constituem entrega de alerta
-externo nem SLA corporativo. `dotnet8` permanece excluído por
+externo nem SLA corporativo. O [contrato operacional P1-08](docs/m11-m04-operational-health.md)
+explicita proxies baseados em jobs, limites da coleta, scheduler compartilhado,
+SLIs e SLOs apenas propostos. Relatório/falha de job não comprova entrega ou
+reconhecimento de alerta; `external_destination` continua null. `dotnet8` permanece excluído por
 [ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md); sua reentrada exige
 os critérios do ADR, sem flexibilizar Trivy.
 
