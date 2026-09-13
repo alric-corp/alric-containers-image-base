@@ -10,11 +10,16 @@ aplica (em `policies/`) tenha uma origem revisável.
 | ADR | Decisão | Estado | Aplicada por |
 | --- | --- | --- | --- |
 | [0001](0001-dotnet8-fora-do-lote-padrao.md) | `dotnet8` fora do lote padrão, sem sair do catálogo | Proposto | `policies/operations/health.json` → `exceptions`; lint `scripts/pipeline/catalog/default_batch.py` |
+| [0002](0002-sigstore-trust-model.md) | Modelo de confiança Sigstore e decisão de uso corporativo | PROPOSED — decisão corporativa EXTERNAL / PENDING | Documenta signing/verification existentes; não altera controles |
 
 Estado: **Proposto** enquanto o PR que introduz o ADR aguarda revisão de code
 owner; **Aceito** com a aprovação e o merge; **Substituído** quando outro ADR
 o revoga. Um ADR com `review_by` na política vencido gera alerta no job de
 saúde até ser revisado (renovado com nova data ou revogado).
+
+Para um ADR que dependa de **decisão externa**, como o ADR-0002, aprovação e
+merge documental não concedem aceite corporativo. Seu estado PROPOSED
+permanece até registro explícito do owner externo indicado no próprio ADR.
 
 Convenção: um arquivo `docs/adr/NNNN-titulo-em-minusculas.md` (quatro dígitos,
 kebab-case, direto neste diretório), cuja primeira linha é o título
@@ -29,5 +34,5 @@ diretório, link simbólico em qualquer componente do caminho (`docs`,
 deste diretório na raiz canônica do repositório, ou arquivo sem esse título.
 
 Decisões previstas pelo roadmap consolidado e ainda sem ADR: papel do scanner
-corporativo (AppSec), aceitação do Sigstore público (Segurança), destino e SLA
-de alerta (Containers Products).
+corporativo (AppSec), destino e SLA de alerta (Containers Products).
+A aceitação corporativa do Sigstore público permanece pendente no ADR-0002.

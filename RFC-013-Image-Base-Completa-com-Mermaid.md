@@ -196,6 +196,7 @@ histórica permanece limitada ao commit/run em que foi obtida.
 | P1-01 — stable read-back | IMPLEMENTED; confirmação ECR antes de promoted=true | PASS — go1-26 e go1-26-dev no [run 34768459323](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34768459323), commit e3ed682 |
 | P1-02 — partial retry | IMPLEMENTED; merge PR #55 | PENDING — requer rerun real com evidence anterior e mesmo digest |
 | P1-03 — Wolfi defense-in-depth | IMPLEMENTED; merge PR #54 | PENDING — caminho mínimo Go observado no run 34735740791; aceite formal não declarado |
+| P1-05 — Sigstore Trust Model ADR | [ADR-0002](docs/adr/0002-sigstore-trust-model.md) PROPOSED; documenta o modelo existente | Decisão corporativa EXTERNAL / PENDING; sem novo controle ou aceite hospedado |
 | P1-09 / P1-10 — contrato e estado da RFC | Documentação proposta nesta revisão | Revisão independente posterior; nenhum enforcement novo |
 
 As specs originais conservam seus snapshots pré-merge. Para P1-03, a consulta
@@ -244,7 +245,7 @@ os nomes de destino nesta RFC são planejamento, não infraestrutura implantada.
 | Corporate OIDC/IAM | EXTERNAL — pendente | Cloud/Security: trust e permission policies da origem/conta novas, negativos reais |
 | Corporate ECR | EXTERNAL — pendente | Cloud: registry, resource/lifecycle policies, Org IDs e imutabilidade, testes autenticados |
 | Corporate egress/mirror | EXTERNAL — pendente | Cloud/Network/Security, P0-03: boundary aprovada; isolamento Wolfi quando requerido |
-| Sigstore decision | EXTERNAL — pendente | Security: issuer/identidades e política de serviço/log público ou alternativa aprovada |
+| Sigstore decision | EXTERNAL — pendente | Segurança/AppSec: [ADR-0002 PROPOSED](docs/adr/0002-sigstore-trust-model.md), raízes/identidades, metadados públicos e processamento externo de SPDX, ou alternativa aprovada |
 | Scanner/Veracode decision | EXTERNAL — pendente | AppSec: cobertura Wolfi/multiarch, policy, re-scan e formato de evidence |
 | External alert destination | EXTERNAL — pendente | Containers Products: canal/owner/escalonamento; external_destination permanece null |
 | Corporate SLA | EXTERNAL — pendente | Containers Products: medir correção upstream até stable e pactuar prazo |

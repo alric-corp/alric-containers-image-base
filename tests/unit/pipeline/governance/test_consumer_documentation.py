@@ -17,11 +17,14 @@ from tools.check_ai_context import link_targets
 
 ROOT = Path(__file__).resolve().parents[4]
 CONTRACT = ROOT / "docs/consumer-verification-contract.md"
+TRUST_ADR = ROOT / "docs/adr/0002-sigstore-trust-model.md"
 SPEC = ROOT / "specs/2026-09-13-consumer-contract-rfc-refresh"
+TRUST_SPEC = ROOT / "specs/2026-09-13-sigstore-trust-model-adr"
 DOCUMENTS = [ROOT / name for name in (
     "README.md", "RFC-013-Image-Base-Completa-com-Mermaid.md", "docs/README.md",
     "docs/repository-architecture.md", "docs/m09-m12-reusable-workflows.md",
-)] + [CONTRACT] + [SPEC / name for name in (
+    "docs/adr/README.md",
+)] + [CONTRACT, TRUST_ADR] + [directory / name for directory in (SPEC, TRUST_SPEC) for name in (
     "spec.md", "acceptance.md", "plan.md", "tasks.md", "evidence.md", "handoff.md",
 )]
 
@@ -71,8 +74,13 @@ class ConsumerDocumentationTests(unittest.TestCase):
             ("Repository de origem", repository),
             ("Repository ID", self.policy[repository]["repository_id"]),
             ("Owner ID", self.policy[repository]["owner_id"]),
+            ("Certificate identity Cosign", self.variables["CERT_IDENTITY"]),
+            ("OIDC issuer Cosign", self.variables["OIDC_ISSUER"]),
+            ("Source ref", "refs/heads/main"),
         ):
-            self.assertIn(f"| {label} | `{value}` |", self.document)
+            for document in (CONTRACT, TRUST_ADR):
+                with self.subTest(document=document.relative_to(ROOT), field=label):
+                    self.assertIn(f"| {label} | `{value}` |", document.read_text(encoding="utf-8"))
 
     def test_architecture_docs_reference_the_current_shared_workflow_pin(self):
         pin = dependencies(ROOT)[0]["ref"]
