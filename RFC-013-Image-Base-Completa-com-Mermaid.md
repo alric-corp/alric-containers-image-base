@@ -8,7 +8,7 @@
 | Possíveis estados | Aceito - Obsoleto - Substituído |
 | Owner | Containers Products |
 | Data | 01/09/2026 |
-| Última revisão técnica | 10/09/2026 — estado do produto após 25 entregas sobre a POC |
+| Última revisão técnica | 13/09/2026 — main `e3ed68259f66af41e8054a4c0ac29a54082ddd60`, após merge do P1-02 |
 | Prontidão para produção | **Não** — ver [Prontidão para produção](#prontidão-para-produção) |
 | Impacto | Alto |
 | Criticidade | Alta |
@@ -18,6 +18,10 @@ Esta RFC descreve o que a plataforma entrega hoje e o que separa esse estado
 de uma liberação para produção. O caminho até aqui — diagnóstico original da
 POC, cada entrega, achados reais e links de PR/run — está preservado na
 íntegra em [docs/rfc-013-historico-de-entregas.md](docs/rfc-013-historico-de-entregas.md).
+A reconciliação desta revisão e suas fontes estão na
+[spec P1-09/P1-10](specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md).
+Implementado significa presente no código identificado; não implica aceite
+hospedado de toda fatia nem liberação corporativa.
 
 ## TL;DR
 
@@ -66,23 +70,25 @@ de release em volta delas.
 
 | Mantido da POC | Substituído ou acrescentado |
 | --- | --- |
-| Melange + Apko sobre pacotes Wolfi, sem Dockerfile de base | Docker Hub → ECR corporativo, um repositório por framework, tags imutáveis |
+| Melange + Apko sobre pacotes Wolfi, sem Dockerfile de base | Docker Hub → ECR no sandbox, um repositório por definição; destino corporativo pendente |
 | Um YAML por framework em `frameworks/`, `distroless/image-base.yaml` como base comum | `wolfi-base` retirado da base (trazia `apk` e shell para toda imagem "distroless") |
 | Pacote de certificados compilado pelo melange e consumido pelo apko | Scan nas **duas** arquiteturas (a POC escaneava só `latest-amd64` e publicava as duas) |
 | Usuário non-root `uid/gid 10000`, `work-dir: /app` | Publicação sem rebuild: o mesmo OCI escaneado é o que vai para o registry, digest comparado |
 | `Makefile` de build local via `docker run` | `stable` deixa de ser publicada no build: só promovida após soak com re-scan |
 | Duas versões por linguagem | Variantes runtime e `-dev` para Go, Java e .NET; contrato funcional por framework |
-| Toolkit de troubleshooting para ephemeral container | Assinatura keyless, provenance SLSA, ferramentas fixadas por SHA/digest, testes, gates de merge |
+| Toolkit de troubleshooting para ephemeral container | Assinatura keyless, provenance no formato SLSA, SBOM attestations, pins, testes e gates de merge |
 
 ### Componentes
 
 1. **Catálogo declarativo** — `distroless/image-base.yaml` (`ca-certificates-bundle`, `tzdata` e âncoras adicionais aprovadas) e `frameworks/<nome>.yaml`, um por runtime/variante.
-2. **Validação sem credenciais** — melange compila o bundle nas duas arquiteturas; `apko build` gera **um** layout OCI multi-arquitetura por framework; Trivy escaneia cada manifest separadamente (`--ignore-unfixed`, `CRITICAL,HIGH,MEDIUM,LOW`, mais segredos). O layout aprovado vira artifact `validated-oci-<framework>`.
-3. **Contrato funcional** — executado sobre o próprio artifact candidato, nas duas arquiteturas, sem rebuild: Node e Python rodam um probe com o interpretador da imagem; Go, Java e .NET compilam um projeto mínimo versionado com a variante `-dev` e o executam na variante de runtime. Confere versão, UID/GID herdados, raiz somente leitura com áreas graváveis explícitas, bundle de CAs e TLS positivo/negativo.
-4. **Publicação por framework** — Skopeo copia o OCI aprovado para o ECR preservando digests, lê a tag de volta e compara; assina com cosign keyless e anexa provenance SLSA. Tag imutável `ddmmaa-hhmm-r<run>-a<tentativa>`.
-5. **Promoção de `stable`** — a cada ciclo, seleciona o build mais recente que completou o soak (6h), verifica assinatura/provenance com identidade fixa do workflow assinador, re-escaneia as duas arquiteturas com a base de CVE atual e só então move `stable` por referência.
+2. **Validação sem credenciais AWS** — preflight verifica chave Wolfi local/pin antes dos executores; Melange compila o pacote de CAs nas duas arquiteturas. Apko resolve `apko.lock.json` e compõe **um** OCI multiarch com o mesmo lock e data do commit; Trivy escaneia cada manifest separadamente (`--ignore-unfixed`, `CRITICAL,HIGH,MEDIUM,LOW`, mais segredos). O layout aprovado vira artifact `validated-oci-<framework>`.
+3. **Contrato funcional** — executado sobre o próprio artifact candidato, nas duas arquiteturas, sem rebuild: Node e Python rodam um probe com o interpretador da imagem; Go, Java e .NET compilam um projeto mínimo versionado com a variante `-dev` e o executam na variante de runtime. Confere versão, UID/GID herdados, raiz somente leitura com áreas graváveis explícitas, bundle de CAs, timezone e TLS positivo/negativo. O gate de integração de trust também testa a CA instalada no build; a cobertura aplicável é definida em código.
+4. **Publicação por framework** — Skopeo copia o OCI aprovado para o ECR preservando digests, lê a tag de volta e compara; assina o índice com Cosign keyless, anexa provenance GitHub e atesta os SPDX originais do índice e dos dois manifests com Cosign. Tag imutável `ddmmaa-hhmm-r<run>-a<tentativa>`.
+5. **Promoção de `stable`** — a cada ciclo, seleciona o build mais recente que completou o soak (padrão 6h; input manual validado), verifica assinatura/provenance com identidade fixa do workflow assinador, re-escaneia as duas arquiteturas com a base de CVE atual e só então move `stable` por referência. O ECR é consultado pela própria tag; somente digest observado igual ao candidato permite `promoted=true` (P1-01).
 6. **Recuperação** — `recover-stable.yml` restaura `stable` para um digest já publicado, com as mesmas verificações e sem bypass; quarentena versionada impede a repromoção do candidato retirado.
-7. **Governança executável** — lints obrigatórios no merge (hardening dos workflows, cobertura e consistência dos pins, política de retenção e de cron), política de saúde/alerta versionada, tabela por framework em cada run.
+7. **Retry parcial (P1-02)** — no mesmo workflow run, o publicador pode reutilizar contrato válido para o mesmo índice OCI, framework, revisão e plataformas (e par `-dev` quando aplicável), sem falha mais recente do producer relevante. Não rebuilda, repacka ou muda digest; ausência, corrupção e conflito bloqueiam.
+8. **Chave Wolfi (P1-03)** — chave explícita local versionada, SHA pinado, preflight offline, rotação por revisão humana e monitor de drift detect-only. Isso é defense-in-depth: Apko ainda pode adicionar chaves descobertas via `/apk-configuration`/JWKS. Ver [runbook e risco residual](docs/wolfi-signing-key.md).
+9. **Governança executável** — lints obrigatórios no merge (hardening dos workflows, cobertura e consistência dos pins, política de retenção e de cron), política de saúde/alerta versionada, tabela por framework em cada run.
 
 Detalhes operacionais (como consumir, runbooks, configuração dos workflows)
 estão no [README](README.md); arquitetura e fronteiras em
@@ -92,36 +98,41 @@ estão no [README](README.md); arquitetura e fronteiras em
 
 ```mermaid
 flowchart TD
-    PR["Pull request"] --> V["Validação sem AWS<br/>melange + apko + Trivy amd64/arm64"]
+    PR["Pull request"] --> PRV["Validação sem AWS<br/>build + scan + integração de trust<br/>sem publicação"]
     MAIN["main: push / dispatch / build diário 03:00 UTC"] --> B["build-base-images.yml"]
-    B --> V
-    V --> C["Contrato funcional por framework<br/>sobre o artifact candidato, amd64 + arm64"]
-    C --> PUB["Publicação por framework<br/>cópia OCI por digest + cosign + provenance"]
+    B --> V["Validação sem AWS<br/>melange + apko + scan + integração de trust"]
+    V --> C["Contratos funcionais conforme plano<br/>sobre o artifact candidato, amd64 + arm64"]
+    C --> PUB["Publicação por framework<br/>cópia OCI por digest + cosign + provenance + SBOM attestations"]
     PUB --> ECR[("ECR: tag imutável")]
     PUB --> SUM["Tabela por framework no resumo do run"]
     H["Promoção horária (17 * * * *)"] --> P["promote-stable.yml"]
     ECR --> P
-    P --> GATE["Soak ≥ 6h → assinatura/provenance → re-scan"]
-    GATE --> STABLE["stable"]
-    REC["recover-stable.yml (manual)"] --> GATE
+    P --> GATE["Soak padrão 6h → assinatura/provenance → re-scan"]
+    GATE --> WRITE["stable escrita por referência"]
+    WRITE --> READBACK["ECR read-back: observado == candidato"]
+    READBACK --> STABLE["promoted=true"]
+    REC["recover-stable.yml (manual)"] --> RV["Assinatura/provenance + re-scan<br/>retag + read-back + evidence de recovery"]
     HEALTH["pipeline-health.yml (diário)"] --> ALERT["idade de stable, cron real,<br/>fila, disponibilidade dos pins"]
 ```
 
-Nenhum framework publica sem o seu próprio artifact aprovado **e** o seu
-contrato funcional aprovado nas duas plataformas; uma falha isola só aquele
-framework. PRs, inclusive de fork, nunca recebem credenciais AWS nem OIDC.
+Todo framework precisa do próprio artifact validado e do gate comum de trust.
+O contrato funcional é exigido quando previsto no plano versionado; skips
+explícitos não equivalem a contrato aprovado. O lote atual possui 11 contratos
+diretos, com cinco pares compilados. Uma falha de framework não aprova nem
+bloqueia automaticamente todos os outros. Os caminhos de PR/fork de validação
+não recebem credenciais AWS ou permissão OIDC.
 
 ### Nível de maturidade
 
 "Slim", "distroless" e "hardened" não são sinônimos. A solução está no
 patamar distroless e cobre parte dos controles de hardened:
 
-| Pilar | Estado em 10/09/2026 |
+| Pilar | Estado em 13/09/2026 |
 | --- | --- |
 | Minimalismo | Base sem shell nem gerenciador de pacotes, comprovado por execução nas variantes finais de Node, Python, Go, Java e .NET. Go 1.25/1.26, Java 21/25 e .NET 10 têm runtime separado do toolchain; só `dotnet8` ainda carrega o SDK completo. |
-| Imutabilidade | Tags de build imutáveis no ECR (exceção só para `stable`), rejeição de sobrescrita comprovada nos 15 repositórios. Raiz somente leitura testada em contrato; continua dependendo da configuração do consumidor em runtime. |
-| Manutenção | Rebuild diário e promoção por soak em execução; ferramentas por SHA/digest com lint de cobertura. A entrega do agendador do GitHub é de melhor esforço (medido: 10% das ocorrências horárias viraram run), a automação de atualização (Renovate) não está ativa e a primeira execução de saúde no runner detectou o Skopeo indisponível e lacuna de agendamento. |
-| Verificabilidade | SBOM por build, assinatura cosign keyless e provenance SLSA no ECR, verificados na promoção e de forma independente fora do pipeline. Identidade do assinador vinculada ao ID numérico do repositório, não só ao nome. |
+| Imutabilidade | Tags de build imutáveis no ECR (exceção só para `stable`), rejeição de sobrescrita comprovada no conjunto histórico de 15 ECRs (09/09); o catálogo atual tem 17 definições. Raiz somente leitura testada em contrato; continua dependendo da configuração do consumidor em runtime. |
+| Manutenção | Rebuild diário e promoção por soak em execução; ferramentas por SHA/digest com lint de cobertura. Cron é de melhor esforço; suas lacunas e falhas de pins são monitoradas. A amostra histórica de 10% não é SLA atual. Renovate configurado não comprova instalação ativa; destino externo de alertas e SLA corporativo continuam pendentes. |
+| Verificabilidade | SPDX gerado e atestado por digest; assinatura Cosign e provenance GitHub sobre o índice, verificadas na promoção com IDs numéricos de origem. SBOM verification no consumo é uma etapa distinta; evidence disponível não é enforcement no cluster, nem atribui SLSA level formal. |
 
 ## Catálogo
 
@@ -136,10 +147,14 @@ patamar distroless e cobre parte dos controles de hardened:
 | `dotnet10` / `dotnet10-dev` | runtime / build | `aspnet-10-runtime` / `dotnet-10-sdk` + shell | compilado (par) | — |
 | `dotnet8` | único | `dotnet-8-sdk` | nenhum | **bloqueado pelo scan**: correção `8.0.129-r1` ainda não existe no repositório Wolfi consultado (verificado em 09/09/2026 e 12/09/2026); nunca teve `stable`. **Fora do lote padrão** desde [ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md) |
 
-Dezessete definições, um repositório ECR por definição (os dois novos são
-criados pelo próprio publicador no primeiro build). `stable` existe para as
-catorze publicadas até 10/09;
-`dotnet8` é reportado como exceção conhecida, com dono e data de revisão em
+O catálogo contém **17 definições**, com **16 no lote automático**. O publicador
+cria um ECR por definição quando necessário; isso não prova 17 releases ou
+17 tags `stable` disponíveis. A disponibilidade depende de publicação/promoção
+bem-sucedidas e deve ser consultada no registry. As contagens históricas de
+15 ECRs ou 14 imagens promovidas não são o inventário atual.
+
+`dotnet8` permanece no catálogo e pode ser pedido manualmente; sua exclusão
+não relaxa o scan. Motivo, owner e revisão em
 [policies/operations/health.json](policies/operations/health.json).
 
 ## Melhorias M01–M16: estado
@@ -148,95 +163,115 @@ Diagnóstico original, critérios de aceite completos e as evidências de cada
 item estão no [histórico](docs/rfc-013-historico-de-entregas.md). Aqui, só
 o estado.
 
-| ID | Tema | Estado | Comprovado por | O que falta |
-| --- | --- | --- | --- | --- |
-| M01 | Scan das duas arquiteturas | Concluído | Scan por manifest no build e na promoção; bloqueio real por CVE; evidência por digest | — |
-| M02 | Identidade do artefato publicado | Concluído | Cópia OCI sem rebuild com digest comparado três vezes; retry reaproveita o artifact | — |
-| M03 | Gate de promoção verificável | Concluído | Assinatura + provenance verificadas; negativo autenticado (`no signatures found`) | Primeira promoção após a renomeação do repositório (identidade por ID) ainda sem run |
-| M04 | Soak, concorrência e agendamento | Concluído / medido | Serialização real, sem regressão nem dupla promoção; cron real observado | Cadência do cron é de melhor esforço — SLA precisa ser por lacuna, não por horário |
-| M05 | PR sem credenciais, trust policy | Concluído | PR interno rejeitado, fork real sem OIDC, policy por IDs numéricos | Recriar e reprovar no ambiente de produção |
-| M06 | Imutabilidade no ECR | Concluído | 15 repositórios `IMMUTABLE_WITH_EXCLUSION`; sobrescrita rejeitada de verdade | — |
-| M07 | Runtime separado do toolchain | Parcial | Go 1.25/1.26, Java 21/25 e .NET 10 separados, tamanho medido, apps mínimas executadas nas duas arquiteturas | `dotnet8` (bloqueado pelo scan; separar não muda isso) |
-| M08 | Testes funcionais das imagens | Parcial | 11 frameworks com contrato; gate por framework; Go/Java/.NET aprovados no runner em amd64/arm64 sobre artifacts do PR #48; Go 1.25 e Java 25 aprovados localmente e no runner sobre artifacts do PR #49 | Cadeia com o gate ligado ainda sem run no runner hospedado; só `dotnet8` sem contrato |
-| M09 | Ferramentas fixadas e mantidas | Parcial | SHA/digest em tudo; lint de cobertura e consistência; versões efetivas por etapa; check de disponibilidade | Renovate inativo; Skopeo corrigido com tag `-immutable` + digest nesta branch; integrar e validar publicação |
-| M10 | Certificados com integridade verificável | Parcial | TLS com CA instalada por Melange/Apko nos 5 runtimes e nas duas arquiteturas; integração PEM/JKS/Node | Perfil público ativo; manifesto corporativo real ainda precisa substituir o MOCK |
-| M11 | Documentação, SLA e visibilidade | Parcial | CVEs sem correção visíveis; tabela por framework em cada run; saúde diária com política versionada | SLA não formalizado; canal externo de alerta não definido; saúde já executada, com alertas reais ainda abertos |
-| M12 | Checks obrigatórios | Concluído | `test` + `lint-workflows` exigidos, `enforce_admins`, merge com check falho rejeitado | — |
-| M13 | Publicação independente por framework | Concluído | `dotnet8` falha sem derrubar os demais; retry sem rebuild | — |
-| M14 | Timeouts e concorrência | Concluído | Limites por duração real; cancelamento por PR; timeout real observado | — |
-| M15 | Recuperação de `stable` | Concluído | Runbook executado de ponta a ponta; quarentena versionada | — |
-| M16 | Endurecimento e revisão efetiva | Concluído | Lint obrigatório; code owner comprovado pós-merge; regressão de `enforce_admins` achada e corrigida | — |
-| M09/M12 | Executores compartilhados | Parcial | Validação, contrato e Trivy consumidos por SHA de `alric-containers-reusable-workflows` | `main` da biblioteca protegida; pin corrigido nesta branch, pendente de revisão do PR #2 |
-| — | Scanner corporativo (Veracode SCA) | Aberto | Seis critérios de aceite registrados | Decisão de AppSec; cobertura de Wolfi não comprovada |
+Nesta tabela, IMPLEMENTED descreve código entregue no sandbox; PARTIAL
+preserva lacunas de cobertura/operação; EXTERNAL exige decisão/execução fora
+do produto; DEFERRED identifica trabalho técnico posterior. Evidência
+histórica permanece limitada ao commit/run em que foi obtida.
+
+| ID | Tema | Estado | Fonte / limite atual |
+| --- | --- | --- | --- |
+| M01 | Scan por arquitetura | IMPLEMENTED | Build e promoção escaneiam amd64/arm64; CVE bloqueante impede artifact aprovado |
+| M02 | Identidade do artifact | IMPLEMENTED | OCI verificado, Skopeo preserva digest, publicação faz read-back; P1-02 acrescenta binding do contrato |
+| M03 | Gate de promoção | IMPLEMENTED | Assinatura/provenance, IDs e main conferidos; aceite hospedado P1-01 PASS, conforme evidence abaixo |
+| M04 | Soak, concorrência, cron | PARTIAL | Soak padrão 6h e serialização presentes; scheduler sem SLA garantido |
+| M05 | PR sem AWS / trust OIDC | IMPLEMENTED no sandbox | Policy por IDs; EXTERNAL para novo repository/owner corporativo |
+| M06 | ECR immutable build tags | IMPLEMENTED | Exceção exata stable no publicador; prova histórica não substitui aceite corporativo |
+| M07 | Runtime / toolchain | PARTIAL | Go/Java/.NET 10 em pares; dotnet8 com SDK, excluído do lote |
+| M08 | Contratos funcionais | PARTIAL | 11 contratos diretos: seis interpretados e cinco compilados; dotnet8 sem contrato, plano depende do lote |
+| M09 | Pins / atualização | PARTIAL | Inventário e disponibilidade, Skopeo immutable adotado; Renovate depende de ativação externa |
+| M10 | CAs integradas | PARTIAL | PEM/JKS/Node e testes de CA instalada; perfil public ativo, Corporate CA anchors EXTERNAL |
+| M11 | Saúde / visibilidade | PARTIAL | Resumos, health diário e drift Wolfi; external alert destination e corporate SLA EXTERNAL |
+| M12 | Checks obrigatórios | PARTIAL | test/lint-workflows e revisão configurados; enforce_admins desligado por decisão do sandbox |
+| M13 | Publicação por framework | IMPLEMENTED | Gates isolados; retry P1-02 integrado, aceite real de rerun pendente |
+| M14 | Timeouts / concorrência | IMPLEMENTED | Hardening e grupos por PR/framework; ARM usa emulação quando necessário |
+| M15 | Recovery | IMPLEMENTED | Verificação, re-scan e read-back sem bypass; quarentena exige PR explícito |
+| M16 | Hardening / revisão | PARTIAL | Lint e CODEOWNERS; sem alegar enforcement contra administrador no sandbox |
+| M09/M12 | Reusable workflows | IMPLEMENTED | SHA atual dos chamadores: 7a9b055a462eeb8552d3404c26538b44e8ccd83f; integração verifica checkout e permissões |
+| — | Scanner / Veracode | EXTERNAL | Decisão de AppSec; Trivy continua o gate vigente |
+
+### Fatias recentes da RFC-013
+
+| Fatia | Estado do código na main | Aceite hospedado específico |
+| --- | --- | --- |
+| P1-01 — stable read-back | IMPLEMENTED; confirmação ECR antes de promoted=true | PASS — go1-26 e go1-26-dev no [run 34768459323](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34768459323), commit e3ed682 |
+| P1-02 — partial retry | IMPLEMENTED; merge PR #55 | PENDING — requer rerun real com evidence anterior e mesmo digest |
+| P1-03 — Wolfi defense-in-depth | IMPLEMENTED; merge PR #54 | PENDING — caminho mínimo Go observado no run 34735740791; aceite formal não declarado |
+| P1-09 / P1-10 — contrato e estado da RFC | Documentação proposta nesta revisão | Revisão independente posterior; nenhum enforcement novo |
+
+As specs originais conservam seus snapshots pré-merge. Para P1-03, a consulta
+posterior confirmou preflight com hash igual e lock hospedado com chave local,
+seguido de build/publicação Go no run 34735740791; isso é evidence observada
+desse caminho, não aprovação formal, isolamento exclusivo ou lote inteiro verde.
+P1-01 tem aceite hospedado comprovado no commit
+`e3ed68259f66af41e8054a4c0ac29a54082ddd60`: no run `34768459323`, promoção,
+re-scan e read-back passaram para `go1-26` e `go1-26-dev`. O artifact
+`promotion-go1-26-1` registra `promoted=true`, `read_back_status=confirmed` e
+`candidate_digest == stable_digest_observed == sha256:f658ed77f8734e1c3d218e07684f876f5cd38964afd79bb5c7a7c9e6571d339f`.
+Detalhes na [evidence](specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md).
+P1-02 e P1-03 continuam PENDING; um run geral ou aprovação local não encerra seus aceites.
 
 ## Prontidão para produção
 
-**Não.** A engenharia de release está em nível de produção em vários
-controles — publicação por digest, assinatura, imutabilidade, gates de merge
-sem bypass, promoção por soak com re-scan, recuperação testada — mas cinco
-coisas impedem a liberação, em ordem do que bloqueia hoje para o que exige
-decisão.
+**Não.** A fábrica executa no sandbox; as identidades, decisões e aceites
+corporativos abaixo ainda precisam ser configurados e comprovados.
 
-### 1. A `main` não publica neste momento
+### 1. Estado real da main e dos bloqueios
 
-- **Renomeação dos repositórios (10/09, 12:24 UTC).** O executor compartilhado fixado (`081270c`) referencia internamente o nome antigo `itau-xj7-reusable-workflows`; desde a renomeação, o workflow de build falha na inicialização (`startup_failure`, runs 34475952305 e 34476466006). A correção — apontar os chamadores para o commit `0459275` da biblioteca renomeada — está implementada nesta branch. Esse commit está no PR #2 da biblioteca, ainda não na `main` dela.
-- **Digest do Skopeo removido do `quay.io`.** O build diário de 10/09 (run 34450492208) validou 14 frameworks e falhou **as 14 publicações** em `Verify pinned Skopeo is available`: `manifest unknown`. É a segunda vez (a primeira em 09/09). As tags comuns do upstream são reconstruídas diariamente. O primeiro run de saúde (34493238551) confirmou a indisponibilidade; esta branch atualiza publicador e contratos para `v1.22.2-immutable` + digest, já resolvido e executado localmente.
+A main publica os frameworks que passam seus gates. Os bloqueios de 10/09
+por renomeação, Skopeo removido e permissões aninhadas foram corrigidos;
+os detalhes permanecem no [registro histórico de release](docs/release-readiness-2026-09-10.md).
+O [run 34735740791](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34735740791)
+no commit 285ada4 publicou Go 1.26 e sua variante -dev, embora o lote tenha
+falhas. Não se exige um lote inteiro verde para reconhecer uma publicação
+individual comprovada.
 
-- **Permissões dos workflows aninhados.** O primeiro run do PR de ajustes (34495120049) revelou `actions: read` solicitado por contratos/resumo, ausente no chamador. A passagem da permissão foi corrigida e ganhou lint obrigatório entre workflows.
+Bloqueios upstream de CVE, como o incidente de zlib, continuam separados do
+estado desta entrega documental. Scan bloqueado e ausência do artifact/contrato
+correspondente não são aprovação nem demonstram regressão de retry. Nenhuma
+exceção de CVE, severidade ou package foi alterada nesta revisão.
 
-Enquanto esses bloqueios não forem corrigidos e um build completo passar no runner
-hospedado — validação → contrato → publicação → resumo —, nenhum outro item
-desta seção pode ser considerado provado na cadeia atual.
+### 2. Fronteira sandbox / corporativo
 
-### 2. Tudo está num sandbox
+O sandbox é GitHub `alric-corp` e uma conta AWS pessoal. Evidências de
+pipeline, ECR, assinatura/provenance, promoção e recovery comprovam somente
+os runs registrados. A identidade de produção ainda deve ser aprovada;
+os nomes de destino nesta RFC são planejamento, não infraestrutura implantada.
 
-GitHub `alric-corp` e uma conta AWS pessoal. Para `itau-corp` é preciso
-recriar e **reprovar** (os testes de aceite são repetíveis, os resultados não
-transferem): trust policy OIDC com os IDs numéricos do repositório novo,
-repositórios ECR com a resource policy dos Org IDs reais, `CODEOWNERS` e time
-com escrita de verdade, branch protection com `enforce_admins`, secret
-scanning/push protection, `policies/release/signing-identities.json` com o ID
-do repositório de produção. O assinador continua sendo
-`build-base-images.yml` na `main` do repositório de produção — qualquer
-outra identidade invalida a verificação da promoção.
-
-### 3. Decisões que não são código
-
-| Decisão | Estado | De quem |
+| Item externo | Estado | Owner / aceite necessário |
 | --- | --- | --- |
-| Scanner de container corporativo | O gate roda Trivy; a esteira corporativa levantada usa Veracode SCA agent-based, cuja documentação não lista Wolfi. Seis critérios de aceite abertos (cobertura, entrega por arquitetura, política válida, re-scan na promoção, credenciais, normalização de evidências). | AppSec + Containers Products |
-| Fonte corporativa de certificados (M10) | `make certificates` integra o bundle interno verificado ao pacote Melange e aos stores Apko; o manifesto atual contém CAs MOCK, rejeitadas para release. A fonte e o manifesto corporativos reais continuam pendentes. Ver [composição](docs/image-composition.md). | Containers Products + Segurança |
-| Catálogo | `dotnet8` sem correção disponível no Wolfi: exceção formal registrada no [ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md) — fora do lote padrão, no catálogo, revisão em 09/10/2026, reinclusão condicionada ao pacote corrigido (aceite hospedado do build diário verde pendente). | Containers Products |
-| Canal e dono de alerta, SLA publicável | Política e limites versionados; `external_destination` deliberadamente `null`. O SLA precisa ser escrito sobre a cadência observada do cron, não a nominal. | Containers Products |
+| Corporate CA anchors | EXTERNAL — pendente | Segurança/PKI + Containers Products: fontes e manifesto reais; release rejeita MOCK |
+| Corporate GitHub protections | EXTERNAL — pendente | GitHub admins: repository IDs, owner IDs, times/CODEOWNERS, checks, proteção e enforce_admins |
+| Corporate OIDC/IAM | EXTERNAL — pendente | Cloud/Security: trust e permission policies da origem/conta novas, negativos reais |
+| Corporate ECR | EXTERNAL — pendente | Cloud: registry, resource/lifecycle policies, Org IDs e imutabilidade, testes autenticados |
+| Corporate egress/mirror | EXTERNAL — pendente | Cloud/Network/Security, P0-03: boundary aprovada; isolamento Wolfi quando requerido |
+| Sigstore decision | EXTERNAL — pendente | Security: issuer/identidades e política de serviço/log público ou alternativa aprovada |
+| Scanner/Veracode decision | EXTERNAL — pendente | AppSec: cobertura Wolfi/multiarch, policy, re-scan e formato de evidence |
+| External alert destination | EXTERNAL — pendente | Containers Products: canal/owner/escalonamento; external_destination permanece null |
+| Corporate SLA | EXTERNAL — pendente | Containers Products: medir correção upstream até stable e pactuar prazo |
+| First corporate E2E run | EXTERNAL — pendente | Owners conjuntos: build → scan/contrato → publish/attest → promote/read-back → consumo/recovery |
 
-### 4. Manutenção ainda não ligada
+No sandbox, `enforce_admins` permanece desligado por decisão explícita;
+a exigência de habilitá-lo pertence ao P0-03. Ver
+[Capability Matrix](docs/ai/CAPABILITY-MATRIX.md). Não há alegação de merge
+sem bypass administrativo no ambiente pessoal.
 
-Renovate ainda depende de instalação pelo administrador. O Dependabot #47 foi
-revisado: altera runtime de código gerado sem recompilar, portanto não deve ser
-integrado isoladamente. A saúde já rodou e alertou; a `main` da biblioteca agora
-exige checks e revisão independente de CODEOWNERS, inclusive de administradores.
-O SHA em adoção ainda aguarda essa revisão no PR #2. Ver
-[ajustes finais e aceites](docs/release-readiness-2026-09-10.md).
+### 3. Operação, cobertura e evidence
 
-### 5. Cobertura e evidência parciais
+Renovate está configurado, mas sua instalação/ativação depende do administrador.
+Monitor de saúde e drift são implementados; não constituem entrega de alerta
+externo nem SLA corporativo. `dotnet8` permanece excluído por
+[ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md); sua reentrada exige
+os critérios do ADR, sem flexibilizar Trivy.
 
-Contratos compilados de Go 1.26, Java 21 e .NET 10 aprovados no runner em
-amd64/arm64 sobre artifacts do PR #48 ([seis relatórios](docs/evidence/runtime-runner-2026-09-10.json)),
-mas a cadeia `validação → contrato → publicação` no mesmo run ainda não rodou no runner
-hospedado; `dotnet8` sem contrato; contratos de `go1-25`/`java25` só
-executados localmente; primeira promoção
-pós-renomeação sem run. A lifecycle policy foi aplicada e relida nos 15 ECRs:
-imagens sem tag após 30 dias; todas as releases com tag preservadas.
+CAs corporativas, enforcement de consumo/admission e ARM nativo não são
+propriedades obtidas por esta documentação. Enforcement e ARM nativo são
+DEFERRED; suas políticas/infraestruturas futuras exigem trabalho próprio.
+P1-01/02/03 têm código integrado e verificações locais registradas. A tabela
+de fatias distingue aceites pendentes de observações hospedadas posteriores.
 
-### O que já está no nível esperado
-
-Publicação por digest sem rebuild; assinatura keyless e provenance SLSA
-verificadas na promoção e fora dela; imutabilidade com exceção só para
-`stable`; PRs e forks sem credenciais; entradas validadas antes de qualquer
-credencial; checks obrigatórios sem bypass de administrador e revisão de
-code owner comprovada; soak com re-scan e serialização; recuperação de
-`stable` sem bypass; 176 testes unitários e 20 de integração; lints
-obrigatórios que impedem regressão dos controles.
+Assinatura, provenance e SBOM attestations disponíveis são insumos de
+verificação. O [contrato de consumo](docs/consumer-verification-contract.md)
+define o que o consumidor deve conferir; não instala enforcement no deploy.
 
 ## Valor e impacto
 
@@ -253,16 +288,16 @@ obrigatórios que impedem regressão dos controles.
 
 | Item do escopo | Estado |
 | --- | --- |
-| Padrões de imagem base por framework prioritário (Java, Node.js, Python, Go e .NET) | Entregue (15 definições) |
+| Padrões de imagem base por framework prioritário (Java, Node.js, Python, Go e .NET) | Entregue (17 definições; 16 no lote automático) |
 | Pipeline de build com Melange e Apko | Entregue |
 | Primeiras imagens base em formato distroless | Entregue no sandbox |
 | Build multi-plataforma (`amd64` e `arm64`) | Entregue, escaneado e testado por arquitetura |
-| Consumo pela tag `stable` | Entregue, promovida por soak; tag imutável por build para fixar |
+| Consumo pela tag `stable` | Entregue por soak/read-back; stable é mutável; pin suportado por OCI index digest |
 | Publicação no ECR | Entregue no sandbox; produção pendente |
 | Pull liberado para todas as orgs do Itaú | Resource policy validada no sandbox com Org IDs de teste; produção pendente |
 | Automação no GitHub com scheduler diário | Entregue; cadência real do agendador medida e documentada |
 | Scan das imagens a cada build | Entregue com Trivy; scanner corporativo em decisão |
-| Documentação de uso para consumidores | Entregue no [README](README.md) |
+| Documentação de uso para consumidores | [Contrato canônico](docs/consumer-verification-contract.md), proposto nesta revisão; README mantém exemplos |
 | Trilha de troubleshooting distroless | Toolkit em `troubleshooting/`, ciclo de vida separado |
 
 ## Fora de escopo
@@ -284,7 +319,7 @@ obrigatórios que impedem regressão dos controles.
 - Catálogo, naming e versionamento definidos — feito; SLA de atualização a formalizar.
 - Documentação técnica e guia de consumo — feito.
 - Itens P1 de M01–M11 antes da produção — M10 aberto, M08/M09 parciais; ver [Prontidão](#prontidão-para-produção).
-- **Restante desta fase:** corrigir a `main`, recriar o ambiente em `itau-corp` e reprovar os aceites, fechar as quatro decisões.
+- **Restante desta fase:** concluir aceites específicos pendentes, configurar o ambiente corporativo e executar seus aceites; fechar as decisões externas listadas acima.
 
 ### Fase 2 - Adoção assistida
 
@@ -333,7 +368,7 @@ flowchart LR
         APP -. troubleshooting .-> TOOLS
     end
 
-    ECR -->|"imagem base<br/>stable / tag imutável"| APPREPO
+    ECR -->|"imagem base<br/>stable / build tag / OCI index digest"| APPREPO
     APPREPO -->|"build/deploy"| EKS
 ```
 
@@ -346,13 +381,13 @@ flowchart LR
     APKO --> SBOM["SBOM"]
     SBOM --> SCAN["Trivy + contrato funcional<br/>amd64 + arm64"]
     SCAN --> IMMUTABLE["ECR: mesmo digest validado<br/>tag de build imutável"]
-    IMMUTABLE --> SIGN["cosign keyless + provenance SLSA"]
+    IMMUTABLE --> SIGN["cosign keyless + provenance GitHub + SPDX attestations"]
     SIGN --> SOAK["Candidato com soak concluído"]
     SOAK --> VERIFY["Assinatura/provenance<br/>+ re-scan nas duas arquiteturas"]
-    VERIFY --> STABLE["stable movida por referência"]
+    VERIFY --> STABLE["stable escrita → ECR read-back<br/>observado == candidato"]
 ```
 
-> A versão editável da arquitetura também está disponível no arquivo `RFC-013-Image-Base.drawio`.
+Os diagramas Mermaid acima são as visões versionadas nesta RFC.
 
 ## Arquitetura e fluxo de consumo
 
@@ -360,7 +395,7 @@ A solução separa a responsabilidade da plataforma de imagens base do ciclo de 
 
 1. O monorepo do **Containers Products** centraliza a definição e o build das imagens base.
 2. As imagens são publicadas no **Amazon ECR**, com liberação de pull para as organizações consumidoras.
-3. Cada framework/versão possui uma referência estável para consumo e uma identificação imutável por build.
+3. Cada framework/versão tem namespace próprio; releases aprovadas podem receber stable. Build tag identifica a release e OCI index digest identifica o artifact multiarch exato.
 4. O repositório da aplicação consome a imagem corporativa como base.
 5. A aplicação é construída e posteriormente executada no ambiente de containers, como EKS.
 6. O troubleshooting específico de runtime permanece separado da fábrica de imagens base.
@@ -373,9 +408,23 @@ image-base-<framework>:<ddmmaa-hhmm>-r<run_id>-a<tentativa>
 image-base-<framework>@sha256:<digest>
 ```
 
-`stable` é a referência de consumo simplificada. A tag de build é única por
-run e tentativa e imutável no registry. Para fixar exatamente o conteúdo
-consumido, usar a referência por digest.
+| Identidade | Semântica | Consumo |
+| --- | --- | --- |
+| stable | Ponteiro mutável de conveniência; acompanha promoção | Convenience, sem identidade permanente |
+| build tag | Identificador versionado/imutável da release no ECR | Rastreabilidade; existência da tag não prova finalização de assinatura/attestations |
+| OCI index digest | Identidade exata do artifact multiarch | Reproducible deployment e verificação suportada |
+
+A unidade assinada suportada é o **OCI index digest**. Manifests individuais
+não recebem assinatura de imagem/provenance independentes neste fluxo; seus
+SBOMs têm attestations próprias. Verificar assinatura Cosign, provenance GitHub
+e SBOM attestation quando exigida pelo consumidor, sempre vinculadas ao digest.
+Não se atribui SLSA level formal nem segurança do código por assinatura.
+
+P1-01 confirma stable pelo ECR depois da escrita: observado == candidato antes
+de promoted=true. Isso vale para aquele instante; não impede alteração
+administrativa externa posterior. P1-02 reutiliza evidence no mesmo run/digest
+com PASS válido e sem falha mais recente do producer relevante, sem rebuild.
+Comandos, identidades e limites no [Consumer Verification Contract](docs/consumer-verification-contract.md).
 
 ### Um repositório ECR por linguagem/framework
 
@@ -389,6 +438,10 @@ Cada framework tem seu próprio repositório ECR (`image-base-java21`, `image-ba
 O custo é operacional (mais repositórios para criar/gerenciar lifecycle policy), mitigado por serem criados programaticamente pelo próprio workflow de build. Validado no sandbox: a resource policy least-privilege foi aplicada individualmente aos repositórios `image-base-*`, na mesma estrutura da produção (`Principal: "*"` restrito por `Condition` em `aws:PrincipalOrgID`), usando a Organization do sandbox no lugar dos Org IDs do Itaú.
 
 ### Consumo
+
+Os exemplos abaixo ilustram conveniência com stable; o registry foi omitido.
+Para deployment reproduzível, fixe o índice de cada estágio conforme o
+[contrato de consumo](docs/consumer-verification-contract.md).
 
 Runtime pronto (binário já compilado, JAR, saída de `dotnet publish`):
 
@@ -419,10 +472,10 @@ com scan e testes. Exemplos para Node.js, .NET e Java no [README](README.md#como
 
 ### Publicação e retenção
 
-- Publicação das imagens no ECR corporativo; liberação de pull para as organizações do Itaú.
+- Publicação no ECR do sandbox; ECR corporativo e pull por Org IDs reais continuam externos.
 - Uma tag `stable` para consumo e tags imutáveis para rastreabilidade.
-- Retenção de evidências de CI por finalidade (1, 3 e 30 dias), versionada em `policies/operations/health.json` e conferida por lint contra os workflows. `retention-days` não é backup: reexecução gera digests novos.
-- Lifecycle ECR aplicada no sandbox: expira somente imagens sem tag após 30 dias; preview dos 15 repositórios sem alvos atuais. Todas as releases com tag permanecem preservadas para recuperação. Reduzir a retenção de releases publicadas exige definir a janela de recuperação.
+- Retenção de evidências de CI por finalidade (OCI: 3 dias; Melange, SBOM e relatórios: 30 dias), versionada em `policies/operations/health.json` e conferida por lint contra os workflows. `retention-days` não é backup: novo build pode gerar outro digest; retry de publicação reutiliza o OCI existente sem reconstrução.
+- Lifecycle ECR: policy expira somente imagens sem tag após 30 dias; aplicação/preview no conjunto histórico de 15 repositórios documentados em 10/09, sem extrapolar para todos os ECRs atuais. Todas as releases com tag permanecem preservadas para recuperação. Reduzir a retenção de releases publicadas exige definir a janela de recuperação.
 
 ## Repositórios
 
