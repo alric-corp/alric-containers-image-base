@@ -421,6 +421,11 @@ exata atual e vínculo com os IDs de repository/owner. Ele diferencia evidence
 disponível de enforcement e indica quais valores precisam ser aprovados no
 ambiente corporativo. Não se atribui SLSA level formal.
 
+O [ADR-0002 — Modelo de confiança Sigstore](docs/adr/0002-sigstore-trust-model.md)
+detalha raízes, metadados públicos e diferenças de attestations entre
+repositories públicos/privados. A decisão corporativa permanece PROPOSED,
+dependente de Segurança/AppSec; o ADR não altera o signing atual.
+
 Para aplicar a política completa da promoção, em checkout revisado e com
 `IMAGE_REF` já fixada por digest conforme o contrato:
 

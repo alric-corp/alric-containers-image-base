@@ -250,6 +250,12 @@ registry/conta/região, repository e owner IDs, workflow e identidade certificad
 pelos valores aprovados da fábrica corporativa. Aprovar issuer/serviços Sigstore
 conforme a decisão de Security, sem copiar a policy do sandbox como autorização.
 
+O [ADR-0002 — Modelo de confiança Sigstore](adr/0002-sigstore-trust-model.md)
+formaliza essa decisão ainda PROPOSED, as raízes e os metadados expostos.
+Repository GitHub privado muda o serviço de GitHub attestations, mas não
+reconfigura automaticamente o Cosign direto. A avaliação inclui o envio do
+predicate SPDX ao serviço Rekor, distinto do conteúdo persistido no log.
+
 Permanecem **EXTERNAL — pendentes**: Corporate CA anchors; Corporate GitHub
 protections; Corporate OIDC/IAM; Corporate ECR; Corporate egress/mirror;
 Sigstore decision; Scanner/Veracode decision; external alert destination;
