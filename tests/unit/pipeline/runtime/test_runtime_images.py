@@ -107,12 +107,14 @@ class RuntimeContractTests(unittest.TestCase):
             for arch in ('amd64', 'arm64'):
                 (reports / f'runtime-nodejs24-{arch}.json').write_text(
                     json.dumps({'status': 'passed', 'execution': 'native'}))
-            self.assertTrue(runtime.gate(reports, 'nodejs24')['passed'])
+            # Status-only JSON cannot authorize publication without actual
+            # OCI identity and same-run provenance (P1-02).
+            self.assertFalse(runtime.gate(reports, 'nodejs24')['passed'])
             (reports / 'runtime-nodejs24-arm64.json').write_text(
                 json.dumps({'status': 'failed', 'error': 'bad TLS'}))
             result = runtime.gate(reports, 'nodejs24')
             self.assertFalse(result['passed'])
-            self.assertEqual(result['platforms']['arm64']['error'], 'bad TLS')
+            self.assertIn('validated OCI', result['error'])
 
     def test_compiled_run_builds_the_multi_stage_image_for_both_platforms(self):
         from contextlib import nullcontext
@@ -125,6 +127,9 @@ class RuntimeContractTests(unittest.TestCase):
                 (target / 'validated-index.json').write_text(json.dumps(verified))
             with patch.object(runtime, 'verify', return_value=verified), \
                     patch.object(runtime, 'command', return_value='aarch64'), \
+                    patch.dict('os.environ', {'GITHUB_RUN_ID': '41', 'GITHUB_RUN_ATTEMPT': '2',
+                                             'GITHUB_REPOSITORY': 'alric-corp/image-base',
+                                             'GITHUB_SHA': 'a' * 40}), \
                     patch.object(runtime, 'tls_server', side_effect=lambda *_: nullcontext(('url', 'ca'))), \
                     patch.object(runtime, 'run_platform', return_value={'ok': True}) as platform:
                 self.assertEqual(runtime.run(directory, 'go1-26', directory, dev), 0)
@@ -135,6 +140,10 @@ class RuntimeContractTests(unittest.TestCase):
             self.assertEqual(report['contract'], 'compiled')
             self.assertEqual(report['dev_framework'], 'go1-26-dev')
             self.assertEqual(report['dev_index_digest'], 'index')
+            self.assertEqual(report['run_id'], '41')
+            self.assertEqual(report['run_attempt'], '2')
+            self.assertEqual(report['repository'], 'alric-corp/image-base')
+            self.assertEqual(report['revision'], 'a' * 40)
             self.assertEqual(report['execution'], 'emulated')
             self.assertEqual(
                 json.loads((directory / 'runtime-go1-26-arm64.json').read_text())['execution'],

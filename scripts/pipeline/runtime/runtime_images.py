@@ -19,6 +19,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import re
 import socket
@@ -32,6 +33,7 @@ import uuid
 
 from scripts.pipeline.artifacts.oci_artifact import blob, load_index, verify
 from scripts.pipeline.runtime.readiness import wait_until_ready
+from scripts.pipeline.runtime import contract_evidence
 
 ROOT = Path(__file__).resolve().parents[3]
 SKOPEO = 'quay.io/skopeo/stable:v1.22.2-immutable@sha256:4a16d57b37617a04b3d643079a477a2848efe892dffcdf0ce56df4262b65f810'
@@ -366,7 +368,11 @@ def run(layout, framework, reports, dev_layout=None, build_timeout=600, baked_ca
     reports.mkdir(parents=True, exist_ok=True)
     failed = False
     # Overwrite both reports even when OCI verification or setup fails.
-    evidence = {arch: {'framework': framework, 'contract': kind, 'platform': f'linux/{arch}',
+    evidence = {arch: {'schema_version': 1, 'framework': framework, 'contract': kind,
+                       'platform': f'linux/{arch}', 'repository': os.environ.get('GITHUB_REPOSITORY'),
+                       'run_id': os.environ.get('GITHUB_RUN_ID'),
+                       'run_attempt': os.environ.get('GITHUB_RUN_ATTEMPT'),
+                       'revision': os.environ.get('GITHUB_SHA'),
                        'status': 'failed', 'started_at': datetime.now(timezone.utc).isoformat()}
                 for arch in ('amd64', 'arm64')}
     try:
@@ -376,6 +382,14 @@ def run(layout, framework, reports, dev_layout=None, build_timeout=600, baked_ca
             dev_layout, dev_verified = verified_layout(dev_layout)
         else:
             dev_layout = None
+        # Record the verified identities even if subsequent runtime setup fails.
+        for arch, report in evidence.items():
+            report.update(index_digest=verified['digest'],
+                          manifest_digest=verified['platforms'][f'linux/{arch}'])
+            if dev_verified is not None:
+                report.update(dev_framework=f'{framework}-dev',
+                              dev_index_digest=dev_verified['digest'],
+                              dev_manifest_digest=dev_verified['platforms'][f'linux/{arch}'])
         daemon_arch = command('docker', 'info', '--format', '{{.Architecture}}')
         with tempfile.TemporaryDirectory(prefix='runtime-contract-') as temporary:
             directory = Path(temporary)
@@ -385,15 +399,8 @@ def run(layout, framework, reports, dev_layout=None, build_timeout=600, baked_ca
                     tls_server(directory, 'untrusted') as (untrusted_url, _):
                 for arch, report in evidence.items():
                     try:
-                        report.update(index_digest=verified['digest'],
-                                      manifest_digest=verified['platforms'][f'linux/{arch}'],
-                                      daemon_architecture=daemon_arch,
+                        report.update(daemon_architecture=daemon_arch,
                                       execution=execution_mode(daemon_arch, arch))
-                        if dev_verified is not None:
-                            report.update(
-                                dev_framework=f'{framework}-dev',
-                                dev_index_digest=dev_verified['digest'],
-                                dev_manifest_digest=dev_verified['platforms'][f'linux/{arch}'])
                         report['checks'] = run_platform(
                             (layout, dev_layout), framework, arch, directory,
                             (trusted_url, untrusted_url), None if baked_ca else ca, build_timeout)
@@ -438,23 +445,31 @@ def plan(requested):
     return planned, skipped
 
 
-def gate(reports, framework):
-    """Resultado do contrato funcional de um framework, para o gate de publicação.
-
-    Ausência de relatório é falha, não aprovação: um contrato que não rodou
-    (ou cujo upload de evidência falhou) nunca autoriza publicação.
-    """
-    platforms = {}
-    for arch in ('amd64', 'arm64'):
-        path = Path(reports) / f'runtime-{framework}-{arch}.json'
-        if not path.is_file():
-            platforms[arch] = {'status': 'missing'}
-            continue
-        report = json.loads(path.read_text())
-        platforms[arch] = {'status': report.get('status'), 'execution': report.get('execution'),
-                           'error': report.get('error')}
-    passed = all(platform['status'] == 'passed' for platform in platforms.values())
-    return {'framework': framework, 'passed': passed, 'platforms': platforms}
+def gate(reports, framework, layout=None, artifact_metadata=None, job_metadata=None,
+         run_id=None, attempt=None, repository=None, revision=None, dev_layout=None,
+         download_result='success'):
+    """Fail closed unless same-run reports approve the actual OCI being published."""
+    result = {'framework': framework, 'passed': False, 'run_id': run_id,
+              'run_attempt': attempt, 'selected_attempt': None}
+    try:
+        if download_result != 'success':
+            raise ValueError('functional artifact download failed or did not run')
+        if layout is None or artifact_metadata is None or job_metadata is None:
+            raise ValueError('gate requires validated OCI and complete run metadata')
+        _, expected = verified_layout(layout)
+        dev_expected = None
+        if supported(framework) == 'compiled':
+            if dev_layout is None:
+                raise ValueError('compiled gate requires the current validated build variant')
+            _, dev_expected = verified_layout(dev_layout)
+        artifact_document, _ = contract_evidence.read_json(artifact_metadata)
+        job_document, _ = contract_evidence.read_json(job_metadata)
+        result = contract_evidence.select(reports, framework, expected, run_id, attempt,
+                                          repository, revision, artifact_document,
+                                          job_document, dev_expected)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+        result['error'] = str(error)
+    return result
 
 
 def main():
@@ -477,6 +492,14 @@ def main():
                         help='imprime o plano de contratos para um lote de frameworks')
     parser.add_argument('--requested', metavar='JSON', default=None,
                         help='lote de frameworks do run, usado por --gate e --plan')
+    parser.add_argument('--artifact-metadata', help='complete run artifact API pages')
+    parser.add_argument('--job-metadata', help='complete run job API pages (filter=all)')
+    parser.add_argument('--run-id', default=os.environ.get('GITHUB_RUN_ID'))
+    parser.add_argument('--run-attempt', default=os.environ.get('GITHUB_RUN_ATTEMPT'))
+    parser.add_argument('--repository', default=os.environ.get('GITHUB_REPOSITORY'))
+    parser.add_argument('--revision', default=os.environ.get('GITHUB_SHA'))
+    parser.add_argument('--download-result', default='success')
+    parser.add_argument('--gate-output', help='store the publication gate decision as JSON')
     args = parser.parse_args()
     if args.list_contracts:
         print(json.dumps(contracts()))
@@ -492,11 +515,19 @@ def main():
             # Cobertura gradual explícita: o motivo aparece no log e na tabela
             # do run. Não é aprovação silenciosa por ausência de evidência.
             print(f'{args.gate}: contrato funcional não executado — {skipped[args.gate]}')
+            if args.gate_output:
+                Path(args.gate_output).write_text(json.dumps(
+                    {'framework': args.gate, 'passed': None, 'status': 'not_required',
+                     'reason': skipped[args.gate]}, indent=2) + '\n')
             return 0
         if args.gate not in planned:
             print(f'{args.gate}: fora do lote informado em --requested')
             return 1
-        result = gate(args.reports, args.gate)
+        result = gate(args.reports, args.gate, args.layout, args.artifact_metadata,
+                      args.job_metadata, args.run_id, args.run_attempt, args.repository,
+                      args.revision, args.dev_layout, args.download_result)
+        if args.gate_output:
+            Path(args.gate_output).write_text(json.dumps(result, indent=2) + '\n')
         print(json.dumps(result, indent=2))
         return int(not result['passed'])
     if not args.layout or not args.framework:

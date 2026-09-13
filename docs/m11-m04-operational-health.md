@@ -173,6 +173,13 @@ check obrigatório compara o declarado com o `retention-days` real de cada
 | `recovery-*` | 30 dias | runbook de recuperação do M15 |
 | `pipeline-summary-*`, `pipeline-health-*` | 30 dias | resultado e saúde, para comparar no tempo |
 
+No [retry parcial P1-02](../specs/2026-09-13-partial-retry-without-rebuild/spec.md),
+o contrato de attempt anterior só é reutilizado no mesmo run, para o OCI
+validado atual e seu par compilado. A janela efetiva continua limitada pelo
+OCI de 3 dias; manter reports por 30 dias não prolonga essa janela nem
+autoriza rebuild automático no publicador. Metadados incompletos, histórico
+malformado ou producer mais recente falho bloqueiam o reuso.
+
 **`retention-days` não é backup** (achado do R03): uma reexecução completa
 produz digests novos e não recupera artifact vencido. A recuperação de
 `stable` por digest (M15) depende do ECR, não destes artifacts — o prazo aqui
