@@ -20,7 +20,7 @@ Os diretórios consumidos pelo contrato Apko (`frameworks/`, `distroless/`,
 | `scripts/pipeline/operations/` | Saúde, tempos, resumos e versões efetivas das ferramentas |
 | `scripts/pipeline/governance/` | Hardening, pins, cache e contratos com workflows compartilhados |
 | `policies/operations/` | Limites, donos, retenção e exceções operacionais (frameworks fora do lote padrão, com ADR) |
-| `policies/release/` | Quarentena de digests retirados de stable |
+| `policies/release/` | Quarentena de digests e identidades de assinatura/provenance |
 | `.github/workflows/` | Gatilhos, permissões, concorrência e composição dos jobs |
 | `.github/scripts/` | Seis adaptadores temporários exigidos pelo executor publicado |
 | `tests/unit/pipeline/` | Testes por domínio, sem Docker, AWS, sockets ou acesso à rede |
@@ -29,9 +29,10 @@ Os diretórios consumidos pelo contrato Apko (`frameworks/`, `distroless/`,
 | `docs/` | Arquitetura, decisões (`docs/adr/`), runbooks e evidências revisadas |
 | `troubleshooting/` | Toolkit de diagnóstico com ciclo de vida separado das imagens base |
 
-O bundle corporativo de `scripts/certificates/` e a receita Mozilla em
-`melange/` têm fontes e contratos diferentes. A reorganização não conecta
-silenciosamente um ao outro nem altera a composição das imagens.
+O mecanismo de `scripts/certificates/` prepara âncoras aprovadas para o pacote
+Melange e os providers Apko; o perfil versionado é público, sem CAs corporativas
+reais. A receita Mozilla anterior é histórica. Ver [composição](image-composition.md)
+e o [contrato canônico de consumo](consumer-verification-contract.md).
 
 ## Dependências entre domínios
 
@@ -72,7 +73,7 @@ assinador e recuperação. O executor compartilhado não recebe comandos livres,
 regras de negócio ou credenciais AWS como parte de seu contrato.
 
 Os dois chamadores usam o commit publicado
-`0459275b4a2ffbe6e8961041e7b93b41e88ba215`. Actions externas e reusable workflows
+`7a9b055a462eeb8552d3404c26538b44e8ccd83f`. Actions externas e reusable workflows
 exigem SHA completo; imagens de ferramentas usam digest. O CI faz um segundo
 checkout exatamente desse commit e verifica conteúdo, inputs, hardening,
 retenção e alinhamento do Trivy. Dependabot agrupa as atualizações dos

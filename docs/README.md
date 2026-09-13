@@ -3,12 +3,13 @@
 | Necessidade | Documento |
 | --- | --- |
 | Trabalhar com Codex, Claude Code e Copilot | [Guia de engenharia com IA](ai/README.md) |
-| Consumir ou construir imagens | [README do produto](../README.md) |
+| Escolher e verificar uma base por digest | [Consumer Verification Contract](consumer-verification-contract.md) |
+| Construir imagens e consultar exemplos | [README do produto](../README.md) |
 | Localizar responsabilidades e dependências | [Arquitetura](repository-architecture.md) |
 | Preparar ambiente e validar uma mudança | [Contribuição](../CONTRIBUTING.md) |
 | Entender contratos com o executor compartilhado | [Workflows reutilizáveis](m09-m12-reusable-workflows.md) |
 | Entender a renomeação e a confiança AWS | [Migração de nomes](repository-rename.md) |
-| Conferir os ajustes finais e os aceites restantes | [Liberação em 10/09/2026](release-readiness-2026-09-10.md) |
+| Consultar o diagnóstico histórico de liberação | [Snapshot de 10/09/2026](release-readiness-2026-09-10.md) |
 | Entender CAs, timezone, camadas, replay e SBOMs | [Composição](image-composition.md) |
 | Consultar políticas executáveis | [Políticas](../policies/README.md) |
 | Consultar decisões pontuais e seu estado | [ADRs](adr/README.md) |

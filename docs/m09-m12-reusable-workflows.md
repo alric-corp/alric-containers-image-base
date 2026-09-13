@@ -33,7 +33,7 @@ resolvendo no commit do `image-base`. Isso é intencional e documentado no
 Outro produto precisa implementar as mesmas interfaces antes de adotar o pacote.
 
 Os reusable workflows usam o commit publicado
-`0459275b4a2ffbe6e8961041e7b93b41e88ba215`; a action Trivy e todas as demais
+`7a9b055a462eeb8552d3404c26538b44e8ccd83f`; a action Trivy e todas as demais
 Actions externas também usam SHA completo. Validação recebe
 somente `contents: read`; runtime recebe também `actions: read` para baixar
 artifacts do próprio produto. Não há `secrets: inherit`, comandos como input
@@ -48,8 +48,8 @@ do publicador deve satisfazer o aceite de identidade já registrado na RFC antes
 de ser ativada. A migração atual também não altera Environments ou trust policy IAM.
 
 O nome e a retenção dos artifacts são parte da API:
-`melange-repo` (1 dia), `validated-oci-*` (3 dias), `build-scans-*` e
-`runtime-*` (30 dias). Um run deve chamar a validação uma única vez com o lote
+`melange-repo` (30 dias), `validated-oci-*` (3 dias), `build-scans-*`,
+`sbom-*` e `runtime-*` (30 dias). Um run deve chamar a validação uma única vez com o lote
 completo, porque os nomes dos artifacts são compartilhados dentro do run.
 
 O consumidor implementa [P1-02](../specs/2026-09-13-partial-retry-without-rebuild/spec.md):
@@ -110,8 +110,10 @@ obrigatórios, aprovação independente de CODEOWNERS, descarte de aprovações
 antigas, aprovação do último push e `enforce_admins`. O time recebeu escrita
 e `sha_pinning_required` foi ativado. A configuração reproduzível está no
 [PR #3](https://github.com/alric-corp/alric-containers-reusable-workflows/pull/3).
-O pin corrigido do [PR #2](https://github.com/alric-corp/alric-containers-reusable-workflows/pull/2)
-continua sujeito à revisão independente. [Evidência remota](evidence/release-readiness-2026-09-10.json).
+Esse parágrafo registra o estado observado em 10/09; não é inventário atual
+de proteções corporativas. O pin atual indicado acima já está integrado ao
+produto; o [PR #2](https://github.com/alric-corp/alric-containers-reusable-workflows/pull/2)
+é parte do histórico da migração. [Evidência remota](evidence/release-readiness-2026-09-10.json).
 
 A validação local e os runs autenticados estão registrados abaixo e na RFC
 com seus limites. Um check aprovado não comprova publicação ECR, promoção, recuperação
