@@ -442,6 +442,11 @@ registra as observações hospedadas recentes e os aceites ainda pendentes.
 
 ## Configuração dos workflows reusáveis
 
+O [ADR-0003 — Controles da fábrica em workflows federados](docs/adr/0003-controles-seguranca-workflows-federados.md)
+é a fonte canônica para autoria/sustentação, controles existentes e requisitos
+corporativos a confirmar. O contrato de reuso abaixo permanece técnico;
+não estabelece homologação de scanner ou dispensa de requisitos externos.
+
 Os workflows podem ser chamados diretamente. `validate-base-images.yml` exige apenas `frameworks` e `contents: read`, sem credenciais AWS. Build/publicação e promoção exigem OIDC e restringem os jobs que acessam AWS a eventos de push/schedule/dispatch na `main` do chamador. No uso externo, `actions/checkout` utiliza o repositório chamador, que precisa conter os manifestos e scripts esperados. Exemplo de permissões para build/publicação e promoção:
 
 ```yaml
