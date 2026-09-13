@@ -154,21 +154,73 @@ jobs:
       # duas plataformas. Evidência ausente é falha, não aprovação — e um
       # framework sem contrato (cobertura gradual) recebe a mensagem do
       # motivo, decidido pelo mesmo código versionado que montou a matriz.
+      - name: Resolve publication contract and its validated build variant
+        id: contract-plan
+        env:
+          FRAMEWORK: ${{ matrix.framework }}
+          FRAMEWORKS: ${{ inputs.frameworks }}
+        run: |
+          python3 -B - <<'PY'
+          import json
+          import os
+          from scripts.pipeline.runtime import runtime_images
+          framework = os.environ['FRAMEWORK']
+          planned, _ = runtime_images.plan(json.loads(os.environ['FRAMEWORKS']))
+          required = framework in planned
+          dev = (runtime_images.project(framework)[1]
+                 if required and runtime_images.supported(framework) == 'compiled' else '')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'required={str(required).lower()}\ndev={dev}\n')
+          PY
+
+      - name: Download current validated build variant for digest binding
+        if: steps.contract-plan.outputs.dev != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: validated-oci-${{ steps.contract-plan.outputs.dev }}
+          path: runtime-dev.oci
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: List artifacts and producer jobs of this workflow run
+        if: steps.contract-plan.outputs.required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp "repos/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" > runtime-artifacts.json
+          gh api --paginate --slurp "repos/${REPOSITORY}/actions/runs/${RUN_ID}/jobs?filter=all&per_page=100" > runtime-jobs.json
+
+      # P1-02: attempt anterior pode conter o contrato aprovado. A busca é
+      # restrita ao run; o gate confere identidade/digests e ordena attempts.
+      # Não mergear reports homônimos de artifacts diferentes.
       - name: Download functional contract evidence
         id: contract
+        if: steps.contract-plan.outputs.required == 'true'
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: runtime-${{ matrix.framework }}-${{ github.run_attempt }}
+          pattern: runtime-${{ matrix.framework }}-[0-9]*
           path: runtime-gate
+          merge-multiple: false
+          digest-mismatch: error
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Require the functional contract of this framework
         env:
           FRAMEWORK: ${{ matrix.framework }}
           FRAMEWORKS: ${{ inputs.frameworks }}
+          CONTRACT_DOWNLOAD: ${{ steps.contract.outcome }}
         run: |
-          python3 -B -m scripts.pipeline.runtime.runtime_images --gate "$FRAMEWORK" \
-            --requested "$FRAMEWORKS" --reports runtime-gate
+          python3 -B -m scripts.pipeline.runtime.runtime_images image.oci --gate "$FRAMEWORK" \
+            --requested "$FRAMEWORKS" --reports runtime-gate --dev-layout runtime-dev.oci \
+            --artifact-metadata runtime-artifacts.json --job-metadata runtime-jobs.json \
+            --download-result "$CONTRACT_DOWNLOAD" --gate-output runtime-gate-result.json
 
       - name: Require successful default trust integration
         env:
@@ -311,6 +363,9 @@ jobs:
             published.digest
             published-index.json
             publication-evidence.json
+            runtime-gate-result.json
+            runtime-artifacts.json
+            runtime-jobs.json
             sbom-publication.json
             image.oci/sbom/
             image.oci/apko.lock.json

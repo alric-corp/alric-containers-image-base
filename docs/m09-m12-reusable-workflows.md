@@ -52,6 +52,13 @@ O nome e a retenção dos artifacts são parte da API:
 `runtime-*` (30 dias). Um run deve chamar a validação uma única vez com o lote
 completo, porque os nomes dos artifacts são compartilhados dentro do run.
 
+O consumidor implementa [P1-02](../specs/2026-09-13-partial-retry-without-rebuild/spec.md):
+runtime permanece nomeado por attempt; download/seleção por run e binding dos
+reports aos índices atuais ficam no produto. O reusable continua executando
+o módulo runtime do checkout consumidor e não precisa de mudança de interface.
+Identidade do producer vem do contexto GitHub; artifact-run-id do dispatch
+diagnóstico é a origem do OCI, não uma autorização de publicação cross-run.
+
 ## Checks e atualização
 
 `workflow_dependencies.py` extrai o SHA dos chamadores reais. Nos checks, um
