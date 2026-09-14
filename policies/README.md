@@ -27,3 +27,10 @@ A policy IAM é a configuração desejada; editar o arquivo não a aplica na AWS
 A [migração de nomes](../docs/repository-rename.md) registra aplicação, verificação
 e limites. Nomes históricos só são aceitos para assinaturas/provenance, com
 IDs assinados iguais aos do repositório atual; eles não têm acesso OIDC à role.
+
+O [contrato IAM P1-04](../docs/iam-permission-contract.md) e os
+[templates em proposals](aws/proposals/factory-permissions/README.md) são
+propostas locais separadas: inventário, execução/provisionamento e trust
+corporativa para revisão Cloud/IAM. Não substituem a policy acima nem são
+consumidos como permissões pelos workflows. Validação local não comprova
+autorização efetiva ou isolamento de stable.

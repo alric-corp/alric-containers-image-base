@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InspectRepositoryConfiguration",
+      "Effect": "Allow",
+      "Action": ["ecr:DescribeRepositories"],
+      "Resource": "${ECR_REPOSITORY_ARNS}",
+      "Condition": {"StringEquals": {"aws:RequestedRegion": "${AWS_REGION}"}}
+    },
+    {
+      "Sid": "EnsureRepositoryConfiguration",
+      "Effect": "Allow",
+      "Action": ["ecr:CreateRepository", "ecr:PutImageTagMutability"],
+      "Resource": "${ECR_REPOSITORY_ARNS}",
+      "Condition": {"StringEquals": {"aws:RequestedRegion": "${AWS_REGION}"}}
+    }
+  ]
+}
