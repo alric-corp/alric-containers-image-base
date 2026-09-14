@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import Mock, patch
 from urllib.parse import unquote, urlsplit
 
-from scripts.pipeline.governance.workflow_dependencies import dependencies
+from scripts.pipeline.governance.workflow_dependencies import approved_repository, dependencies
 from scripts.pipeline.release.publish_sboms import publish
 from scripts.pipeline.release.verify_promotion import IDENTITIES, verify_promotion
 from tools.check_ai_context import link_targets
@@ -25,12 +25,13 @@ FEDERATED_SPEC = ROOT / "specs/2026-09-13-federated-factory-security-controls"
 OPERATIONS_SPEC = ROOT / "specs/2026-09-13-operational-readiness-slo"
 ADOPTION = ROOT / "docs/corporate-adoption.md"
 ADOPTION_SPEC = ROOT / "specs/2026-09-13-corporate-adoption"
+ORIGIN_SPEC = ROOT / "specs/2026-09-14-shared-origin-portability"
 DOCUMENTS = [ROOT / name for name in (
     "README.md", "RFC-013-Image-Base-Completa-com-Mermaid.md", "docs/README.md",
     "docs/repository-architecture.md", "docs/m09-m12-reusable-workflows.md",
-    "docs/adr/README.md", "docs/m11-m04-operational-health.md",
+    "docs/adr/README.md", "docs/m11-m04-operational-health.md", "CONTRIBUTING.md",
 )] + [CONTRACT, TRUST_ADR, FEDERATED_ADR, ADOPTION] + [directory / name for directory in (
-    SPEC, TRUST_SPEC, FEDERATED_SPEC, OPERATIONS_SPEC, ADOPTION_SPEC,
+    SPEC, TRUST_SPEC, FEDERATED_SPEC, OPERATIONS_SPEC, ADOPTION_SPEC, ORIGIN_SPEC,
 ) for name in (
     "spec.md", "acceptance.md", "plan.md", "tasks.md", "evidence.md", "handoff.md",
 )]
@@ -95,10 +96,12 @@ class ConsumerDocumentationTests(unittest.TestCase):
 
     def test_architecture_docs_reference_the_current_shared_workflow_pin(self):
         pin = dependencies(ROOT)[0]["ref"]
+        current = f"Biblioteca aprovada: `{approved_repository(ROOT)}@{pin}`."
         for name in ("RFC-013-Image-Base-Completa-com-Mermaid.md",
-                     "docs/m09-m12-reusable-workflows.md"):
+                     "docs/m09-m12-reusable-workflows.md", "README.md",
+                     "docs/repository-architecture.md"):
             with self.subTest(document=name):
-                self.assertIn(pin, (ROOT / name).read_text(encoding="utf-8"))
+                self.assertEqual((ROOT / name).read_text(encoding="utf-8").splitlines().count(current), 1)
 
     def test_signature_and_provenance_examples_match_promotion_verifier(self):
         repository, image = self.variables["SOURCE_REPO"], self.variables["IMAGE_REF"]

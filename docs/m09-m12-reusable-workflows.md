@@ -37,9 +37,10 @@ resolvendo no commit do `image-base`. Isso é intencional e documentado no
 [contrato do pacote](https://github.com/alric-corp/alric-containers-reusable-workflows/blob/8f82ea345b38142d43fb8f8358ae76d2d4ea97ce/docs/apko-contract.md).
 Outro produto precisa implementar as mesmas interfaces antes de adotar o pacote.
 
-Os reusable workflows usam o commit publicado
-`7a9b055a462eeb8552d3404c26538b44e8ccd83f`; a action Trivy e todas as demais
-Actions externas também usam SHA completo. Validação recebe
+Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@7a9b055a462eeb8552d3404c26538b44e8ccd83f`.
+
+A action Trivy e todas as demais Actions externas também usam SHA completo.
+Validação recebe
 somente `contents: read`; runtime recebe também `actions: read` para baixar
 artifacts do próprio produto. Não há `secrets: inherit`, comandos como input
 nem novos jobs com OIDC. As permissões existentes de publicação continuam
@@ -66,12 +67,33 @@ diagnóstico é a origem do OCI, não uma autorização de publicação cross-ru
 
 ## Checks e atualização
 
-`workflow_dependencies.py` extrai o SHA dos chamadores reais. Nos checks, um
-segundo checkout traz esse commit para `.reusable-workflows/`, sem persistir
-credenciais Git. A verificação rejeita referências móveis, divergência entre
-os chamadores, checkout ausente, conteúdo diferente do commit fixado, inputs
-obrigatórios ausentes e inputs desconhecidos. O lint M16 exige SHA completo
-para Actions e reusable workflows, inclusive os corporativos.
+[policies/governance/reusable-workflows.json](../policies/governance/reusable-workflows.json)
+aprova uma origem GitHub.com pelo campo `repository` (`schema_version: 1`).
+O SHA continua literal nos dois chamadores; a composite Trivy conserva seu
+SHA próprio. A policy não gera `uses`: [GitHub exige referência estática no
+job](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_iduses),
+sem expressões nesse campo.
+
+`workflow_dependencies.py checkout` valida a policy, os dois pontos de chamada
+obrigatórios, as actions Trivy de promoção/recuperação, o grupo Dependabot e
+os dois checkouts do gate rápido **antes** de emitir `repository`/`ref`.
+Ele não baixa a biblioteca nem verifica seu conteúdo nessa etapa. Os pontos
+obrigatórios são identificados por arquivo/job/step: mudar a origem de uma
+referência não permite que ela desapareça do inventário validado.
+
+Nos checks, o segundo checkout traz o commit para `.reusable-workflows/`, sem
+persistir credenciais Git. `lint` e `shared_workflows()` então conferem a URL
+de fetch `origin` (HTTPS ou SSH de GitHub.com), HEAD e bytes dos **dois YAMLs
+consumidos**, sem substituições por Git replace objects. Conferem ainda
+`workflow_call`, inputs e igualdade da referência Trivy em validação, promoção
+e recuperação, incluindo a chamada interna da biblioteca. Checkout ausente,
+origem divergente, SHA móvel/divergente, YAML alterado e inputs incompatíveis
+falham. O lint M16 mantém a exigência de SHA completo para dependências externas.
+
+O escopo não atesta todos os arquivos da biblioteca nem os bytes da composite
+no seu commit remoto separado. Uma URL em `origin` é metadado local, não prova
+de que o commit foi publicado naquela origem ou de acesso a um repositório
+privado. Essas provas exigem o aceite remoto no destino.
 
 O executor publicado ainda usa seis scripts em `.github/scripts/`; adaptadores
 sem lógica preservam essas interfaces e delegam para `scripts/pipeline/`.
@@ -99,6 +121,32 @@ versionada não comprova que o app Renovate está instalado e ativo.
 Prepare o checkout no SHA declarado pelos chamadores e execute `make check`,
 conforme [CONTRIBUTING.md](../CONTRIBUTING.md). Não use o checkout com alterações
 locais do repositório compartilhado como substituto do release publicado.
+
+## Mudança de origem revisada — P0-03
+
+Para adotar outro nome/origem, uma mudança revisada deve manter coerentes:
+policy de origem, os dois `uses` de workflows, as duas actions Trivy locais,
+a referência Trivy interna da biblioteca, os checkouts que recebem os outputs,
+o grupo `reusable-container-pipeline` do Dependabot e as referências atuais
+no README, RFC, arquitetura e neste contrato. Os testes documentais conferem
+essas referências; nenhum rename é feito automaticamente.
+
+O release consumido ainda contém a chamada interna da composite na origem
+sandbox. A futura adoção de outra origem exige: disponibilizar o commit real
+da composite no destino; publicar o workflow com a origem aprovada e esse
+SHA anterior; depois alinhar os dois chamadores e as actions locais ao release
+revisado. O [README da biblioteca](https://github.com/alric-corp/alric-containers-reusable-workflows/blob/7a9b055a462eeb8552d3404c26538b44e8ccd83f/README.md)
+descreve essa ordem. Não trocar a chamada interna por `./actions/setup-trivy`:
+o checkout do executor pertence ao produto chamador.
+
+Esta subfatia permite validar outra origem com fixtures locais, sem alterar
+a biblioteca nem os pins sandbox. `REUSABLE_WORKFLOWS_PATH` altera somente a
+localização do checkout; `--root` permite ler a policy/chamadores de uma árvore
+local de teste, sem override da origem por variável de ambiente. Acesso privado
+permanece `EXTERNAL_PENDING`; aceite hospedado desta portabilidade é `NOT RUN`
+e a revisão independente permanece pendente. Não há novas credenciais, secrets
+ou permissões para os executores. A execução corporativa segue o
+[pacote de adoção](corporate-adoption.md).
 
 ## Adoção e evidências
 

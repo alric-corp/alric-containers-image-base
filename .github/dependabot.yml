@@ -14,6 +14,8 @@ updates:
     ignore:
       - dependency-name: "github/gh-aw-actions/*"
     groups:
+      # Keep this origin aligned with policies/governance/reusable-workflows.json.
+      # The reviewed-origin resolver rejects partial migrations of this group.
       reusable-container-pipeline:
         patterns:
           - "alric-corp/alric-containers-reusable-workflows*"

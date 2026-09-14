@@ -32,22 +32,35 @@ executa actionlint em uma imagem fixada por digest.
 ## Checkout da dependência revisada
 
 Os checks de integração leem os workflows compartilhados do **mesmo commit**
-usado pelos chamadores. Prepare um checkout separado do seu trabalho local:
+usado pelos chamadores, na origem aprovada em
+[policies/governance/reusable-workflows.json](policies/governance/reusable-workflows.json).
+Prepare um checkout separado do seu trabalho local. O comando `checkout`
+valida as referências locais antes de emitir outputs; não faz clone nem
+valida os arquivos remotos nessa fase:
 
 ```sh
+set -eu
 python3 -B -m scripts.pipeline.governance.workflow_dependencies checkout
-git clone --no-checkout https://github.com/alric-corp/alric-containers-reusable-workflows.git .reusable-workflows
+SHARED_REPOSITORY="$(python3 -B -c 'from scripts.pipeline.governance.workflow_dependencies import approved_repository; print(approved_repository())')"
 SHARED_REF="$(python3 -B -c 'from scripts.pipeline.governance.workflow_dependencies import dependencies; print(dependencies()[0]["ref"])')"
+git clone --no-checkout "https://github.com/${SHARED_REPOSITORY}.git" .reusable-workflows
 git -C .reusable-workflows fetch origin "$SHARED_REF"
 git -C .reusable-workflows checkout --detach "$SHARED_REF"
 make check
 ```
 
-Se o clone já existe, execute somente o fetch e o checkout em uma árvore limpa.
+Se o clone já existe, confira a URL `origin` contra a policy antes do fetch e
+execute o checkout somente em uma árvore limpa. Não descarte trabalho existente.
 Também é possível exportar `REUSABLE_WORKFLOWS_PATH` apontando para um checkout
-existente no commit esperado. Conteúdo alterado, checkout ausente ou SHA
-divergente falham explicitamente. A variável de ambiente não substitui o pin
-dos chamadores.
+existente: a variável escolhe apenas a localização, sem substituir origem ou
+pin. `--root` seleciona a árvore de configuração em testes locais; não é um
+override da origem por ambiente. No lint, origem divergente, checkout ausente,
+SHA divergente ou bytes alterados nos dois YAMLs consumidos falham explicitamente.
+
+A comparação local da URL de fetch, HEAD e conteúdo não prova publicação do
+commit ou acesso privado. O resolvedor não fornece credenciais. Configurar o
+acesso autorizado e verificar a execução no destino são etapas separadas do
+[contrato de reuso](docs/m09-m12-reusable-workflows.md).
 
 ## Comandos
 
@@ -56,7 +69,7 @@ dos chamadores.
 | `make test-unit` | Regras Python, arquitetura e filtros de CI; sem infraestrutura |
 | `make test-integration` | Certificados, TLS, adaptadores e contrato compartilhado |
 | `make lint-local` | Hardening dos workflows, cobertura/consistência dos pins e lote padrão do catálogo |
-| `make lint-shared` | SHA, inputs, Trivy, retenção e cron dos executores reais |
+| `make lint-shared` | Origem, SHA, inputs, Trivy, retenção e cron dos executores reais |
 | `make lint-workflows` | actionlint nos YAML locais e compartilhados |
 | `make check` | Todos os testes e lints acima |
 | `make list` / `make build FRAMEWORK=...` | Catálogo e build local com Docker |
