@@ -544,7 +544,8 @@ existentes. Alterar o nome não permite omitir uma dependência da validação.
 Para os checks locais, `REUSABLE_WORKFLOWS_PATH` escolhe somente a localização
 do checkout; não substitui origem ou pin. Consulte [CONTRIBUTING.md](CONTRIBUTING.md).
 Os checks locais não provam publicação no destino nem acesso privado. Outra
-origem exige release revisado da chamada interna da biblioteca; nenhum pin
-sandbox foi alterado e o aceite hospedado dessa portabilidade está `NOT RUN`.
+origem exige release revisado da chamada interna da biblioteca. O caminho
+hospedado na origem sandbox tem [PASS observado no PR #62 e na main](specs/2026-09-14-shared-origin-portability/evidence.md),
+sujeito à revisão da reconciliação; migração real e acesso privado não foram comprovados.
 A [migração dos nomes e da confiança AWS](docs/repository-rename.md)
 descreve a compatibilidade das assinaturas históricas.

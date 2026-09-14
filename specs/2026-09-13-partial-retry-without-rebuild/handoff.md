@@ -32,3 +32,19 @@ acceptance real ainda precisa de rerun seguro após merge/autorização, conform
 [plan.md](plan.md); evidências em
 [evidence.md](evidence.md). Revisão independente Opus 5 MAX: NOT RUN.
 HOSTED ACCEPTANCE = NOT RUN.
+
+## Atualização pós-integração — 2026-09-14
+
+O snapshot pré-merge acima permanece histórico. P1-02 está integrado via
+PR #55/e3ed682; a coleta atual usa main 8ed8260 e
+[registra](evidence.md#reconciliação-hospedada--2026-09-14) o gate e os reports
+de 34852458933/1, índices runtime/dev e publicação normal confirmados.
+**HOSTED ACCEPTANCE = PENDING**: selected_attempt=1, reused=false;
+nenhum attempt > 1 na janela de 23 runs. Nova coleta ainda não revisada
+independentemente.
+
+Nenhum rerun de lote foi executado ou recomendado: os candidatos examinados
+não apresentam a falha downstream exigida. Próxima ação: autorização para
+preparar/revisar o ensaio isolado do plan, com alvos, SHA e escritas explícitos
+antes de qualquer execução. Não usar ausência de logs ou digest igual como
+prova única de ausência de rebuild. Aceites corporativos continuam externos.

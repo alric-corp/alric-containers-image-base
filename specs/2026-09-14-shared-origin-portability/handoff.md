@@ -69,3 +69,22 @@ permanecem abertos; estados específicos preservados na evidence.
 Próximo passo desta entrega: revisão independente do diff e dos critérios
 locais pelo Claude Code. Este handoff não autoriza staging/publicação Git,
 mudança de infraestrutura, acesso corporativo ou operações da fábrica.
+
+## Reconciliação corrente — 2026-09-14
+
+O texto anterior preserva o snapshot pré-publicação. PR #62 integrado em
+`8ed8260eba75d4f8b5d856cd1fba37a404a5129a`; main local atualizada por
+fast-forward, sem mudanças na biblioteca, checkout consumido ou pins.
+
+Proposta de estado: **HOSTED_ACCEPTANCE = PASS observado na origem sandbox**.
+Runs 34850493723/1 (PR, checkout de merge de teste `991b784d…`) e
+34852456390/1 (push main `8ed8260…`) comprovam resolver → outputs → checkout
+real `7a9b055…` → lint de origem/HEAD/bytes/Trivy → contratos. Evidência e
+limites em [evidence.md](evidence.md); revisão independente desta coleta pendente.
+APPROVE anterior da implementação, informado pelo usuário, não é aprovação
+automática deste encerramento. A API não registra review formal no PR.
+
+Migração real para outra origem NOT RUN; fixture alternativa permanece local;
+acesso privado NOT VERIFIED; corporativo EXTERNAL_PENDING. A sequência futura
+de release acima continua válida. Próximo passo: revisar esta reconciliação;
+não repetir workflows para recriar a evidência já disponível.

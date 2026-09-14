@@ -14,3 +14,19 @@
 Aceites hospedado e corporativo: NOT RUN / EXTERNAL_PENDING. Se uma nova origem
 exigir release compartilhado, sua integração real depende de revisão/publicação
 posterior e adoção do SHA real; nenhum pin operacional aponta a fixture.
+
+## Estado corrente — reconciliação de 2026-09-14
+
+O NOT RUN acima é o snapshot anterior à coleta hospedada. Evidência nova em
+[evidence.md](evidence.md): runs 34850493723 (merge de teste do PR) e
+34852456390 (main integrada), attempt 1, demonstram execução do resolvedor,
+outputs, checkout real e lint/contratos posteriores na origem sandbox.
+
+**PASS observado — hosted na origem atual**, para A01 e os caminhos positivos
+de A03–A08 descritos na evidence. Negativos/migração sintética continuam provas
+locais/fixtures; não há exigência nova de migrar a origem operacional. A02 e
+demais negativos não são promovidos a testes operacionais por rodarem no CI.
+
+Migração real a outra origem NOT RUN; acesso privado NOT VERIFIED; corporativo
+EXTERNAL_PENDING. A implementação recebeu APPROVE conforme relato do usuário;
+a conclusão desta coleta está **PENDING de revisão independente**.

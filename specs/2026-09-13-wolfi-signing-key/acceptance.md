@@ -45,3 +45,18 @@ PARTIAL / BLOCKED_UPSTREAM caso o scan do lote pare pelo incidente zlib.
 A revisão arquitetural independente autorizou a reformulação; a nova revisão
 da entrega e hosted acceptance permanecem **NOT RUN**. Resultados efetivos
 da repetição dos checks estão registrados em [evidence.md](evidence.md).
+
+## Estado corrente observado — 2026-09-14
+
+O estado NOT RUN acima descreve a preparação histórica. A nova
+[coleta](evidence.md#reconciliação-hospedada--2026-09-14) comprova o caminho
+mínimo hospedado A01/A02/A03 e ordem do preflight de A04 na main:
+run 34852458933/1, Melange e Apko go1-26/go1-26-dev, amd64/arm64.
+**PASS observado nesse mínimo; HOSTED ACCEPTANCE = PARTIAL /
+BLOCKED_UPSTREAM no lote**. O scan bloqueado permanece fail-closed.
+
+A05–A09 conservam seus tipos de evidência local/documental/operacional e
+limites, incluindo discovery. Não exigir nova prova online dos negativos
+locais. A10 foi observado nos gates dos Go, sem converter isso em aceite
+de todo o catálogo. Conclusão nova sujeita a revisão independente;
+CORPORATE_ACCEPTANCE = EXTERNAL_PENDING.

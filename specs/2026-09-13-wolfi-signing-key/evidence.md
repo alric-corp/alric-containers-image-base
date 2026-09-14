@@ -288,3 +288,114 @@ requisito futuro de mirror/proxy controlado sem discovery e egress restrito
 se a corporação exigir independência da origem; ver [handoff.md](handoff.md).
 Nenhuma tecnologia ou infraestrutura corporativa foi implementada.
 Não houve auto-aprovação; a nova revisão independente permanece pendente.
+
+## Reconciliação hospedada — 2026-09-14
+
+Esta seção acrescenta observações pós-merge; os registros anteriores continuam
+históricos. A conclusão abaixo ainda precisa de revisão independente da coleta.
+
+### Recorte e revisão executada
+
+Coleta GitHub somente leitura entre 2026-09-14T14:06:38Z e
+2026-09-14T14:26:52Z. Recorte dirigido: PR #62 e sua integração, runs criados
+entre 13:38:00Z e 14:06:38Z em 14/09. A janela filtra criação, não término:
+o build da main terminou depois desse corte. Foram consultados metadados,
+jobs/steps, logs completos e artifacts pequenos pertinentes, sem AWS/registry.
+
+- Principal: [run 34852458933](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34852458933),
+  attempt 1, push/main, commit `8ed8260eba75d4f8b5d856cd1fba37a404a5129a`.
+- Complemento: [run 34850495412](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34850495412),
+  attempt 1, pull_request. API head `074fcb834576560de4f75a7bc15b2b9033dd3cae`;
+  checkout real `991b784d189924d3a0cd71cb0db9d90cafaa4f99`, merge de teste,
+  não execução pós-merge. Sua árvore coincide com a main integrada.
+- Jobs: página 1, per_page=100, 55/55 na main e 26/26 no PR.
+  Artifacts: mesma paginação, 47/47 e 42/42. Sem páginas restantes nessas
+  respostas; não foi feito inventário de todos os runs históricos.
+
+A interpretação usa os workflows/configs/scripts dessa revisão: gate
+`wolfi-trust` anterior ao reusable, preflight de Melange e preflight no
+build Apko; chave `melange/keys/wolfi-signing.rsa.pub`, pin adjacente
+`wolfi-signing-key.json`, keyring Apko nesse caminho e Melange em
+`keys/wolfi-signing.rsa.pub`. Não se substituiu a biblioteca consumida
+`7a9b055a462eeb8552d3404c26538b44e8ccd83f` pela sua main.
+
+### Cadeia principal observada
+
+| Job / step | Evidência datada UTC / resultado | Critérios cobertos |
+| --- | --- | --- |
+| wolfi-trust `104003553543`, step 4 | 13:57:24; chave local, expected_sha256=actual_sha256, errors=[]; SUCCESS | A01/A03 e ordem do preflight de A04 |
+| Melange `104003598332`, steps 5/8 | Validação dos inputs/trust antes do build; build x86_64/aarch64 13:57:44–13:57:48, SUCCESS | A01; formato/caminho local efetivamente consumido |
+| Apko go1-26 `104003752937`, steps 7/8 | Lock/build 13:58:02–13:58:05, SUCCESS; replay inputs e SBOM preservados | A01/A02; build hospedado real |
+| Apko go1-26-dev `104003753060`, steps 7/8 | Lock/build 13:58:17–13:58:25, SUCCESS; replay inputs e SBOM preservados | A01/A02; par dev real |
+| Os dois Apko, steps 11/14 | Scan amd64/arm64 SUCCESS e upload de OCI validado SUCCESS | A10: gates continuam exercitados nesse escopo |
+
+SHA-256 da chave esperado/observado:
+`f0031424cf46f7db780ce63a45f0fd6aa6f85f601e6bb3b7a91fe3d4d5b7d2cc`.
+Os locks preservados de ambos os Go incluem os bytes dessa chave no keyring
+local; os build-inputs fixam a revisão integrada. Não foi necessário baixar
+OCI/layers nem autenticar no ECR para conferir esses relatórios.
+
+| Artifact principal | ID | Arquivos conferidos |
+| --- | --- | --- |
+| melange-repo | 10351384045 | APKINDEX e APK de image-base-ca-certificates para aarch64/x86_64; versão Melange |
+| sbom-go1-26-1 | 10351309202 | apko.lock.json, build-inputs.json, validated-index.json |
+| sbom-go1-26-dev-1 | 10351094343 | mesmos três arquivos |
+| build-scans-go1-26-1 | 10350844642 | evidence-amd64/arm64.json: exit_code=0 |
+| build-scans-go1-26-dev-1 | 10351244452 | evidence-amd64/arm64.json: exit_code=0 |
+| build-scans-nodejs22-1 | 10350824660 | evidence e Trivy por arquitetura: bloqueio atual descrito abaixo |
+
+Identidades dos índices multiarch, sem confundir com manifests individuais:
+
+- go1-26: `sha256:b647a115bac41c6e21d0dce3f06a7631e452debe1fcbe6210ef6285d8d7ddd60`.
+- go1-26-dev: `sha256:80ccc9668150585214f25990dc293a91b3dc7e94cd9566f2eb6b43a983e64850`.
+
+No PR, os jobs wolfi-trust `103996912774`, Melange `103996979829`,
+Apko Go `103997105919` e dev `103997106031` também passaram.
+É evidência complementar desse contexto; a cadeia principal acima já contém
+preflight, Melange e Apko na mesma execução da main.
+
+### Falha do lote e limite do aceite
+
+O run principal terminou FAILURE: 13 dos 16 jobs de validação falharam no
+step de scan; go1-25, go1-26 e go1-26-dev passaram. O artifact representativo
+nodejs22 registra **CVE-2026-85091**, zlib **1.3.2-r6**, MEDIUM,
+FixedVersion **1.3.3-r0**, exit_code=1 em amd64 e arm64, seguido de upload
+de OCI validado SKIPPED. FixedVersion é informação do scanner, não prova de
+que o pacote corrigido está disponível agora na origem. Não se generalizou
+essa CVE a todos os 13 frameworks sem examinar seus relatórios individuais.
+
+Conclusão proposta: **caminho mínimo hosted P1-03 PASS observado** para
+go1-26/go1-26-dev nas duas arquiteturas; **HOSTED ACCEPTANCE = PARTIAL /
+BLOCKED_UPSTREAM** para o lote, conforme o aceite externo desta spec.
+A falha de scan não apaga os builds comprovados e não é falha da chave.
+Publicação/promoção SKIPPED no PR decorrem dos guards de evento; não são PASS.
+
+A05 continua apoiado nas duas fontes oficiais da adoção original; A06/A07
+mantêm revisão humana e monitor detect-only, sem nova consulta ao monitor.
+Os negativos A03/A04 não foram repetidos online como exigência nova.
+A08 permanece **EXPECTED TOOLING LIMITATION REPRODUCED** no registro
+original: descoberta /apk-configuration/JWKS pode ampliar o trust set.
+Nenhum 404 é garantia futura, discovery não foi desativado e não se
+demonstrou confiança exclusivamente local. Não há aceite corporativo.
+
+### Integridade da coleta e limites
+
+ZIPs disponíveis e não expirados ao coletar, com retenção desses relatórios
+até 14/10/2026. SHA-256 dos downloads:
+
+| Material | SHA-256 |
+| --- | --- |
+| Logs main 34852458933/1 | `688fadb2bd5609dc3698ddbbc51f63dcb5c331126013a9dafa54d9bcc8af1454` |
+| sbom-go1-26-1 | `bab334e69863548fcf5fd426f2349043cf5956750172e87982fa700929442f26` |
+| sbom-go1-26-dev-1 | `67e4376844cb8442ef5a4739bd65377a01f180a735af0e2bc11a40fbffc0a88c` |
+| build-scans-nodejs22-1 | `0939930125c159b2884fffa84269df6dbc6bb38013e6bb10fb41b073be54b749` |
+| melange-repo | `2e9f03c73491c7a4ecbf75e0fa55ed596434e8171fc117693d0550a919d0e622` |
+
+Hashes identificam material coletado; não substituem assinatura/procedência.
+ZIPs e logs integrais permanecem fora do checkout. Não houve novo build,
+rerun, publicação, consulta AWS ou modificação de qualquer controle.
+
+Verificações locais desta rodada: seis testes documentais, lint-local,
+check_ai_context, links dos documentos alterados e diff check PASS.
+Registro consolidado em [evidence da reconciliação](../2026-09-14-shared-origin-portability/evidence.md#verificações-locais-desta-reconciliação);
+as contagens históricas anteriores não foram reexecutadas.
