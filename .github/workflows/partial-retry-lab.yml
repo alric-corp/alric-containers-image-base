@@ -1,0 +1,155 @@
+name: P1-02 isolated retry evidence laboratory
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Requires separate execution authorization; evidence only, no publication.'
+        type: choice
+        required: true
+        default: do-not-run
+        options: [do-not-run, P1-02-evidence-only]
+      reviewed-sha:
+        description: 'Exact reviewed main SHA authorized for this laboratory run.'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  request:
+    name: Lab request
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'alric-corp/alric-containers-image-base' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Validate explicit laboratory request
+        run: python3 -B -m scripts.pipeline.runtime.retry_lab guard
+
+  lab-build:
+    name: Lab build
+    needs: request
+    uses: ./.github/workflows/validate-base-images.yml
+    with:
+      frameworks: '["go1-26","go1-26-dev"]'
+
+  lab-contract:
+    name: Lab contract
+    needs: lab-build
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/test-runtime-images.yml
+    with:
+      framework: go1-26
+
+  lab-retry:
+    name: Lab retry gate
+    needs: [lab-build, lab-contract]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Validate explicit laboratory request
+        run: |
+          python3 -B -m scripts.pipeline.runtime.retry_lab guard
+          mkdir -p lab-evidence
+      - name: Download retained runtime OCI
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: validated-oci-go1-26
+          path: image.oci
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+      - name: Download retained dev OCI
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: validated-oci-go1-26-dev
+          path: runtime-dev.oci
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+      - name: Download functional evidence from this run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: runtime-go1-26-[0-9]*
+          path: runtime-gate
+          merge-multiple: false
+          digest-mismatch: error
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+      - name: Download attempt-1 baseline
+        if: github.run_attempt == '2'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: runtime-lab-p1-02-baseline-${{ github.run_id }}
+          path: baseline
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+      - name: Collect complete GitHub artifact and job metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" > lab-evidence/artifacts.json
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=all&per_page=100" > lab-evidence/jobs.json
+      - name: Execute the real production functional gate
+        run: |
+          python3 -B -m scripts.pipeline.runtime.runtime_images image.oci --gate go1-26 \
+            --requested '["go1-26","go1-26-dev"]' --reports runtime-gate --dev-layout runtime-dev.oci \
+            --artifact-metadata lab-evidence/artifacts.json --job-metadata lab-evidence/jobs.json \
+            --gate-output lab-evidence/runtime-gate-result.json
+      - name: Record lab execution and compare inherited evidence
+        run: |
+          set -euo pipefail
+          baseline=()
+          if [[ "$GITHUB_RUN_ATTEMPT" == 2 ]]; then
+            baseline=(--baseline baseline/execution.json)
+          fi
+          python3 -B -m scripts.pipeline.runtime.retry_lab record \
+            --gate lab-evidence/runtime-gate-result.json --artifacts lab-evidence/artifacts.json \
+            --jobs lab-evidence/jobs.json "${baseline[@]}" --output lab-evidence/execution.json
+      - name: Preserve attempt-1 baseline
+        if: github.run_attempt == '1'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: runtime-lab-p1-02-baseline-${{ github.run_id }}
+          path: lab-evidence/execution.json
+          overwrite: false
+          retention-days: 30
+          if-no-files-found: error
+      - name: Controlled attempt-1 barrier
+        run: |
+          python3 -B -m scripts.pipeline.runtime.retry_lab barrier \
+            --manifest lab-evidence/execution.json --output lab-evidence/barrier.json
+      - name: Preserve lab attempt evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: runtime-lab-p1-02-attempt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            lab-evidence/
+            runtime-gate/
+            image.oci/validated-index.json
+            runtime-dev.oci/validated-index.json
+          overwrite: false
+          retention-days: 30
+          if-no-files-found: error
