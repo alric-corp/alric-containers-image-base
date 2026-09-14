@@ -219,6 +219,11 @@ P1-02 e P1-03 continuam PENDING; um run geral ou aprovação local não encerra 
 **Não.** A fábrica executa no sandbox; as identidades, decisões e aceites
 corporativos abaixo ainda precisam ser configurados e comprovados.
 
+O [pacote P0-03](docs/corporate-adoption.md) organiza os parâmetros reais,
+dependências, responsáveis, ordem de execução e checklist de aceite do destino.
+O pacote local é revisável; implantação e homologação corporativas permanecem
+pendentes. Não substitui os contratos nem encerra aceites hospedados anteriores.
+
 ### 1. Estado real da main e dos bloqueios
 
 A main publica os frameworks que passam seus gates. Os bloqueios de 10/09

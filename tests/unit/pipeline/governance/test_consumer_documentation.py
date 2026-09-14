@@ -23,12 +23,14 @@ SPEC = ROOT / "specs/2026-09-13-consumer-contract-rfc-refresh"
 TRUST_SPEC = ROOT / "specs/2026-09-13-sigstore-trust-model-adr"
 FEDERATED_SPEC = ROOT / "specs/2026-09-13-federated-factory-security-controls"
 OPERATIONS_SPEC = ROOT / "specs/2026-09-13-operational-readiness-slo"
+ADOPTION = ROOT / "docs/corporate-adoption.md"
+ADOPTION_SPEC = ROOT / "specs/2026-09-13-corporate-adoption"
 DOCUMENTS = [ROOT / name for name in (
     "README.md", "RFC-013-Image-Base-Completa-com-Mermaid.md", "docs/README.md",
     "docs/repository-architecture.md", "docs/m09-m12-reusable-workflows.md",
     "docs/adr/README.md", "docs/m11-m04-operational-health.md",
-)] + [CONTRACT, TRUST_ADR, FEDERATED_ADR] + [directory / name for directory in (
-    SPEC, TRUST_SPEC, FEDERATED_SPEC, OPERATIONS_SPEC,
+)] + [CONTRACT, TRUST_ADR, FEDERATED_ADR, ADOPTION] + [directory / name for directory in (
+    SPEC, TRUST_SPEC, FEDERATED_SPEC, OPERATIONS_SPEC, ADOPTION_SPEC,
 ) for name in (
     "spec.md", "acceptance.md", "plan.md", "tasks.md", "evidence.md", "handoff.md",
 )]
@@ -67,7 +69,7 @@ class ConsumerDocumentationTests(unittest.TestCase):
                     self.assertTrue(destination.exists())
 
     def test_consumer_bash_examples_have_valid_syntax(self):
-        for document in (CONTRACT, OPERATIONS_SPEC / "evidence.md"):
+        for document in (CONTRACT, OPERATIONS_SPEC / "evidence.md", ADOPTION):
             with self.subTest(document=document.relative_to(ROOT)):
                 examples = "\n".join(re.findall(
                     r"(?ms)^```bash\n(.*?)^```$", document.read_text(encoding="utf-8")))

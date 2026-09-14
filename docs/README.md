@@ -16,6 +16,7 @@
 | Avaliar raízes, metadados e adoção corporativa do Sigstore | [ADR-0002 — Sigstore Trust Model (PROPOSED)](adr/0002-sigstore-trust-model.md) |
 | Distinguir autoria, controles e requisitos corporativos da fábrica federada | [ADR-0003 — P1-06](adr/0003-controles-seguranca-workflows-federados.md) |
 | Avaliar permissões AWS, templates e aceite IAM futuro | [Contrato IAM — P1-04, proposta não aplicada](iam-permission-contract.md) |
+| Preparar configuração e aceite do destino corporativo | [Pacote de adoção — P0-03, execução externa pendente](corporate-adoption.md) |
 | Operar a fábrica e avaliar alertas, indicadores e proposta de SLO/SLA | [Contrato operacional — M11/M04/P1-08](m11-m04-operational-health.md) |
 | Revisar signing key Wolfi e rotação | [Wolfi signing-key defense-in-depth](wolfi-signing-key.md) |
 | Recuperar stable | [Runbook de recuperação](../README.md#recuperação-de-stable-runbook-m15) |
