@@ -196,6 +196,7 @@ histórica permanece limitada ao commit/run em que foi obtida.
 | P1-01 — stable read-back | IMPLEMENTED; confirmação ECR antes de promoted=true | PASS — go1-26 e go1-26-dev no [run 34768459323](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34768459323), commit e3ed682 |
 | P1-02 — partial retry | IMPLEMENTED; merge PR #55 | PENDING — requer rerun real com evidence anterior e mesmo digest |
 | P1-03 — Wolfi defense-in-depth | IMPLEMENTED; merge PR #54 | PENDING — caminho mínimo Go observado no run 34735740791; aceite formal não declarado |
+| P1-04 — contrato de permissões IAM | [Inventário e templates locais propostos](docs/iam-permission-contract.md), sem aplicação IAM | Validação AWS/sandbox NOT RUN; aceite corporativo EXTERNAL_PENDING; PutImage no mesmo ECR não isola stable por principal |
 | P1-05 — Sigstore Trust Model ADR | [ADR-0002](docs/adr/0002-sigstore-trust-model.md) PROPOSED; documenta o modelo existente | Decisão corporativa EXTERNAL / PENDING; sem novo controle ou aceite hospedado |
 | P1-06 — controles em workflows federados | [ADR-0003](docs/adr/0003-controles-seguranca-workflows-federados.md); premissa de autoria/sustentação separada dos requisitos externos | Requisitos e primeiro aceite corporativo pendentes; somente documentação |
 | P1-08 — contrato operacional, alertas e proposta de SLO/SLA | [Contrato operacional](docs/m11-m04-operational-health.md) proposto nesta fatia; mecanismos existentes preservados | Operação observada em amostra datada na [evidence](specs/2026-09-13-operational-readiness-slo/evidence.md); entrega externa, responsáveis e SLA corporativos pendentes; não encerra o P1-08 completo |
@@ -244,7 +245,7 @@ os nomes de destino nesta RFC são planejamento, não infraestrutura implantada.
 | --- | --- | --- |
 | Corporate CA anchors | EXTERNAL — pendente | Segurança/PKI + Containers Products: fontes e manifesto reais; release rejeita MOCK |
 | Corporate GitHub protections | EXTERNAL — pendente | GitHub admins: repository IDs, owner IDs, times/CODEOWNERS, checks, proteção e enforce_admins |
-| Corporate OIDC/IAM | EXTERNAL — pendente | Cloud/Security: trust e permission policies da origem/conta novas, negativos reais |
+| Corporate OIDC/IAM | EXTERNAL — pendente | Cloud/Security: avaliar [proposta P1-04](docs/iam-permission-contract.md), trust/permissions/provisionamento e restrições efetivas; negativos reais pendentes |
 | Corporate ECR | EXTERNAL — pendente | Cloud: registry, resource/lifecycle policies, Org IDs e imutabilidade, testes autenticados |
 | Corporate egress/mirror | EXTERNAL — pendente | Cloud/Network/Security, P0-03: boundary aprovada; isolamento Wolfi quando requerido |
 | Sigstore decision | EXTERNAL — pendente | Segurança/AppSec: [ADR-0002 PROPOSED](docs/adr/0002-sigstore-trust-model.md), raízes/identidades, metadados públicos e processamento externo de SPDX, ou alternativa aprovada |

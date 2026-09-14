@@ -80,7 +80,7 @@ Cada publicação recebe uma **build tag imutável** `<ddmmaa>-<hhmm>-r<run_id>-
 
 - **Consumir as imagens:** um cliente OCI (`docker`, `podman`, `nerdctl`...) autenticado no ECR (`aws ecr get-login-password`).
 - **Build/CI local:** Docker Engine com suporte a `--privileged` (usado pelo melange) — nada de `apko`/`melange` instalado à parte, o [`Makefile`](Makefile) roda os dois via `docker run`. Não precisa de credencial AWS para build local (o OCI é construído e carregado no Docker local).
-- **CI (push real):** uma role AWS com permissão de `ecr:*` no(s) repositório(s) alvo, assumível via OIDC pelo GitHub Actions (sem access key de longa duração) — veja [Configuração dos workflows reusáveis](#configuração-dos-workflows-reusáveis).
+- **CI (push real):** uma role assumível via OIDC com permissões explícitas de execução e provisionamento nos ECRs autorizados — veja o [contrato IAM P1-04 e templates propostos](docs/iam-permission-contract.md). A proposta ainda exige validação/aplicação por Cloud/IAM.
 
 ## Como usar
 
@@ -481,7 +481,7 @@ jobs:
 | `frameworks` | ambos | input | sim | array JSON com os nomes dos arquivos em `frameworks/*.yaml` a processar |
 | `soak-hours` | promote-stable | input | não (default `6`) | horas mínimas que um build imutável espera antes de poder virar `stable` |
 
-Pré-requisito de infraestrutura (fora deste repo): configurar o [provedor OIDC do GitHub Actions](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services) na conta AWS e uma IAM role com trust policy restrita a este repositório/branch, com permissão de `ecr:*` nos repositórios `image-base-*`.
+Pré-requisito de infraestrutura: provider OIDC e role aprovados por Cloud/IAM, com trust restrita e permissões conforme o [contrato P1-04](docs/iam-permission-contract.md). Seus exemplos locais não alteram a policy ativa. O publicador atual também cria/configura ECRs; PutImage no mesmo repositório não reserva stable exclusivamente ao promotor.
 
 ## Build local
 
