@@ -526,14 +526,25 @@ Para executar as suítes de regressão do pipeline e dos certificados, consulte 
 
 ## Workflows compartilhados
 
-A validação Apko/Melange e a execução dos contratos de runtime são consumidas
-via o commit publicado `7a9b055a462eeb8552d3404c26538b44e8ccd83f` de
-`alric-corp/alric-containers-reusable-workflows`. A instalação do Trivy é uma
+A validação Apko/Melange e a execução dos contratos de runtime usam a biblioteca
+fixada abaixo. A instalação do Trivy é uma
 composite action comum à validação, promoção e recuperação. Gatilhos, catálogo,
 scripts/testes de domínio e decisões de release permanecem neste repositório.
 
+Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@7a9b055a462eeb8552d3404c26538b44e8ccd83f`.
+
 Veja a [divisão de responsabilidades, contrato e adoção](docs/m09-m12-reusable-workflows.md).
-Para os checks locais, defina `REUSABLE_WORKFLOWS_PATH` apontando para um checkout
-da biblioteca no SHA fixado pelos chamadores; no CI esse commit é conferido
-automaticamente. A [migração dos nomes e da confiança AWS](docs/repository-rename.md)
+A [policy de origem revisada](policies/governance/reusable-workflows.json)
+define o repositório permitido; os dois workflows e a composite mantêm SHAs
+literais separados. O resolvedor valida os pontos locais obrigatórios antes
+de emitir os outputs usados pelo checkout. O lint posterior confere origem,
+HEAD, os dois YAMLs consumidos e a referência Trivy interna, além dos contratos
+existentes. Alterar o nome não permite omitir uma dependência da validação.
+
+Para os checks locais, `REUSABLE_WORKFLOWS_PATH` escolhe somente a localização
+do checkout; não substitui origem ou pin. Consulte [CONTRIBUTING.md](CONTRIBUTING.md).
+Os checks locais não provam publicação no destino nem acesso privado. Outra
+origem exige release revisado da chamada interna da biblioteca; nenhum pin
+sandbox foi alterado e o aceite hospedado dessa portabilidade está `NOT RUN`.
+A [migração dos nomes e da confiança AWS](docs/repository-rename.md)
 descreve a compatibilidade das assinaturas históricas.

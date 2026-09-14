@@ -186,8 +186,18 @@ histórica permanece limitada ao commit/run em que foi obtida.
 | M14 | Timeouts / concorrência | IMPLEMENTED | Hardening e grupos por PR/framework; ARM usa emulação quando necessário |
 | M15 | Recovery | IMPLEMENTED | Verificação, re-scan e read-back sem bypass; quarentena exige PR explícito |
 | M16 | Hardening / revisão | PARTIAL | Lint e CODEOWNERS; sem alegar enforcement contra administrador no sandbox |
-| M09/M12 | Reusable workflows | IMPLEMENTED | SHA atual dos chamadores: 7a9b055a462eeb8552d3404c26538b44e8ccd83f; integração verifica checkout e permissões |
+| M09/M12 | Reusable workflows | IMPLEMENTED | SHA atual dos chamadores: 7a9b055a462eeb8552d3404c26538b44e8ccd83f; [origem revisada](policies/governance/reusable-workflows.json), checkout, contratos e referências Trivy conferidos localmente |
 | — | Requisitos de segurança / scanner | EXTERNAL — a confirmar | [P1-06](docs/adr/0003-controles-seguranca-workflows-federados.md); Trivy continua o gate vigente; aplicabilidade de integração adicional não presumida |
+
+Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@7a9b055a462eeb8552d3404c26538b44e8ccd83f`.
+
+A preparação P0-03 permite validar uma origem revisada da biblioteca sem
+substituições automáticas: policy, referências literais dos chamadores/actions,
+chamada Trivy interna, checkouts e Dependabot precisam concordar. Os checks
+conferem origem local, SHA e bytes dos dois YAMLs consumidos; não comprovam
+publicação do commit ou acesso privado. A origem sandbox e seus pins foram
+preservados; outra origem exige futuro release da biblioteca e aceite hospedado,
+ainda `NOT RUN`. Ver [contrato de reuso](docs/m09-m12-reusable-workflows.md).
 
 ### Fatias recentes da RFC-013
 

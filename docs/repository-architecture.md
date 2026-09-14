@@ -19,6 +19,7 @@ Os diretórios consumidos pelo contrato Apko (`frameworks/`, `distroless/`,
 | `scripts/pipeline/release/` | Seleção de candidatos, publicação, promoção e evidência de CVEs |
 | `scripts/pipeline/operations/` | Saúde, tempos, resumos e versões efetivas das ferramentas |
 | `scripts/pipeline/governance/` | Hardening, pins, cache e contratos com workflows compartilhados |
+| `policies/governance/` | Origem revisada da biblioteca; os SHAs permanecem nas referências literais dos workflows |
 | `policies/operations/` | Limites, donos, retenção e exceções operacionais (frameworks fora do lote padrão, com ADR) |
 | `policies/release/` | Quarentena de digests e identidades de assinatura/provenance |
 | `.github/workflows/` | Gatilhos, permissões, concorrência e composição dos jobs |
@@ -64,7 +65,7 @@ mudança explícita nesta documentação e no teste de arquitetura.
 
 ## Fronteira entre produto e workflows compartilhados
 
-O repositório `alric-containers-reusable-workflows` fornece os executores genéricos
+O repositório `alric-corp/alric-containers-reusable-workflows` fornece os executores genéricos
 Melange/Apko/scan e runtime. O checkout desses executores é o commit do
 **consumidor**, de onde vêm os manifests, scripts e testes.
 
@@ -72,12 +73,24 @@ O `image-base` conserva catálogo, ECR, tags, soak, quarentena, identidade do
 assinador e recuperação. O executor compartilhado não recebe comandos livres,
 regras de negócio ou credenciais AWS como parte de seu contrato.
 
-Os dois chamadores usam o commit publicado
-`7a9b055a462eeb8552d3404c26538b44e8ccd83f`. Actions externas e reusable workflows
+Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@7a9b055a462eeb8552d3404c26538b44e8ccd83f`.
+
+Os dois chamadores usam esse commit. Actions externas e reusable workflows
 exigem SHA completo; imagens de ferramentas usam digest. O CI faz um segundo
-checkout exatamente desse commit e verifica conteúdo, inputs, hardening,
-retenção e alinhamento do Trivy. Dependabot agrupa as atualizações dos
-workflows compartilhados; Renovate acompanha os digests locais.
+checkout no commit indicado. A origem aprovada fica em
+[policies/governance/reusable-workflows.json](../policies/governance/reusable-workflows.json).
+O resolvedor valida as referências locais e o wiring dos checkouts antes de
+emitir origem/SHA; o lint posterior confere `origin`, HEAD, bytes dos dois
+YAMLs consumidos, inputs, hardening, retenção e alinhamento da action Trivy
+interna com promoção/recuperação. Dependabot agrupa a origem aprovada;
+Renovate acompanha os digests locais.
+
+`REUSABLE_WORKFLOWS_PATH` só escolhe a localização. A conferência local não
+prova publicação do commit, acesso privado ou o conteúdo integral da biblioteca
+e da composite no seu SHA separado. Uma origem nova exige referências estáticas
+coerentes e futuro release da chamada interna, conforme o
+[contrato de reuso](m09-m12-reusable-workflows.md). A biblioteca e os pins sandbox
+permanecem inalterados nesta preparação; aceite hospedado continua pendente.
 
 ## Compatibilidade da migração
 

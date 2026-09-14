@@ -68,7 +68,7 @@ segredos fictícios. As colunas finais apontam a um teste de destino CA-xx.
 | ID / finalidade | Origem e configuração sandbox publicável | Entrada e fornecedor corporativos | Forma atual / ajuste e classe | Verificação |
 | --- | --- | --- | --- | --- |
 | PAR-01 — dois repositórios | Produto `alric-corp/alric-containers-image-base`; biblioteca `alric-corp/alric-containers-reusable-workflows`. URLs/estrutura em [reuso](m09-m12-reusable-workflows.md). [Promoção](../.github/workflows/promote-stable.yml) e [recovery](../.github/workflows/recover-stable.yml) passam `$GITHUB_REPOSITORY` ao [verificador](../scripts/pipeline/release/verify_promotion.py), que recebe `repository` como argumento posicional. [Build](../scripts/pipeline/artifacts/build_image.py) e [runtime](../scripts/pipeline/runtime/runtime_images.py) fazem leituras próprias da variável para identificar o repositório de origem | Admin GitHub + Containers Products: host, owner/nome, visibilidade, URLs e acesso dos dois repos | EXTERNAL_PROVISIONING. Contexto GITHUB_REPOSITORY é ALREADY_PORTABLE; literais das linhas seguintes não são | CA-01/02/09: commit, origem e identidade do destino |
-| PAR-02 — origem e pins shared | [workflow_dependencies.py](../scripts/pipeline/governance/workflow_dependencies.py): REPOSITORY literal sandbox e regex derivado; [validate](../.github/workflows/validate-base-images.yml)/[runtime](../.github/workflows/test-runtime-images.yml) usam SHA `7a9b055a462eeb8552d3404c26538b44e8ccd83f` | Mantenedores: origem e release revisado acessível | CODE_CHANGE_REQUIRED se a origem mudar. REUSABLE_WORKFLOWS_PATH só muda diretório local; não origem/regex. Ajustar callers/resolvedor/testes juntos | CA-02: uma origem aprovada, SHA exato e checkout íntegro |
+| PAR-02 — origem e pins shared | [Policy de origem](../policies/governance/reusable-workflows.json) + [workflow_dependencies.py](../scripts/pipeline/governance/workflow_dependencies.py): inventário explícito de pontos obrigatórios; [validate](../.github/workflows/validate-base-images.yml)/[runtime](../.github/workflows/test-runtime-images.yml) usam SHA `7a9b055a462eeb8552d3404c26538b44e8ccd83f` | Mantenedores: origem e release revisado acessível | Origem é CONFIGURATION_ONLY versionada; atualização dos literais/release é coordenada. O resolvedor portátil foi implementado localmente na [subfatia técnica](../specs/2026-09-14-shared-origin-portability/spec.md), com revisão/hosted pendentes. REUSABLE_WORKFLOWS_PATH só muda diretório; não aprova origem, SHA ou bytes | CA-02: policy, callers, action interna/local, checkout, Dependabot e documentos coerentes; acesso privado ainda não comprovado |
 | PAR-03 — action compartilhada | [Promoção](../.github/workflows/promote-stable.yml)/[recovery](../.github/workflows/recover-stable.yml): setup-trivy SHA `eea2d2f4c4102ded74204e4131c1417f444ae3fc`; referência interna também existe no release shared | Containers Products: origem e commit da action e novo release da biblioteca se necessário | CODE_CHANGE_REQUIRED condicional à nova origem, coordenada entre repos. Renomear caller não reescreve referências de commit antigo; publicar release revisado antes de repin, em etapa autorizada | CA-02/07: mesma definição Trivy nos caminhos |
 | PAR-04 — acesso privado e checkout | [Fast checks](../.github/workflows/test-promotion.yml): segundo actions/checkout usa repository/ref resolvidos e token padrão, sem credencial própria | Admin GitHub/Segurança: visibilidade, compartilhamento e forma segura de leitura cross-repository | Sharing de action/reusable é CONFIGURATION_ONLY; segundo checkout privado exige solução revisada, CODE_CHANGE_REQUIRED se o acesso atual não servir. Não injetar secret em PR/fork | CA-02: download do reusable e clone explícito testados separadamente |
 | PAR-05 — governança e permissões | [CODEOWNERS](../.github/CODEOWNERS), [fast checks](../.github/workflows/test-promotion.yml), [workflow.yml](../.github/workflows/workflow.yml); owners sandbox, checks test/lint-workflows. Enforce_admins=false é decisão do sandbox | Admin GitHub/AppSec: times/revisores, origem dos checks, regras centrais, Actions permitidas e acesso da biblioteca | CONFIGURATION_ONLY para owners versionados; EXTERNAL_PROVISIONING + EXTERNAL_DECISION para proteções efetivas, incluindo enforce_admins corporativo. Preservar permissões aninhadas; sem secrets: inherit | CA-01/02: revisão exigível e PR sem AWS/OIDC |
@@ -355,12 +355,13 @@ próprio, não interpretação otimista deste checklist.
 
 ### A. Ajustes locais necessários ou condicionais
 
-Estes trabalhos **não foram implementados** aqui. Códigos PAR/CA são do pacote,
-sem nova prioridade ou backlog concorrente.
+A portabilidade do resolvedor possui implementação local na subfatia técnica
+vinculada abaixo; sua adoção no destino e os demais ajustes continuam pendentes.
+Códigos PAR/CA são do pacote, sem nova prioridade ou backlog concorrente.
 
 | Ajuste / evidência do problema | Resultado necessário e componente | Dependência | Critério de aceite / fatia |
 | --- | --- | --- | --- |
-| Nova origem da biblioteca não é descoberta pelo literal REPOSITORY/regex | Tornar origem revisada coerente no resolvedor, callers, action, checkout e agrupamento de atualizações em [.github/dependabot.yml](../.github/dependabot.yml); [workflow_dependencies.py](../scripts/pipeline/governance/workflow_dependencies.py), workflows citados em PAR-02/03 e documentos ativos/teste documental enumerados na próxima fatia abaixo | Nome/release aprovados; local pode usar fixture sintética | CA-02: origem esperada, SHA exato de cada referência, bytes íntegros, agrupamento e documentação ativa coerentes; inputs/permissões e snapshots históricos preservados; P0-03/reuso M09/M12 |
+| Mudança de origem da biblioteca exige adoção coordenada | Resolvedor e validação local implementados na [subfatia de portabilidade](../specs/2026-09-14-shared-origin-portability/spec.md); para o destino, atualizar policy, callers, action, checkout, [.github/dependabot.yml](../.github/dependabot.yml) e documentos ativos/teste documental enumerados abaixo | Nome/acesso/release reais aprovados; fixture sintética não comprova integração no destino | CA-02: origem esperada, SHA exato de cada referência, bytes íntegros, agrupamento e documentação ativa coerentes; inputs/permissões e snapshots históricos preservados; P0-03/reuso M09/M12 |
 | Segundo checkout usa token do próprio repo | Solução de leitura cross-repository segura se biblioteca for privada, em [test-promotion.yml](../.github/workflows/test-promotion.yml) | Decisão de visibilidade/acesso admins; sem secrets a PR/fork | CA-02 com limites de eventos documentados, falha fechada e sem ampliar executor; P0-03 |
 | Runners literais e sem input shared | Se destino exigir outros runners, adaptar interface/callers e release shared sob revisão | Plataforma/Segurança decide capacidade/labels | CA-05 e contratos reais por arquitetura; P0-03, sem obrigação de ARM nativo |
 | Aquisição CA presume lista/object keys | Se fonte aprovada divergir, adaptar estreitamente helper/inputs, mantendo pins e stage/verify | Fontes/manifesto da PKI | CA-06 positivos/negativos e sem aquisição AWS recorrente implícita; M10/P0-03 |
@@ -401,7 +402,13 @@ exigidos, ficam como melhorias registradas, não pretexto para expandir esta
 fatia. Watchdog, mirror generalizado, Renovate, admission, VEX e ARM nativo não
 são adicionados automaticamente ao plano obrigatório.
 
-### Próxima fatia técnica recomendada
+### Portabilidade: subfatia técnica e adoção posterior
+
+A [implementação local](../specs/2026-09-14-shared-origin-portability/evidence.md)
+agora cobre o resolvedor e os negativos; revisão independente e aceite hospedado
+continuam pendentes. A sequência abaixo permanece necessária para mudar a origem
+operacional, sem usar o SHA de fixture como release publicado.
+
 **P0-03 — Portabilidade da origem da biblioteca compartilhada**, começando pelo
 resolvedor, callers, action e checkout, incluindo o padrão do grupo
 `reusable-container-pipeline` em [.github/dependabot.yml](../.github/dependabot.yml)
@@ -415,7 +422,7 @@ Atualizar também as referências ativas de origem/pins na
 [contrato de reuso](m09-m12-reusable-workflows.md), no [README](../README.md)
 e na [arquitetura](repository-architecture.md), com a verificação documental
 correspondente em [test_consumer_documentation.py](../tests/unit/pipeline/governance/test_consumer_documentation.py),
-que hoje exige o pin corrente na RFC e no contrato de reuso. Preservar os
+que exige origem/pin corrente nesses quatro documentos. Preservar os
 snapshots históricos que registram origens/pins anteriores.
 
 Critério: origem explicitamente aprovada resolvida em todos os callers,
@@ -423,11 +430,13 @@ checkout no SHA comum dos reusables e íntegro, pin próprio da action consisten
 entre suas chamadas, agrupamento de atualizações e documentação ativa coerentes
 com as referências executáveis. Manter SHA exato em cada referência, distinguindo
 o pin do reusable do pin da action; preparar o release compartilhado antes de
-adotá-lo, conforme etapa C. Negativos para origem/SHA inesperados e falha de
-acesso, preservando permissões e os seis adaptadores, pertencem à futura fatia.
+adotá-lo, conforme etapa C. Negativos locais para origem/SHA inesperados e
+falha da fronteira Git integram a subfatia técnica; não comprovam acesso privado.
+Permissões e os seis adaptadores permanecem preservados.
 Se a biblioteca for privada, a solução de acesso de PAR-04 depende da decisão
 dos admins antes de qualquer credencial; não inventar autorização.
-Nenhum desses ajustes é iniciado nesta sessão.
+A origem operacional e os pins reais permanecem sandbox. Nenhum release
+compartilhado novo foi publicado nem foi comprovado acesso privado corporativo.
 
 ## 7. Registro de liberação
 
