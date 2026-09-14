@@ -85,3 +85,18 @@ Eventual CVE zlib permanece BLOCKED_UPSTREAM separado; não reduzir controles.
 Nenhuma ação remota de escrita foi realizada.
 
 Confirme o estado real do Git antes de continuar.
+
+## Atualização pós-integração — 2026-09-14
+
+Os estados pré-merge acima são históricos. A [reconciliação](evidence.md#reconciliação-hospedada--2026-09-14)
+registra main `8ed8260eba75d4f8b5d856cd1fba37a404a5129a`,
+run 34852458933/1: preflight com pin correto, Melange e Apko lock/build
+go1-26/go1-26-dev nas duas arquiteturas concluídos.
+**Mínimo hosted PASS observado; lote PARTIAL / BLOCKED_UPSTREAM**.
+O scan representativo nodejs22 bloqueou CVE-2026-85091 em zlib; nenhuma
+correção/dispensa foi aplicada. A revisão independente desta coleta está
+PENDING; ela não herda a aprovação da implementação.
+
+Nenhuma execução adicional é necessária para repetir o mínimo já observado.
+A ausência de lote verde e os requisitos corporativos continuam separados;
+preservar integralmente a Known Tooling Limitation acima.

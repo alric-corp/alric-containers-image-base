@@ -162,3 +162,150 @@ PASS limitado aos frameworks/runs anteriores; P1-02/P1-03 permanecem PENDING
 (sem trust Wolfi exclusiva). Validações AWS/simulação/laboratório P1-04 NOT RUN,
 aceite corporativo EXTERNAL_PENDING; aceite operacional P1-08 pendente; P0-02
 e P0-04 não encerrados. A autorização de workflows federados não foi ampliada.
+
+## Reconciliação hospedada — 2026-09-14
+
+Os registros acima são o snapshot da implementação local. Esta seção registra
+uma coleta posterior, somente de leitura, ainda sujeita à revisão independente
+do encerramento; não atribui ao Claude Code revisão desta nova coleta.
+
+### Integração e revisão efetivamente observadas
+
+Coleta Git/GitHub entre 2026-09-14T14:06:38Z e 2026-09-14T14:11:30Z.
+Produto inicialmente limpo na branch `feat/shared-origin-portability`, HEAD
+`074fcb834576560de4f75a7bc15b2b9033dd3cae`; fetch/push origin apontam para
+`alric-corp/alric-containers-image-base`. Fetch e fast-forward da main levaram
+a `8ed8260eba75d4f8b5d856cd1fba37a404a5129a`, igual à origin/main observada.
+
+[PR #62](https://github.com/alric-corp/alric-containers-image-base/pull/62)
+MERGED em 2026-09-14T13:57:13Z. Head revisado `074fcb8…`; merge integrado
+`8ed8260…`, com pais `468cfe0…` e `074fcb8…`. A aprovação adversarial
+**Claude Code — APPROVE** é a informada pelo responsável e registrada no PR.
+A API de reviews retornou lista vazia (página 1, per_page=100), e o campo
+`reviewDecision` retornou `REVIEW_REQUIRED`, apesar do estado MERGED. Não há
+review formal de GitHub a atribuir a um revisor nem mudança de proteções nesta
+coleta. Aprovação relatada e integração são fatos distintos.
+
+O PR executou merge de teste `991b784d189924d3a0cd71cb0db9d90cafaa4f99`.
+A API Git confirmou seus pais `468cfe0…`/`074fcb8…` e tree
+`32da61dfff228b393b078e644fdf4b3e98b039aa`, igual ao tree do head revisado e do
+merge integrado. Isso permite interpretar esses runs pelo mesmo conteúdo,
+sem tratar o run de PR como execução pós-merge.
+
+### Janela, fontes e cobertura
+
+Janela dirigida: runs criados em 2026-09-14T13:38:00Z–14:06:38Z, ligados ao
+PR #62 ou ao commit integrado. Consulta `actions/runs?head_sha=8ed8260…`,
+página 1/per_page=100: total 4, todos retornados (fast checks, build e dois
+updates Dependabot; estes últimos não usados para aceite). O run de PR foi
+identificado nos checks do próprio PR. Não é inventário de todo o histórico.
+
+Para cada fast check abaixo: metadados do run, jobs do attempt 1, página
+1/per_page=100, total 2/2; artifacts página 1/per_page=100, total 0/0; ZIP dos
+logs do attempt disponível e lido integralmente nos dois jobs. Não houve
+página restante, expiração ou falha de acesso nessas consultas. Não exigir
+artifact inexistente quando o mecanismo preserva o resultado nos logs.
+
+| Contexto / run | Revisão efetivamente checada | Jobs e resultado |
+| --- | --- | --- |
+| PR, [34850493723](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34850493723), attempt 1 | API head `074fcb834576560de4f75a7bc15b2b9033dd3cae`; checkout `991b784d189924d3a0cd71cb0db9d90cafaa4f99` (merge de teste) | `lint-workflows` 103996906662 SUCCESS; `test` 103996906678 SUCCESS |
+| Main/push, [34852456390](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34852456390), attempt 1 | API/checkout `8ed8260eba75d4f8b5d856cd1fba37a404a5129a` | `lint-workflows` 104003543818 SUCCESS; `test` 104003543517 SUCCESS |
+
+### Critério → evidência operacional
+
+Nos quatro jobs, steps 4, 5 e 6 (`Resolve reviewed reusable workflows`,
+`Checkout reusable workflows at the caller SHA`, `Record reusable workflow
+commit`) terminaram SUCCESS, nessa ordem. Nos dois jobs lint, actionlint,
+hardening/pins e `Shared workflow and retention contracts` também SUCCESS.
+
+Extratos mínimos do job **104003543818 na main**, em UTC:
+
+```text
+13:57:21.2892166  checkout do produto: 8ed8260eba75d4f8b5d856cd1fba37a404a5129a
+13:57:22.5890710  python3 -B -m scripts.pipeline.governance.workflow_dependencies checkout
+13:57:22.7363478  repository: alric-corp/alric-containers-reusable-workflows
+13:57:22.7364093  ref: 7a9b055a462eeb8552d3404c26538b44e8ccd83f
+13:57:22.7364754  persist-credentials: false
+13:57:23.2280298  git log -1: 7a9b055a462eeb8552d3404c26538b44e8ccd83f
+13:57:27.9844237  Shared workflow origin, SHA, inputs and hardening verified.
+13:57:28.4899840  Retenção e agendamento conferidos em 11 workflow(s).
+```
+
+O resolvedor escreve em GITHUB_OUTPUT, sem imprimir seu conteúdo bruto. Os
+valores acima são os inputs efetivamente recebidos pelo checkout subsequente;
+o YAML dessa revisão liga esses inputs aos outputs `shared.repository/ref`.
+Não houve inferência a partir apenas de teste unitário ou nome de diretório.
+
+| Critérios | Cobertura nova e limite |
+| --- | --- |
+| A01/R1/R2 | Policy da revisão executada, CLI efetivamente chamada e outputs consumidos pelo checkout real na origem sandbox |
+| A03/R4, A04/R5, A05 | SHA real conferido; lint da mesma revisão verifica origin, HEAD, bytes dos dois workflows e chamada Trivy interna. Pin da action permanece `eea2d2f4c4102ded74204e4131c1417f444ae3fc`, distinto do reusable |
+| A06 | Resolvedor confere grupo Dependabot; teste documental corrente passou dentro dos unitários hospedados |
+| A07 | Logs dos quatro jobs mostram Contents: read/Metadata: read e checkout sem credenciais persistidas; integração real exercita contratos/adaptadores |
+| A02 e negativos de A03–A06 | Continuam provas de fixture; sua execução num runner GitHub não equivale a migração operacional para outra origem |
+| A08 | Contextos PR/main e limites registrados; sem alegar acesso privado ou adoção corporativa |
+
+No job test do PR: 350 unitários/24 integração PASS. No job test da main:
+350/24 PASS, incluindo `test_real_callers_match_shared_api_and_tooling` e
+contratos de retenção/adaptadores. São resultados **hospedados coletados**, não
+novas execuções locais desta reconciliação e não contagens adicionais de aceite.
+
+SHA-256 dos ZIPs coletados: PR
+`0efc2c2e72df2ae853d8a5e71a26deb583bd2e3765f4ef0173ec55971495be36`;
+main `3af80cfb74a022ea513da1c089034135c2d209a3e856943440867148bc84e92d`.
+Hashes identificam os downloads; não substituem verificação de assinatura ou
+procedência. ZIPs/logs integrais permanecem fora do repositório.
+
+Correção do finding LOW — 2026-09-14: o hash do ZIP do run 34850493723
+(attempt 1) acima foi corrigido após **dois downloads de confirmação**
+pelo mesmo endpoint GitHub REST:
+`/repos/alric-corp/alric-containers-image-base/actions/runs/34850493723/logs`.
+Coletas concluídas em **2026-09-14T15:07:44Z** e **2026-09-14T15:07:45Z**;
+ambas retornaram ZIPs de 26.348 bytes com o SHA-256 corrigido acima.
+Esta verificação posterior corrige somente a rastreabilidade do ZIP;
+os demais hashes, observações dos jobs/steps e estados de aceite permanecem
+inalterados. Não foi reaberta a investigação dos runs.
+
+### Estado corrente proposto
+
+**HOSTED_ACCEPTANCE = PASS observado para o caminho operacional na origem
+atual do sandbox**, tanto no PR quanto após merge na main. A conclusão desta
+coleta ainda requer revisão independente. A implementação já tinha APPROVE;
+não transferir essa aprovação automaticamente ao novo encerramento.
+
+Origem alternativa: PASS em fixture; migração real a outra origem: NOT RUN;
+acesso privado/interno: NOT VERIFIED; CORPORATE_ACCEPTANCE: EXTERNAL_PENDING.
+Nenhum release novo da biblioteca necessário/adotado no sandbox. Biblioteca
+canônica e checkout consumido continuam limpos nos SHAs registrados acima.
+Falhas de imagens no outro workflow não invalidam o checkout/lint comprovado
+aqui; também não são convertidas em publicação ou promoção aprovadas.
+
+### Verificações locais desta reconciliação
+
+Executadas em 14/09/2026, após os adendos documentais:
+
+| Check | Resultado desta sessão |
+| --- | --- |
+| python3 -B -m unittest tests.unit.pipeline.governance.test_consumer_documentation -v | 6 testes PASS |
+| make lint-local | PASS; hardening, 52 pins em 49 arquivos, catálogo/lote |
+| python3 -B tools/check_ai_context.py | PASS, validação estrutural offline |
+| Links locais dos 14 Markdown alterados e novas âncoras de reconciliação | PASS; usando link_targets existente, sem criar parser/teste novo |
+| Preservação histórica | PASS: os nove arquivos anteriores de evidence/acceptance/handoff são prefixos byte a byte dos arquivos acrescidos |
+| git diff --check | PASS |
+
+Não se repetiu a suíte completa apenas para obter contagens: os 350/24 acima
+são resultados dos runs hospedados identificados, não desta execução local.
+As comparações dos reports/índices baixados estão na evidence P1-02; as de
+chave/locks estão na evidence P1-03.
+
+Escopo final: 14 Markdown, incluindo os nove adendos nas três specs e cinco
+referências ativas; nenhum arquivo novo/untracked ou staged. Main/HEAD/
+origin/main observada em `8ed8260eba75d4f8b5d856cd1fba37a404a5129a`.
+Biblioteca canônica limpa em `b574bd487e7c598c12ab6c6e584a523e03caaa45`;
+checkout consumido limpo em `7a9b055a462eeb8552d3404c26538b44e8ccd83f`;
+pin da composite inalterado. Nenhum commit/push/PR ou execução operacional.
+
+Tentativas auxiliares de leitura sem acesso não produziram dados válidos;
+foram desconsideradas. As consultas concluídas descritas acima e nas outras
+duas specs cobrem os totais/páginas declarados. A investigação não é inventário
+fora da janela nem validação de acesso privado.

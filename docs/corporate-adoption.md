@@ -32,7 +32,7 @@ e as evidências referenciadas, sem reescrever snapshots pré-merge:
 | --- | --- | --- |
 | P1-01 | Hosted PASS limitado a go1-26/go1-26-dev no run 34768459323, commit e3ed682; read_back_status=confirmed e digests iguais, conforme [evidence P1-09](../specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md) | NOT RUN |
 | P1-02 | PENDING para retry real, embora integrado | NOT RUN |
-| P1-03 | PENDING; observação Go do run 34735740791 já registrada na RFC não encerra o aceite | NOT RUN |
+| P1-03 | PARTIAL / BLOCKED_UPSTREAM; mínimo hosted PASS observado nos dois Go em 34852458933/1, conforme [nova evidence](../specs/2026-09-13-wolfi-signing-key/evidence.md#reconciliação-hospedada--2026-09-14); coleta sujeita a revisão | NOT RUN |
 | P1-04 | LOCAL_STRUCTURE_VALIDATED=PASS; AWS_VALIDATOR_CHECKED, AWS_SIMULATION_CHECKED e SANDBOX_EXECUTION_VERIFIED=NOT RUN | CORPORATE_ACCEPTED=EXTERNAL_PENDING |
 | P1-08 | Documentação revisada; aceite operacional completo pendente | NOT RUN / EXTERNAL_PENDING |
 
@@ -68,7 +68,7 @@ segredos fictícios. As colunas finais apontam a um teste de destino CA-xx.
 | ID / finalidade | Origem e configuração sandbox publicável | Entrada e fornecedor corporativos | Forma atual / ajuste e classe | Verificação |
 | --- | --- | --- | --- | --- |
 | PAR-01 — dois repositórios | Produto `alric-corp/alric-containers-image-base`; biblioteca `alric-corp/alric-containers-reusable-workflows`. URLs/estrutura em [reuso](m09-m12-reusable-workflows.md). [Promoção](../.github/workflows/promote-stable.yml) e [recovery](../.github/workflows/recover-stable.yml) passam `$GITHUB_REPOSITORY` ao [verificador](../scripts/pipeline/release/verify_promotion.py), que recebe `repository` como argumento posicional. [Build](../scripts/pipeline/artifacts/build_image.py) e [runtime](../scripts/pipeline/runtime/runtime_images.py) fazem leituras próprias da variável para identificar o repositório de origem | Admin GitHub + Containers Products: host, owner/nome, visibilidade, URLs e acesso dos dois repos | EXTERNAL_PROVISIONING. Contexto GITHUB_REPOSITORY é ALREADY_PORTABLE; literais das linhas seguintes não são | CA-01/02/09: commit, origem e identidade do destino |
-| PAR-02 — origem e pins shared | [Policy de origem](../policies/governance/reusable-workflows.json) + [workflow_dependencies.py](../scripts/pipeline/governance/workflow_dependencies.py): inventário explícito de pontos obrigatórios; [validate](../.github/workflows/validate-base-images.yml)/[runtime](../.github/workflows/test-runtime-images.yml) usam SHA `7a9b055a462eeb8552d3404c26538b44e8ccd83f` | Mantenedores: origem e release revisado acessível | Origem é CONFIGURATION_ONLY versionada; atualização dos literais/release é coordenada. O resolvedor portátil foi implementado localmente na [subfatia técnica](../specs/2026-09-14-shared-origin-portability/spec.md), com revisão/hosted pendentes. REUSABLE_WORKFLOWS_PATH só muda diretório; não aprova origem, SHA ou bytes | CA-02: policy, callers, action interna/local, checkout, Dependabot e documentos coerentes; acesso privado ainda não comprovado |
+| PAR-02 — origem e pins shared | [Policy de origem](../policies/governance/reusable-workflows.json) + [workflow_dependencies.py](../scripts/pipeline/governance/workflow_dependencies.py): inventário explícito de pontos obrigatórios; [validate](../.github/workflows/validate-base-images.yml)/[runtime](../.github/workflows/test-runtime-images.yml) usam SHA `7a9b055a462eeb8552d3404c26538b44e8ccd83f` | Mantenedores: origem e release revisado acessível | Origem é CONFIGURATION_ONLY versionada; atualização dos literais/release é coordenada. O resolvedor portátil foi implementado localmente na [subfatia técnica](../specs/2026-09-14-shared-origin-portability/spec.md), com PASS hosted observado na origem sandbox após PR #62, sujeito à revisão da coleta; migração real/acesso privado pendentes. REUSABLE_WORKFLOWS_PATH só muda diretório; não aprova origem, SHA ou bytes | CA-02: policy, callers, action interna/local, checkout, Dependabot e documentos coerentes; acesso privado ainda não comprovado |
 | PAR-03 — action compartilhada | [Promoção](../.github/workflows/promote-stable.yml)/[recovery](../.github/workflows/recover-stable.yml): setup-trivy SHA `eea2d2f4c4102ded74204e4131c1417f444ae3fc`; referência interna também existe no release shared | Containers Products: origem e commit da action e novo release da biblioteca se necessário | CODE_CHANGE_REQUIRED condicional à nova origem, coordenada entre repos. Renomear caller não reescreve referências de commit antigo; publicar release revisado antes de repin, em etapa autorizada | CA-02/07: mesma definição Trivy nos caminhos |
 | PAR-04 — acesso privado e checkout | [Fast checks](../.github/workflows/test-promotion.yml): segundo actions/checkout usa repository/ref resolvidos e token padrão, sem credencial própria | Admin GitHub/Segurança: visibilidade, compartilhamento e forma segura de leitura cross-repository | Sharing de action/reusable é CONFIGURATION_ONLY; segundo checkout privado exige solução revisada, CODE_CHANGE_REQUIRED se o acesso atual não servir. Não injetar secret em PR/fork | CA-02: download do reusable e clone explícito testados separadamente |
 | PAR-05 — governança e permissões | [CODEOWNERS](../.github/CODEOWNERS), [fast checks](../.github/workflows/test-promotion.yml), [workflow.yml](../.github/workflows/workflow.yml); owners sandbox, checks test/lint-workflows. Enforce_admins=false é decisão do sandbox | Admin GitHub/AppSec: times/revisores, origem dos checks, regras centrais, Actions permitidas e acesso da biblioteca | CONFIGURATION_ONLY para owners versionados; EXTERNAL_PROVISIONING + EXTERNAL_DECISION para proteções efetivas, incluindo enforce_admins corporativo. Preservar permissões aninhadas; sem secrets: inherit | CA-01/02: revisão exigível e PR sem AWS/OIDC |
@@ -374,7 +374,8 @@ renderizador universal ou substituição em massa. Nenhuma foi feita aqui.
 
 ### B. Aceites sandbox ainda pendentes
 P1-02: rerun real controlado, conforme [plano existente](../specs/2026-09-13-partial-retry-without-rebuild/plan.md),
-sem rebuild. P1-03: consolidar aceite específico preflight/chave local, sem
+sem rebuild. P1-03: revisar a nova comprovação do mínimo preflight/chave
+local dos dois Go; o lote permanece PARTIAL / BLOCKED_UPSTREAM, sem
 inferir exclusividade. P1-04: validador/simulador/laboratório autorizado; P1-08:
 integração/entrega/ACK e operação após decisões. Resultados futuros entram na
 fatia correspondente; não são transferência automática para o corporativo.
@@ -405,8 +406,10 @@ são adicionados automaticamente ao plano obrigatório.
 ### Portabilidade: subfatia técnica e adoção posterior
 
 A [implementação local](../specs/2026-09-14-shared-origin-portability/evidence.md)
-agora cobre o resolvedor e os negativos; revisão independente e aceite hospedado
-continuam pendentes. A sequência abaixo permanece necessária para mudar a origem
+foi integrada pelo PR #62. A coleta de 14/09/2026 registra PASS hospedado
+observado na origem sandbox (PR e main), sujeito à revisão independente da
+reconciliação; migração real e acesso privado continuam pendentes.
+A sequência abaixo permanece necessária para mudar a origem
 operacional, sem usar o SHA de fixture como release publicado.
 
 **P0-03 — Portabilidade da origem da biblioteca compartilhada**, começando pelo

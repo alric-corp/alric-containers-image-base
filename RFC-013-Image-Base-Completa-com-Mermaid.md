@@ -196,8 +196,10 @@ substituições automáticas: policy, referências literais dos chamadores/actio
 chamada Trivy interna, checkouts e Dependabot precisam concordar. Os checks
 conferem origem local, SHA e bytes dos dois YAMLs consumidos; não comprovam
 publicação do commit ou acesso privado. A origem sandbox e seus pins foram
-preservados; outra origem exige futuro release da biblioteca e aceite hospedado,
-ainda `NOT RUN`. Ver [contrato de reuso](docs/m09-m12-reusable-workflows.md).
+preservados. A [reconciliação de 14/09/2026](specs/2026-09-14-shared-origin-portability/evidence.md)
+registra PASS hospedado observado no PR #62 e na main para a origem sandbox,
+sujeito à revisão independente dessa coleta. Migração real a outra origem
+continua NOT RUN e acesso privado NOT VERIFIED. Ver [contrato de reuso](docs/m09-m12-reusable-workflows.md).
 
 ### Fatias recentes da RFC-013
 
@@ -205,7 +207,7 @@ ainda `NOT RUN`. Ver [contrato de reuso](docs/m09-m12-reusable-workflows.md).
 | --- | --- | --- |
 | P1-01 — stable read-back | IMPLEMENTED; confirmação ECR antes de promoted=true | PASS — go1-26 e go1-26-dev no [run 34768459323](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34768459323), commit e3ed682 |
 | P1-02 — partial retry | IMPLEMENTED; merge PR #55 | PENDING — requer rerun real com evidence anterior e mesmo digest |
-| P1-03 — Wolfi defense-in-depth | IMPLEMENTED; merge PR #54 | PENDING — caminho mínimo Go observado no run 34735740791; aceite formal não declarado |
+| P1-03 — Wolfi defense-in-depth | IMPLEMENTED; merge PR #54 | PARTIAL / BLOCKED_UPSTREAM — mínimo hosted PASS observado em go1-26/go1-26-dev, run 34852458933/1; reconciliação sujeita a revisão |
 | P1-04 — contrato de permissões IAM | [Inventário e templates locais propostos](docs/iam-permission-contract.md), sem aplicação IAM | Validação AWS/sandbox NOT RUN; aceite corporativo EXTERNAL_PENDING; PutImage no mesmo ECR não isola stable por principal |
 | P1-05 — Sigstore Trust Model ADR | [ADR-0002](docs/adr/0002-sigstore-trust-model.md) PROPOSED; documenta o modelo existente | Decisão corporativa EXTERNAL / PENDING; sem novo controle ou aceite hospedado |
 | P1-06 — controles em workflows federados | [ADR-0003](docs/adr/0003-controles-seguranca-workflows-federados.md); premissa de autoria/sustentação separada dos requisitos externos | Requisitos e primeiro aceite corporativo pendentes; somente documentação |
@@ -222,7 +224,12 @@ re-scan e read-back passaram para `go1-26` e `go1-26-dev`. O artifact
 `promotion-go1-26-1` registra `promoted=true`, `read_back_status=confirmed` e
 `candidate_digest == stable_digest_observed == sha256:f658ed77f8734e1c3d218e07684f876f5cd38964afd79bb5c7a7c9e6571d339f`.
 Detalhes na [evidence](specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md).
-P1-02 e P1-03 continuam PENDING; um run geral ou aprovação local não encerra seus aceites.
+Em 14/09/2026, a [nova coleta P1-03](specs/2026-09-13-wolfi-signing-key/evidence.md#reconciliação-hospedada--2026-09-14)
+comprovou na main o mínimo preflight/Melange/Apko dos dois Go, nas duas
+arquiteturas: PASS nesse escopo; lote PARTIAL / BLOCKED_UPSTREAM. P1-02
+continua PENDING: a [coleta dirigida](specs/2026-09-13-partial-retry-without-rebuild/evidence.md#reconciliação-hospedada--2026-09-14)
+não encontrou retry na janela e o gate observado registra reused=false.
+As conclusões novas aguardam revisão independente, sem aceite corporativo.
 
 ## Prontidão para produção
 

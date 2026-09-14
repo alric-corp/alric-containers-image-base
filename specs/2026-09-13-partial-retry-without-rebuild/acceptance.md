@@ -22,3 +22,12 @@ Resultados A01–A08: **PASS local**, conforme testes e limites registrados em
 tem três diagnósticos preexistentes no workflow gerado, reproduzidos na HEAD;
 o lint canônico e o workflow modificado passaram.
 Revisão independente: NOT RUN. HOSTED ACCEPTANCE = NOT RUN.
+
+## Estado corrente observado — 2026-09-14
+
+[Coleta pós-integração](evidence.md#reconciliação-hospedada--2026-09-14):
+23 runs na janela dirigida, todos attempt 1; 15 revisões contêm P1-02.
+A01 e o binding de A03 foram observados em 34852458933/1, mas o gate registra
+selected_attempt=1 e reused=false. **HOSTED ACCEPTANCE = PENDING**:
+A02 exige o retry real, não apenas publicação normal ou igualdade de digest.
+Não há novo encerramento independente; negativos/seleção mantêm PASS local.

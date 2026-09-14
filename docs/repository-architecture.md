@@ -90,7 +90,9 @@ prova publicação do commit, acesso privado ou o conteúdo integral da bibliote
 e da composite no seu SHA separado. Uma origem nova exige referências estáticas
 coerentes e futuro release da chamada interna, conforme o
 [contrato de reuso](m09-m12-reusable-workflows.md). A biblioteca e os pins sandbox
-permanecem inalterados nesta preparação; aceite hospedado continua pendente.
+permanecem inalterados. O caminho hospedado na origem sandbox tem
+[PASS observado no PR e na main](../specs/2026-09-14-shared-origin-portability/evidence.md),
+sujeito à revisão da reconciliação; migração real e acesso privado permanecem pendentes.
 
 ## Compatibilidade da migração
 

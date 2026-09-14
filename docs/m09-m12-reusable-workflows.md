@@ -143,8 +143,10 @@ Esta subfatia permite validar outra origem com fixtures locais, sem alterar
 a biblioteca nem os pins sandbox. `REUSABLE_WORKFLOWS_PATH` altera somente a
 localização do checkout; `--root` permite ler a policy/chamadores de uma árvore
 local de teste, sem override da origem por variável de ambiente. Acesso privado
-permanece `EXTERNAL_PENDING`; aceite hospedado desta portabilidade é `NOT RUN`
-e a revisão independente permanece pendente. Não há novas credenciais, secrets
+permanece `EXTERNAL_PENDING`. O caminho na origem sandbox tem
+[PASS hospedado observado](../specs/2026-09-14-shared-origin-portability/evidence.md)
+nos runs 34850493723 (PR) e 34852456390 (main), com revisão desta reconciliação
+pendente; migração real a outra origem continua NOT RUN. Não há novas credenciais, secrets
 ou permissões para os executores. A execução corporativa segue o
 [pacote de adoção](corporate-adoption.md).
 

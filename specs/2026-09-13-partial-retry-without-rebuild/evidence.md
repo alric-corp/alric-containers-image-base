@@ -169,3 +169,136 @@ integridade acrescentam IO; custo no runner hospedado ainda não foi medido.
 Revisão independente Opus 5 MAX: NOT RUN. HOSTED ACCEPTANCE = NOT RUN.
 Plano controlado em [plan.md](plan.md), sem falhas destrutivas ou alteração
 dos gates. Incidente zlib permanece separado.
+
+## Reconciliação hospedada — 2026-09-14
+
+Adendo aos snapshots históricos, sem alterar seus resultados. Coleta somente
+leitura do GitHub, concluída em 2026-09-14T14:26:52Z. Nenhum retry foi acionado.
+
+### Janela, paginação e revisão
+
+Consulta dirigida de `workflow.yml`, filtro created entre
+2026-09-13T00:00:00Z e 2026-09-14T14:06:38Z, coletada às 14:18:43Z:
+página 1, per_page=100, total_count=23, recebidos 23. **Todos attempt 1**.
+Ancestralidade Git local confirma 15 revisões contendo a implementação
+`654359c231241615baf09f046e4bd175bce30deb`, integrada pelo PR #55 em
+`e3ed68259f66af41e8054a4c0ac29a54082ddd60`.
+Isso significa “nenhum retry encontrado nesta janela”, não “nunca executado”.
+
+Principal: [run 34852458933](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34852458933),
+attempt 1, push/main, commit `8ed8260eba75d4f8b5d856cd1fba37a404a5129a`.
+Jobs 55/55 e artifacts 47/47, cada consulta em uma página de 100.
+Logs de attempt 1 completos e ZIPs pertinentes disponíveis. Foram usados
+o código dessa revisão e os reports realmente preservados, não o resumo health.
+
+### Caminho normal comprovado, sem reutilização
+
+| Etapa | Identidade / resultado observado |
+| --- | --- |
+| Contrato go1-26 | Job 104005247750, 14:02:06Z–14:06:06Z, SUCCESS; download dos OCI aprovados e teste nas duas arquiteturas |
+| Reports | Artifact 10351870297, runtime-go1-26-1, arquivos runtime-go1-26-amd64.json e runtime-go1-26-arm64.json, ambos status=passed |
+| Publicação | Job 104006720016, 14:06:09Z–14:07:08Z, SUCCESS |
+| Evidence de publicação | Artifact 10352725729, publication-go1-26-1; runtime-gate-result.json, validated-index.json, published-index.json e publication-evidence.json |
+
+Extrato do gate preservado: `passed=true`, `run_attempt=1`,
+`selected_attempt=1`, `reused=false`, `selected_artifact_id=10351870297`,
+`latest_producer_job_id=104005247750`, `latest_producer_attempt=1`.
+Repository, revisão, run e framework correspondem nos dois reports e no gate.
+
+| Identidade | Digest completo |
+| --- | --- |
+| OCI index go1-26 | `sha256:b647a115bac41c6e21d0dce3f06a7631e452debe1fcbe6210ef6285d8d7ddd60` |
+| Manifest linux/amd64 | `sha256:907a3d84e4a0829f1be51afb4b2b87d5de5f46bd2235a524198580f15fc74461` |
+| Manifest linux/arm64 | `sha256:608b0bcb805acbe7c8df88663757d0d135be2678b2438a595d19be30060bffa2` |
+| OCI index go1-26-dev | `sha256:80ccc9668150585214f25990dc293a91b3dc7e94cd9566f2eb6b43a983e64850` |
+| Dev manifest linux/amd64 | `sha256:9bcbcd56e750a18f1fb5d1d8848d2bcb65f959636d98acb36cb3dc661052cece` |
+| Dev manifest linux/arm64 | `sha256:6ccc7d9f24ac10eda4eafa378586602960d2c9ad49045e6da67f4c10fe5aeab4` |
+
+Comparação local dos arquivos baixados: hashes dos dois reports conferem com
+report_sha256 do gate; índices/manifests runtime/dev e contexto conferem.
+SHA-256 dos bytes de published-index.json corresponde ao índice acima;
+publication-evidence registra validated_digest=copied_digest=remote_digest.
+O job executou Skopeo copy --all --preserve-digests, signing, SBOM e
+provenance com SUCCESS. São provas do primeiro attempt, não de retry.
+O contrato constrói aplicação de teste; isso não é rebuild da imagem base.
+Sem attempt 2, não há como comparar jobs herdados/reexecutados nem demonstrar
+ausência de rebuild/repack durante retry.
+
+### Busca de candidato existente
+
+Além do principal, foram examinados jobs dos runs 34738421104 (55/55),
+34796737880 (55/55) e 34813257692 (19/19), uma página de 100 por consulta.
+Os dois primeiros publicaram go1-26 e go1-26-dev com SUCCESS; os publishers
+falhos dependiam de artifacts validados ausentes ou do par dev ausente.
+O terceiro contém promoção, sem os publishers/contratos de build procurados.
+Não foram baixados todos os artifacts/logs desses candidatos descartados;
+a exclusão usa os jobs/steps, sem reinterpretar runs antigos pela main atual.
+
+No run principal, 13 outros publishers falham em Require validated artifact;
+go1-25 falha ao baixar o par dev, assim como seu producer funcional.
+Os 13 scans anteriores falharam; o exemplo nodejs22 e sua CVE atual estão
+na [evidence Wolfi](../2026-09-13-wolfi-signing-key/evidence.md#reconciliação-hospedada--2026-09-14).
+Não se encontrou, nesses candidatos dirigidos, falha downstream após um
+contrato válido que justifique recomendar rerun para esse aceite.
+A conclusão não cobre todos os possíveis candidatos fora da janela ou todos
+os logs dos 23 runs. Os jobs do PR são contexto PR, não publicação main.
+
+O lote principal é inadequado como ensaio mínimo: rerun failed jobs pode
+reexecutar builds/scans falhos e dependentes, com escritas de publicação.
+Não presumir que jobs bem-sucedidos nunca serão reexecutados por dependências.
+A falha global do lote não constitui a falha downstream exigida pelo P1-02.
+
+### Retenção e integridade dos materiais
+
+Na coleta, os artifacts abaixo estavam não expirados:
+
+| Material | ID | expires_at UTC |
+| --- | --- | --- |
+| validated-oci-go1-26 | 10350984493 | 2026-09-17T13:58:15Z |
+| validated-oci-go1-26-dev | 10351009609 | 2026-09-17T13:58:43Z |
+| runtime-go1-26-1 | 10351870297 | 2026-10-14T14:06:02Z |
+| publication-go1-26-1 | 10352725729 | 2026-10-14T14:07:03Z |
+
+OCI não foi baixado; sua retenção não prova elegibilidade de um rerun.
+ZIP runtime SHA-256:
+`f905c02b46cd06e44dd650ed2b85a36236aa9f662c991c3c4eeff318f37a1908`.
+ZIP publication:
+`272e62321cb1be959c9ad6b3aa78cfb226fa39b2828e96813de8ea23bde28519`.
+Hashes identificam os downloads, não substituem assinatura/procedência.
+
+### Conclusão e única execução futura recomendada
+
+**HOSTED ACCEPTANCE = PENDING**. A01 tem observação hosted do primeiro
+attempt; A03 tem binding comprovado nessa execução. A02 e a seleção/reuso
+entre attempts continuam sem prova hosted. A04–A08 mantêm a cobertura local
+anterior, sem exigir reprodução hospedada de cada negativo de fixture.
+A nova reconciliação precisa de revisão independente.
+
+Recomenda-se obter autorização para preparar e revisar o **workflow de aceite
+isolado já previsto no [plan.md](plan.md#hosted-acceptance)**, antes de executá-lo.
+Não há run existente recomendado para rerun nesta coleta.
+
+- Alvo: sandbox, role/repositórios ECR de teste separados, identificados e
+  autorizados pelo responsável; nenhuma criação ou alteração IAM implícita.
+- Revisão: futuro SHA real integrado do laboratório, contendo P1-02, a ser
+  registrado antes da execução; rerun executa esse SHA, não uma main posterior.
+- Escopo mínimo: go1-26 e par go1-26-dev, ambos amd64/arm64.
+  Attempt 1 valida OCI/contrato e para numa barreira revisada **antes de escrita
+  de publicação no ECR**; attempt 2 usa Re-run failed jobs do mesmo run.
+- Leituras previstas: GitHub artifacts/jobs, origens normais de build e ECR.
+  Escritas previstas: artifacts GitHub, tags de teste, assinaturas/attestations
+  e provenance no destino aprovado. Proibir stable/promoção/recovery no laboratório.
+- Evidence: IDs/timestamps/steps dos dois attempts; OCI ainda retido e sem
+  overwrite por rebuild; reports anteriores; gate selected_attempt=1,
+  reused=true, passed=true; digests runtime/dev iguais; publicação verificada;
+  confirmação de que build/contrato foram herdados e não reexecutados.
+- Interromper se scan/contrato falhar, artifact expirar, identidade/digest
+  divergir, destino não estiver isolado ou surgir necessidade de privilégios
+  adicionais. Não provocar falha em assinatura/publicação produtiva.
+- Autorização separada necessária para implementação do laboratório, revisão
+  e execução/escritas nesses alvos. Nenhuma dessas ações ocorreu nesta sessão.
+
+Verificações locais desta rodada: seis testes documentais, lint-local,
+check_ai_context, links dos documentos alterados e diff check PASS.
+Registro consolidado em [evidence da reconciliação](../2026-09-14-shared-origin-portability/evidence.md#verificações-locais-desta-reconciliação).
+Nenhum teste local é apresentado como execução de retry hospedado.
