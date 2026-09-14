@@ -48,3 +48,36 @@ não apresentam a falha downstream exigida. Próxima ação: autorização para
 preparar/revisar o ensaio isolado do plan, com alvos, SHA e escritas explícitos
 antes de qualquer execução. Não usar ausência de logs ou digest igual como
 prova única de ausência de rebuild. Aceites corporativos continuam externos.
+
+
+## Handoff incremental — laboratório local — 2026-09-14
+
+Baseline: `62af489234e29f7f731a7b9c6266143229087129` (merge PR #63).
+Ler a seção de laboratório no plan para evento, inputs, ordem, retenção,
+abort conditions, evidência e limite da publicação futura.
+
+| Estado | Resultado desta rodada |
+| --- | --- |
+| LAB_DESIGN | Especificado para revisão |
+| LAB_IMPLEMENTATION | IMPLEMENTED, fase sem publicação |
+| LOCAL_VERIFICATION | PASS, resultados nesta seção nova da evidence |
+| INDEPENDENT_REVIEW | PENDING para o laboratório |
+| EXECUTION_AUTHORIZED | NO |
+| ATTEMPT_1_EXECUTED | NOT RUN |
+| ATTEMPT_2_EXECUTED | NOT RUN |
+| HOSTED_ACCEPTANCE | PENDING para P1-02 |
+
+Workflow: .github/workflows/partial-retry-lab.yml. Módulo auxiliar:
+scripts/pipeline/runtime/retry_lab.py. O helper compara evidência do gate real;
+não substitui seleção funcional nem publica. Os contratos locais chamam os
+reusables existentes e preservam os probes de trust já obrigatórios.
+A futura autorização deve identificar o SHA **integrado do laboratório**, não
+esta baseline. Não executar dispatch/rerun por inferência da aprovação local.
+
+Prioridade de revisão: contexto/guard, ordem da barreira, comparação com jobs
+copiados, completude dos artifacts, fail-closed e ausência de caminho ECR.
+Mesmo dois attempts satisfatórios não comprovam continuação da publicação:
+a extensão isolada correspondente exige proposta/revisão/autorização própria.
+A disponibilidade futura dos pacotes e o comportamento real das APIs entre
+attempts permanecem sujeitos ao ensaio; fixtures não provam execução hospedada.
+Não encerrar outras specs nem alterar pins, IAM, promoção ou health.

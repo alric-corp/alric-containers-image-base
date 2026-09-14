@@ -302,3 +302,86 @@ Verificações locais desta rodada: seis testes documentais, lint-local,
 check_ai_context, links dos documentos alterados e diff check PASS.
 Registro consolidado em [evidence da reconciliação](../2026-09-14-shared-origin-portability/evidence.md#verificações-locais-desta-reconciliação).
 Nenhum teste local é apresentado como execução de retry hospedado.
+
+
+## Implementação local do laboratório isolado — 2026-09-14
+
+Registro posterior à reconciliação acima; nenhum resultado histórico foi substituído.
+PR #63 consultado em leitura: MERGED em 2026-09-14T17:19:41Z;
+head `83b364610d4e4235e738d480051b9efa0a476a4e`, merge
+`62af489234e29f7f731a7b9c6266143229087129`. Após fetch do sandbox confirmado e
+fast-forward com árvore limpa, main/HEAD/origin/main correspondem a esse merge.
+Remote: alric-corp/alric-containers-image-base; checkout na raiz do repositório.
+Nenhuma reconciliação destrutiva, staging, commit, push ou PR nesta rodada.
+
+A biblioteca canônica permaneceu limpa em
+`b574bd487e7c598c12ab6c6e584a523e03caaa45`; checkout consumido limpo em
+`7a9b055a462eeb8552d3404c26538b44e8ccd83f`, composite preservada em
+`eea2d2f4c4102ded74204e4131c1417f444ae3fc`. Não foi necessário novo release.
+
+### Rastreabilidade da implementação
+
+- Novo `.github/workflows/partial-retry-lab.yml`: dispatch dedicado,
+  callers locais validate-base-images/test-runtime-images, gate real,
+  baseline retida, comparação e barreira; nenhum caminho ECR.
+- Novo `scripts/pipeline/runtime/retry_lab.py`: guard e comparação da evidência
+  já aprovada por runtime_images --gate. Não fabrica PASS de contrato.
+- Novo `tests/unit/pipeline/runtime/test_retry_lab.py`: 25 testes locais,
+  layouts OCI com blobs reais de fixture, reports e APIs paginadas sintéticas.
+- Os seis documentos desta spec receberam somente acréscimos desta rodada.
+  Total: nove arquivos, três novos e seis Markdown modificados.
+- Runtime/dev partilham os reports funcionais por arquitetura; o gate atual
+  vincula índices/manifests de ambos. Os workflows e o gate produtivos não mudaram.
+
+A aptidão observada do par Go é o snapshot já reconciliado do run
+34852458933/1, revisão 8ed8260eba75d4f8b5d856cd1fba37a404a5129a.
+Não houve novo build nem consulta operacional para alegar aptidão atual das
+fontes remotas. O ensaio futuro só chega à barreira se os gates reais passarem.
+O caller preserva também os cinco probes de image-trust existentes; não é
+uma execução do lote de publicação dos 16 frameworks.
+
+### Verificação realmente executada nesta rodada
+
+| Check | Resultado |
+| --- | --- |
+| make test-unit | PASS: 375 testes, incluindo 25 novos do laboratório |
+| make test-integration | PASS: 24 testes, incluindo contratos dos adaptadores |
+| unittest test_retry_lab + test_contract_evidence + test_runtime_images | PASS: 63 testes; subconjunto dos unitários, não somar |
+| make lint-local | PASS; 60 pins em 51 arquivos; catálogo/lote preservados |
+| make lint-shared | PASS; origem/SHA/contratos e retenção verificados |
+| make lint-workflows | PASS; inclui workflow novo e os dois reusables consumidos |
+| actionlint .github/workflows/partial-retry-lab.yml | PASS |
+| python3 -B tools/check_ai_context.py | PASS |
+| git diff --check | PASS |
+
+Negativos executados: contexto/input/evento/revisão/attempt inválidos;
+contrato ausente ou falho; dev ausente; OCI adulterado e JSON inválido;
+producer failure mais recente; outro run/framework; seleção ou reutilização
+incorreta; execução de producer diferente mesmo com digests iguais; troca de
+artifact; baseline ausente/expirada/ambígua/tardia; falha fora da barreira;
+metadados incompletos ou producer posterior ao início do consumer.
+Testes de wiring verificam ordem gate→manifest→upload→barreira, ausência de
+publicação/credenciais adicionais e ausência da instrumentação em workflows normais.
+A CLI real do gate é exercitada antes da CLI do laboratório nas fixtures.
+O código não usa mocks como prova de autorização AWS ou execução hospedada.
+
+### Fontes e limites
+
+Fontes oficiais consultadas nesta implementação:
+[rerun de workflows/jobs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)
+(SHA/ref originais) e [API de jobs](https://docs.github.com/en/rest/actions/workflow-jobs)
+(metadados de execução). O plan registra paginação, retenção e checklist futura.
+Nenhuma coleta de runs de build, download de artifact, chamada AWS, assinatura,
+scan real ou operação de publicação foi executada nesta sessão.
+
+A comparação local não comprova como o GitHub apresentará todos os jobs herdados
+num rerun real. Dados ausentes/divergentes falham fechado, sem inferir ausência
+de rebuild por ausência de logs. A conclusão final do consumer exige leitura
+posterior do job: seu manifest é produzido enquanto está in_progress.
+
+LAB_IMPLEMENTATION=IMPLEMENTED (ensaio sem publicação); LOCAL_VERIFICATION=PASS;
+INDEPENDENT_REVIEW=PENDING; EXECUTION_AUTHORIZED=NO;
+ATTEMPT_1_EXECUTED=NOT RUN; ATTEMPT_2_EXECUTED=NOT RUN;
+P1-02 HOSTED_ACCEPTANCE=PENDING. A publicação real prevista pelo aceite original
+não foi implementada neste workflow e requer extensão e autorização separadas.
+A aprovação desta rodada ainda será feita por revisão independente.

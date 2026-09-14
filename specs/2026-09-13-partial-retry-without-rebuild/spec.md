@@ -51,3 +51,33 @@ auto-aprovação; revisão independente posterior pelo Opus 5 MAX.
 
 [acceptance.md](acceptance.md) define casos; [plan.md](plan.md) descreve meios.
 HOSTED ACCEPTANCE = NOT RUN até executar o plano hospedado registrado.
+
+## Extensão de laboratório isolado — 2026-09-14
+
+Requisitos locais posteriores aos snapshots acima:
+
+- L1: workflow exclusivo de laboratório, somente dispatch explícito na main
+  sandbox e SHA revisado informado igual ao SHA executado; nenhuma chamada
+  pela fábrica normal e nenhum input de destino/credenciais.
+- L2: produzir go1-26/go1-26-dev e testar amd64/arm64 pelos executores atuais.
+  O gate real P1-02 verifica layouts, reports e metadados do mesmo run.
+- L3: attempt 1 falha deliberadamente só depois do PASS do gate e upload da
+  baseline. Falha anterior de build/scan/contrato não constitui cenário aceito.
+- L4: attempt 2 exige selected_attempt=1, reused=true, passed=true; índices,
+  manifests e hashes iguais, mesmos artifacts e producers herdados comprovados
+  por metadados GitHub e falha anterior especificamente na barreira.
+  Rerun completo não deve passar como ausência de rebuild.
+- L5: preservar APIs paginadas, jobs/steps/horários, IDs, revisão, workflow ref,
+  gate original e comparação. run_attempt de job copiado, ID isolado ou digest
+  igual não bastam para provar herança.
+- L6: nenhum caminho de AWS, ECR, OIDC, signing, promoção ou recovery neste
+  workflow. Nenhum destino configurável; publicação real exigida pelo aceite
+  completo anterior permanece fase posterior separada e não implementada.
+- L7: retenção vigente: OCI 3 dias; reports/evidência 30 dias. Não mudar
+  políticas globais. Expiração, metadados incompletos ou ambíguos falham fechado.
+- L8: produção, seis adaptadores, biblioteca, pins e semântica P1-02 intactos.
+  Testes locais e integração futura não equivalem a autorização de execução.
+
+O laboratório implementa o ensaio de reutilização anterior à publicação.
+P1-02 HOSTED_ACCEPTANCE permanece PENDING até os critérios completos;
+EXECUTION_AUTHORIZED=NO nesta sessão.
