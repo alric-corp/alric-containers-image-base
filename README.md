@@ -332,6 +332,10 @@ A configuração de revisão da `main` no sandbox, conferida em 13/09/2026, exig
 garantia de bloqueio para administradores. Habilitação e aceite no corporativo
 pertencem ao P0-03, conforme a [Capability Matrix](docs/ai/CAPABILITY-MATRIX.md).
 
+O [pacote de adoção corporativa P0-03](docs/corporate-adoption.md) reúne
+parâmetros, responsáveis, sequência e testes de aceite. É preparação local
+para revisão; não comprova implantação, homologação ou SLA corporativo.
+
 Os dois checks rodam **sem filtro de path**: um required check com filtro
 nunca dispara para um PR fora do escopo e fica pendente para sempre em vez de
 aprovar. São rápidos (segundos), então um PR só de documentação recebe
