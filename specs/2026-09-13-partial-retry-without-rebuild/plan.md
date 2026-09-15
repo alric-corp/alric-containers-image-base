@@ -481,3 +481,65 @@ P1-02 HOSTED_ACCEPTANCE = PENDING
 
 Nenhuma execução real foi feita. Pendente: nova revisão independente desta
 correção antes de qualquer integração adicional.
+
+## Correção do job_inventory para reconhecer Lab publish — 2026-09-15
+
+Após provisionamento AWS real, configuração das GitHub Repository
+Variables `LAB_*` e execução hospedada real (attempt 1 PASS no run
+`34976226951`), o `Re-run failed jobs` do attempt 2 falhou com
+`INVALID_SCENARIO — "unexpected job in laboratory run"`, antes de
+qualquer verificação de retry/reuse. Detalhes completos, incluindo a
+reprodução isolada e os efeitos AWS confirmados como nulos, em
+[evidence.md](evidence.md#run-hospedado-34976226951-e-correção-do-job_inventory--2026-09-15).
+
+Causa: `job_inventory()` em `retry_lab.py` nunca foi atualizado, na
+implementação da seção anterior, para tolerar o job `Lab publish` no
+mesmo grafo — seu allowlist reconhecia apenas `Lab request`,
+`PRODUCER_PREFIXES` e o consumidor dedicado (`Lab retry gate`).
+
+Alternativas consideradas e rejeitadas:
+
+- Aceitar qualquer nome iniciado por `'Lab '` — rejeitada explicitamente:
+  enfraqueceria o fail-closed original, permitindo qualquer job futuro
+  cujo nome comece com esse prefixo (`'Lab evil'`, `'Lab bypass'`) sem
+  nunca falhar, mesmo que ilegítimo.
+- Tratar `Lab publish` como um producer adicional (adicioná-lo a
+  `PRODUCER_PREFIXES` ou deixá-lo cair em `by_name` como `Lab request`
+  já faz) — rejeitada: `Lab publish` não produz evidência de build/
+  contrato, e em attempt 1 ele é `skipped` sem `steps`, o que quebraria
+  imediatamente `execution()` (`require(... and job['steps'], 'missing
+  producer steps')`) caso fosse tratado como producer.
+- Mover `Lab request` para o mesmo tratamento de "ignorar/continue" —
+  rejeitada: fora do escopo do achado (o request já funciona
+  corretamente como está, participando de `by_name`/`latest` e do
+  requisito de leaves) e alteraria semântica não relacionada ao defeito.
+
+Correção adotada: nova constante `PUBLISHER = 'Lab publish'`; dentro do
+laço de `job_inventory()`, uma ramificação explícita simétrica à do
+consumidor (`if name == PUBLISHER: continue`), que reconhece o job mas
+nunca o adiciona a `by_name`. Isso garante, por construção, que sua
+presença — em qualquer estado de metadata do GitHub — não pode
+influenciar `latest_producer_attempt`, `selected_attempt`, `reused` ou a
+detecção de rebuild/nova falha, porque essas decisões são calculadas
+inteiramente a partir de `by_name`/`latest`, ao qual `Lab publish` nunca
+pertence.
+
+`retry_lab_publish.py` (a lógica de publicação AWS/ECR/Cosign/SBOM/
+provenance), os guards de stable e a proposta IAM/ECR não foram tocados —
+nenhum teste demonstrou dependência inevitável, e o achado é anterior à
+publicação em si.
+
+```text
+P1_02_ATTEMPT_1 = PASS
+P1_02_ATTEMPT_2 = FAILED — HISTORICAL RUN 34976226951
+RETRY_REUSE_HOSTED = PASS
+PUBLICATION_JOB_FIX = IMPLEMENTED
+PUBLICATION_JOB_FIX_LOCAL_VERIFICATION = PASS
+AWS_PUBLICATION_EXECUTION = NOT RUN
+PUBLICATION_CONTINUATION = PENDING
+P1-02 HOSTED_ACCEPTANCE = PENDING
+```
+
+Nenhuma execução AWS, workflow_dispatch, rerun ou commit/push/PR foi feita
+nesta sessão. Pendente: revisão independente desta correção antes de
+qualquer novo attempt hospedado.
