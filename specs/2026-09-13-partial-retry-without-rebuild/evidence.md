@@ -483,3 +483,171 @@ em 3 dias. A revisão independente re-hasheou os OCI enquanto disponíveis.
 Próxima fase única: **P1-02 — Publication continuation after reused evidence**,
 com destino de teste isolado, stable proibida, inputs externos, revisão e
 autorização próprios. Nenhuma implementação ou execução dessa fase ocorreu.
+
+## Investigação sandbox read-only para infraestrutura de publicação — 2026-09-15
+
+Coleta somente leitura na conta sandbox, sem criar/alterar recurso AWS, sem
+assumir a role de execução do laboratório e sem publicar imagem. Nenhum
+workflow foi despachado. Substitui `UNKNOWN`/`EXTERNAL_INPUT_REQUIRED` do
+desenho anterior por fatos observados; não decide nem aplica nada.
+
+### Identidade da sessão de investigação
+
+`aws sts get-caller-identity`: Account `712107929769` (confere com o
+esperado), Arn `arn:aws:iam::712107929769:user/Tomas-Instructor`, UserId
+`AIDA2LTHQWCUSKYQ7WQ6S`. Usuário humano do operador, não uma role de workflow;
+usado só para leitura IAM/ECR nesta investigação.
+
+### Role existente `github-actions-image-base`
+
+ARN `arn:aws:iam::712107929769:role/github-actions-image-base`, path `/`,
+RoleId `AROA2LTHQWCUZEZTDLWPR`, criada em `2026-09-08T00:35:13Z`,
+`MaxSessionDuration=3600`, sem tags, sem permissions boundary
+(`PermissionsBoundary` ausente na resposta de `get-role` = `OBSERVED_NONE`).
+`RoleLastUsed`: `2026-09-15T01:32:52Z` em `us-east-1`.
+
+Trust (`AssumeRolePolicyDocument`), Sid `GitHubOIDCImageBase`:
+
+```json
+"Condition": {
+  "StringEquals": {
+    "token.actions.githubusercontent.com:sub":
+      "repo:alric-corp@178685987/alric-containers-image-base@1360616627:ref:refs/heads/main",
+    "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+  }
+}
+```
+
+Somente `StringEquals` (nenhum `StringLike`/wildcard). Não há condições
+separadas para `repository`, `repository_id`, `repository_owner_id`, `ref`
+ou `job_workflow_ref` — toda a restrição de repositório/branch está embutida
+na única string `sub`. Respostas às perguntas do desenho:
+
+- A. Aceita somente `refs/heads/main`? **Sim**, embutido no `sub`.
+- B. Aceita o repository correto? **Sim**, owner ID 178685987 e repository ID
+  1360616627 conferem com os já documentados em
+  [ADR-0002](../../docs/adr/0002-sigstore-trust-model.md) e
+  [contrato de consumo](../../docs/consumer-verification-contract.md).
+- C. Vinculada a um workflow específico? **Não** — `job_workflow_ref` não é
+  usado; qualquer workflow deste repositório despachado em `main` produz o
+  mesmo `sub` e passaria nesta trust.
+- D. Contém wildcard? **Não** neste statement.
+- E. Um `partial-retry-lab.yml` em `main` seria estruturalmente elegível?
+  **Sim**, pela mesma razão do item C.
+
+Classificação da trust: **STRUCTURALLY_COMPATIBLE** — compatibilidade
+estrutural, não autorização de execução; a role nunca foi assumida nesta
+investigação.
+
+### Policies efetivas anexadas
+
+Um managed policy anexado, `github-actions-image-base-ecr`
+(`arn:aws:iam::712107929769:policy/github-actions-image-base-ecr`), versão
+única `v1` (default). Zero inline policies. Zero tags na policy.
+
+Documento completo (`get-policy-version`):
+
+```json
+{
+  "Statement": [
+    {"Sid": "EcrAuth", "Effect": "Allow",
+     "Action": "ecr:GetAuthorizationToken", "Resource": "*"},
+    {"Sid": "EcrImageBaseRepos", "Effect": "Allow",
+     "Action": ["ecr:CreateRepository", "ecr:DescribeRepositories",
+       "ecr:DescribeImages", "ecr:BatchGetImage",
+       "ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer",
+       "ecr:InitiateLayerUpload", "ecr:UploadLayerPart",
+       "ecr:CompleteLayerUpload", "ecr:PutImage",
+       "ecr:PutImageTagMutability", "ecr:PutImageScanningConfiguration",
+       "ecr:TagResource", "ecr:ListTagsForResource"],
+     "Resource": "arn:aws:ecr:us-east-1:712107929769:repository/image-base-*"}
+  ]
+}
+```
+
+Nenhum `sts:*`, `kms:*`, `s3:*`, `secretsmanager:*` ou `iam:*` nesta policy.
+
+**Achado central desta investigação**: o `Resource` do segundo statement é
+`arn:aws:ecr:us-east-1:712107929769:repository/image-base-*` — um prefixo
+wildcard, não uma lista explícita de ARNs e não `Resource: "*"` irrestrito.
+Esse prefixo cobre **todo o catálogo de frameworks atual** (`image-base-<
+qualquer nome>`) e, por coincidência de nomenclatura, cobre também
+`image-base-p102-lab-go1-26` e `image-base-p102-lab-go1-26-dev` — os dois
+repositórios propostos para o laboratório de publicação, que ainda não
+existem. A role atual, sem nenhuma mudança, já teria `ecr:CreateRepository`,
+`ecr:PutImage`, `ecr:PutImageTagMutability` etc. sobre nomes futuros que
+comecem com `image-base-`. Isso não é isolamento por recurso: a mesma
+credencial que publicaria no laboratório também alcança
+`image-base-go1-26`/`image-base-go1-26-dev` e qualquer outro repositório do
+catálogo com esse prefixo, hoje ou no futuro.
+
+Grants não previamente inventariados em
+[docs/iam-permission-contract.md](../../docs/iam-permission-contract.md):
+`ecr:PutImageScanningConfiguration`, `ecr:TagResource` e
+`ecr:ListTagsForResource` estão presentes na policy real e não constavam da
+tabela O01–O18 daquele documento.
+
+### Escopo ECR observado da role atual
+
+A role não alcança "qualquer ECR da conta" (não há `Resource: "*"` nas
+actions de escrita) nem usa lista explícita de ARNs individuais — o alcance
+real é o prefixo `image-base-*`. Sob esse prefixo, a role já consegue
+escrever hoje em `image-base-go1-26`/`image-base-go1-26-dev` (é a role de
+produção) e escreveria igualmente em qualquer repositório futuro com esse
+prefixo, lab incluído. Isso é informação de risco (blast radius), não uma
+autorização concedida por esta investigação.
+
+### ECRs de produção — configuração observada
+
+| Campo | `image-base-go1-26` | `image-base-go1-26-dev` |
+| --- | --- | --- |
+| repositoryArn | `arn:aws:ecr:us-east-1:712107929769:repository/image-base-go1-26` | `.../image-base-go1-26-dev` |
+| createdAt | 2026-09-07T22:02:44-03:00 | 2026-09-09T16:58:16-03:00 |
+| imageTagMutability | IMMUTABLE_WITH_EXCLUSION | IMMUTABLE_WITH_EXCLUSION |
+| exclusionFilters | WILDCARD `stable` | WILDCARD `stable` |
+| encryption | AES256 | AES256 |
+| scanOnPush | true | true |
+| repository policy | `AllowCrossAccountPull` (Principal `*`, condição `aws:PrincipalOrgID=o-5gqr9v3h2q`, ações `BatchGetImage`/`GetDownloadUrlForLayer`) | OBSERVED_NONE (`RepositoryPolicyNotFoundException`) |
+| lifecycle policy | expira só imagens untagged após 30 dias; tagged (inclusive `stable`) preservado | idêntica |
+| tags | nenhuma | nenhuma |
+
+`IMMUTABLE_WITH_EXCLUSION` com exclusão `stable` significa: toda tag é
+imutável (não pode ser sobrescrita), **exceto** a tag literal `stable`, que
+permanece mutável para permitir a promoção mover o ponteiro. Isso não impede
+a role atual de escrever `stable` — é só uma trava de mutabilidade de tag,
+não de identidade/principal; confirma o risco já registrado em
+[docs/iam-permission-contract.md](../../docs/iam-permission-contract.md#limitação-publisher--promoter--stable):
+"Imutável + Exclusões" não protege `stable` contra a própria role.
+
+O escaneamento contínuo (`ecr:get-registry-scanning-configuration`) é
+`ENHANCED`/`CONTINUOUS_SCAN` sobre `*` no nível do registry — aplica-se
+igualmente a qualquer repositório futuro, lab incluído, sem exigir grant
+adicional na role.
+
+### Repositórios de laboratório
+
+`image-base-p102-lab-go1-26` e `image-base-p102-lab-go1-26-dev`: ambos
+**NOT_FOUND** (`RepositoryNotFoundException` em `describe-repositories`,
+confirmado individualmente para os dois nomes). Nenhum recurso a inspecionar,
+nenhum consumidor possível ainda.
+
+### Camadas adicionais (SCP / boundary / registry policy / session policy)
+
+| Camada | Estado |
+| --- | --- |
+| Permissions boundary da role | OBSERVED_NONE (`PermissionsBoundary` ausente em `get-role`) |
+| SCP / Organizations | OBSERVED — única policy anexada à conta é `FullAWSAccess` (AWS managed, padrão), sem restrição adicional visível; org `o-5gqr9v3h2q` confere com a condição do repository policy de `image-base-go1-26` |
+| Registry policy ECR (nível de conta) | OBSERVED_NONE (`RegistryPolicyNotFoundException`) |
+| Session policy do step `configure-aws-credentials` | OBSERVED_NONE — o publicador (`build-base-images.yml`) não declara `inline-session-policy`/`managed-session-policies`, conforme código-fonte já revisado |
+| VPC endpoint policy | NOT_VISIBLE_FROM_CURRENT_IDENTITY — sem VPC/endpoint ID relevante identificado; execução via GitHub-hosted runner não passa por VPC endpoint da conta |
+
+Ausência de uma camada não é tratada como prova de ausência de restrição
+onde não há visibilidade (VPC endpoint); onde há visibilidade real
+(permissions boundary, registry policy, session policy do step), o estado é
+`OBSERVED_NONE` porque a chamada de leitura respondeu "não existe", não
+porque a camada é inacessível.
+
+Provider OIDC (`token.actions.githubusercontent.com`): client ID
+`sts.amazonaws.com`, thumbprint `2b18947a6a9fc7764fd8b5fb18a863b0c6dac24f`,
+criado em `2025-08-12`, sem tags — consistente com o principal federado
+referenciado na trust da role.
