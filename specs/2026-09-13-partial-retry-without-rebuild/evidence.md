@@ -651,3 +651,52 @@ Provider OIDC (`token.actions.githubusercontent.com`): client ID
 `sts.amazonaws.com`, thumbprint `2b18947a6a9fc7764fd8b5fb18a863b0c6dac24f`,
 criado em `2025-08-12`, sem tags — consistente com o principal federado
 referenciado na trust da role.
+
+## Verificação local do job de publicação — 2026-09-15
+
+Somente execução local; nenhum workflow foi despachado, nenhuma chamada AWS
+foi feita nesta seção. Detalhes da arquitetura implementada em
+[plan.md](plan.md#implementação-local-do-job-de-publicação--2026-09-15).
+
+```text
+python3 -B -m unittest tests.unit.pipeline.runtime.test_retry_lab_publish -v
+  → 36 testes, OK
+python3 -B -m unittest tests.unit.pipeline.runtime.test_retry_lab -v
+  → 31 testes, OK (inclui os novos testes do job lab-publish)
+make test-unit    → 437 testes, OK
+make test-integration → 24 testes, OK
+make lint-local   → OK
+make lint-shared  → OK
+make lint-workflows (actionlint) → OK
+python3 -B tools/check_ai_context.py → OK
+git diff --check  → sem erros
+```
+
+`renovate.json` ganhou `partial-retry-lab.yml` no gerenciador do pin do
+Skopeo (o job novo introduz uma terceira ocorrência de
+`quay.io/skopeo/stable`, já coberta pelo mesmo padrão usado em
+`build-base-images.yml`).
+
+## Verificação local da correção F1/F2 — 2026-09-15
+
+Somente execução local; nenhum workflow foi despachado, nenhuma chamada AWS
+foi feita. Detalhes em
+[plan.md](plan.md#correção-f1f2-da-revisão-adversarial-do-job-de-publicação--2026-09-15).
+
+```text
+python3 -B -m unittest tests.unit.pipeline.runtime.test_retry_lab_publish -v
+  → 48 testes, OK (12 novos: GateLayoutBindingTests, DigestFormatTests,
+    mais extensões em FinalizeTests)
+python3 -B -m unittest tests.unit.pipeline.runtime.test_retry_lab -v
+  → 34 testes, OK (3 novos: posição exata do step de binding, uso de env:,
+    finalize consumindo layout-binding)
+make test-unit    → 453 testes, OK
+make test-integration → 24 testes, OK
+make lint-local   → OK
+make lint-shared  → OK (o novo step inicialmente interpolava
+  ${{ steps.verified.outputs.* }} direto em run:; corrigido para env: antes
+  de reexecutar — a lint de hardening pegou isso na primeira passada)
+make lint-workflows (actionlint) → OK
+python3 -B tools/check_ai_context.py → OK
+git diff --check  → sem erros
+```

@@ -343,7 +343,8 @@ class LabWorkflowTests(unittest.TestCase):
         self.assertEqual(set(events['workflow_dispatch']['inputs']), {'confirmation', 'reviewed-sha'})
         self.assertEqual(events['workflow_dispatch']['inputs']['confirmation']['default'], 'do-not-run')
         jobs = self.workflow['jobs']
-        self.assertEqual(set(jobs), {'request', 'lab-build', 'lab-contract', 'lab-retry'})
+        self.assertEqual(set(jobs),
+                         {'request', 'lab-build', 'lab-contract', 'lab-retry', 'lab-publish'})
         self.assertIn("github.event_name == 'workflow_dispatch'", jobs['request']['if'])
         self.assertIn('retry_lab guard', jobs['request']['steps'][1]['run'])
         self.assertEqual(jobs['lab-build']['uses'], './.github/workflows/validate-base-images.yml')
@@ -353,6 +354,11 @@ class LabWorkflowTests(unittest.TestCase):
         self.assertEqual(jobs['lab-build']['needs'], 'request')
         self.assertEqual(jobs['lab-contract']['needs'], 'lab-build')
         self.assertEqual(jobs['lab-retry']['needs'], ['lab-build', 'lab-contract'])
+        # Publication continues only from lab-retry, and only once it is green;
+        # there is no path that lets attempt 1 (or a failed attempt 2) publish.
+        self.assertEqual(jobs['lab-publish']['needs'], 'lab-retry')
+        self.assertEqual(jobs['lab-publish']['if'],
+                         "github.run_attempt == '2' && needs.lab-retry.result == 'success'")
 
     def test_barrier_order_and_scoped_downloads(self):
         names = [s.get('name') for s in self.steps]
@@ -370,19 +376,65 @@ class LabWorkflowTests(unittest.TestCase):
         self.assertIn('--paginate --slurp', commands)
         self.assertIn('jobs?filter=all&per_page=100', commands)
 
-    def test_no_publication_privileges_or_new_credentials(self):
+    def test_no_publication_privileges_outside_lab_publish(self):
         self.assertEqual(self.workflow['permissions'], {'contents': 'read'})
-        for job in self.workflow['jobs'].values():
+        jobs = self.workflow['jobs']
+        for name, job in jobs.items():
             self.assertNotIn('secrets', job)
+            if name == 'lab-publish':
+                continue
             self.assertTrue(set(job.get('permissions', {})) <= {'contents', 'actions'})
             self.assertTrue(all(level == 'read' for level in job.get('permissions', {}).values()))
-        for prohibited in ('stable', 'promote-stable', 'recover-stable', 'build-base-images.yml',
-                           'id-token', 'attestations:', 'secrets.', 'secrets: inherit',
-                           'aws-actions/', 'cosign', 'docker build', 'apko build', 'melange build'):
-            self.assertNotIn(prohibited, self.raw)
+        # Evidence-only jobs never gain AWS/signing capability, regardless of lab-publish.
+        evidence_only_text = '\n'.join(json.dumps(jobs[name]) for name in
+                                       ('request', 'lab-build', 'lab-contract', 'lab-retry'))
+        for prohibited in ('id-token', 'attestations', 'aws-actions/', 'cosign',
+                           'configure-aws-credentials', 'amazon-ecr-login'):
+            self.assertNotIn(prohibited, evidence_only_text)
         for line in self.raw.splitlines():
-            if 'token' in line.lower():
+            if 'token' in line.lower() and 'id-token' not in line.lower():
                 self.assertIn('${{ github.token }}', line)
+
+    def test_lab_publish_grants_exactly_the_minimum_publication_permissions(self):
+        permissions = self.workflow['jobs']['lab-publish']['permissions']
+        self.assertEqual(permissions, {'contents': 'read', 'actions': 'read',
+                                       'id-token': 'write', 'attestations': 'write',
+                                       'artifact-metadata': 'write'})
+        self.assertNotIn('secrets', self.workflow['jobs']['lab-publish'])
+
+    def test_lab_publish_never_touches_stable_promotion_or_the_product_publisher(self):
+        # SKOPEO_IMAGE legitimately names quay.io/skopeo/stable (the tool image,
+        # already pinned/reviewed); strip it so the check targets Docker tag
+        # "stable" and the promotion/recovery/product-signer surface instead.
+        job = copy.deepcopy(self.workflow['jobs']['lab-publish'])
+        job.get('env', {}).pop('SKOPEO_IMAGE', None)
+        publish_text = json.dumps(job)
+        for prohibited in ('promote-stable', 'recover-stable', 'imagetools create',
+                           'verify_stable', 'build-base-images.yml', 'signing-identities',
+                           'secrets.', 'secrets: inherit', ':stable"', "'stable'",
+                           'CreateRepository', 'PutImageTagMutability',
+                           'PutImageScanningConfiguration', 'TagResource',
+                           'image-base-'):
+            self.assertNotIn(prohibited, publish_text)
+        self.assertNotIn('stable', publish_text.replace('skopeo/stable', ''))
+
+    def test_lab_publish_never_accepts_workflow_dispatch_tag_or_destination_input(self):
+        events = self.workflow.get('on', self.workflow.get(True))
+        inputs = events['workflow_dispatch']['inputs']
+        self.assertEqual(set(inputs), {'confirmation', 'reviewed-sha'})
+        publish_text = json.dumps(self.workflow['jobs']['lab-publish'])
+        for forbidden_input in ('inputs.tag', 'inputs.repository', 'inputs.destination',
+                                'inputs.role', 'inputs.framework'):
+            self.assertNotIn(forbidden_input, publish_text)
+
+    def test_lab_publish_reads_no_hardcoded_aws_credentials(self):
+        publish_text = json.dumps(self.workflow['jobs']['lab-publish'])
+        for literal_credential in ('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'aws_session_token'):
+            self.assertNotIn(literal_credential, publish_text)
+        auth_step = next(s for s in self.workflow['jobs']['lab-publish']['steps']
+                         if s.get('uses', '').startswith('aws-actions/configure-aws-credentials@'))
+        self.assertEqual(auth_step['with']['role-to-assume'], '${{ vars.LAB_AWS_ROLE_ARN }}')
+        self.assertEqual(auth_step['with']['aws-region'], '${{ vars.LAB_AWS_REGION }}')
 
     def test_normal_workflows_do_not_enable_lab_or_failure_injection(self):
         for path in (ROOT / '.github/workflows').glob('*.yml'):
@@ -400,6 +452,69 @@ class LabWorkflowTests(unittest.TestCase):
             self.assertFalse(step['with']['overwrite'])
             self.assertEqual(step['with']['if-no-files-found'], 'error')
         self.assertEqual(uploads[0]['if'], "github.run_attempt == '1'")
+
+    def test_publication_binding_is_validated_before_any_aws_auth(self):
+        publish_steps = self.workflow['jobs']['lab-publish']['steps']
+        names = [s.get('name') for s in publish_steps]
+        bind_index = names.index('Validate same-run retry/reuse binding before any AWS auth')
+        revalidate_index = names.index('Revalidate OCI layouts locally before push')
+        layout_binding_index = names.index(
+            'Validate revalidated OCI digests against the retry/reuse gate')
+        auth_index = next(i for i, s in enumerate(publish_steps)
+                          if s.get('uses', '').startswith('aws-actions/configure-aws-credentials@'))
+        preflight_index = names.index('Preflight lab repository configuration (read-only)')
+        publish_index = names.index('Publish runtime image by digest')
+        self.assertLess(bind_index, auth_index)
+        # F1: the gate<->verified-OCI digest binding must sit strictly between
+        # local revalidation and AWS auth — not merely somewhere before auth.
+        self.assertLess(revalidate_index, layout_binding_index)
+        self.assertLess(layout_binding_index, auth_index)
+        self.assertLess(auth_index, preflight_index)
+        self.assertLess(preflight_index, publish_index)
+        download_names = {s['name'] for s in publish_steps
+                          if s.get('uses', '').startswith('actions/download-artifact@')}
+        self.assertLess(max(names.index(n) for n in download_names), bind_index)
+
+    def test_layout_binding_step_uses_the_revalidated_digests_and_the_bound_gate_fail_closed(self):
+        publish_steps = self.workflow['jobs']['lab-publish']['steps']
+        by_name = {s.get('name'): s for s in publish_steps}
+        step = by_name['Validate revalidated OCI digests against the retry/reuse gate']
+        # No continue-on-error/if on this step: a failure here must stop the
+        # job before the next step (AWS auth) can run at all.
+        self.assertNotIn('continue-on-error', step)
+        self.assertNotIn('if', step)
+        # Hardening: values from a previous step's outputs must flow through
+        # env, never be interpolated with ${{ }} directly inside run:.
+        self.assertEqual(step['env'], {
+            'RUNTIME_DIGEST': '${{ steps.verified.outputs.runtime_digest }}',
+            'DEV_DIGEST': '${{ steps.verified.outputs.dev_digest }}'})
+        text = step['run']
+        self.assertNotIn('${{', text)
+        self.assertIn('retry_lab_publish verify-layout-binding', text)
+        self.assertIn('--gate lab-publish/gate.json', text)
+        self.assertIn('"$RUNTIME_DIGEST"', text)
+        self.assertIn('"$DEV_DIGEST"', text)
+        self.assertIn('set -eu', text)
+
+    def test_finalize_step_consumes_the_layout_binding(self):
+        finalize_step = next(s for s in self.workflow['jobs']['lab-publish']['steps']
+                             if s.get('name') == 'Finalize publication result')
+        self.assertIn('--layout-binding lab-publish/layout-binding.json', finalize_step['run'])
+
+    def test_lab_publish_reuses_the_productive_publication_verifier_directly(self):
+        publish_text = json.dumps(self.workflow['jobs']['lab-publish'])
+        self.assertEqual(publish_text.count('scripts.pipeline.release.verify_publication'), 2)
+        self.assertEqual(publish_text.count('scripts.pipeline.release.publish_sboms'), 2)
+        self.assertNotIn('retry_lab_publish verify-publication', publish_text)
+
+    def test_lab_publish_evidence_artifact_retention_and_no_overwrite(self):
+        upload = next(s for s in self.workflow['jobs']['lab-publish']['steps']
+                     if s.get('uses', '').startswith('actions/upload-artifact@'))
+        self.assertEqual(upload['with']['name'],
+                         'runtime-lab-p1-02-publication-${{ github.run_id }}-${{ github.run_attempt }}')
+        self.assertEqual(upload['with']['retention-days'], 30)
+        self.assertFalse(upload['with']['overwrite'])
+        self.assertEqual(upload['with']['if-no-files-found'], 'error')
 
 
 if __name__ == '__main__':

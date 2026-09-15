@@ -105,3 +105,56 @@ Não houve AWS, ECR, assinatura, attestation, provenance, SBOM push, stable,
 promotion ou recovery. A próxima fase deve ser separada, usar destino de teste
 isolado, proibir `stable`, coletar os subjects/digests exigidos e obter
 autorização explícita antes de qualquer escrita externa.
+
+## Handoff — implementação local do job de publicação — 2026-09-15
+
+O job `lab-publish` foi implementado em
+`.github/workflows/partial-retry-lab.yml`, condicionado a
+`run_attempt == 2 && needs.lab-retry.result == 'success'`, com
+`scripts.pipeline.runtime.retry_lab_publish` (novo módulo, domínio
+`runtime`) fazendo o binding fail-closed antes de qualquer auth AWS. Perfil
+A (preprovisioned + execution-only): nenhum `CreateRepository`/
+`PutImageTagMutability` no job. Destino fixo: conta 712107929769, região
+us-east-1, role `github-actions-image-base-p102-lab`, repos
+`p102-lab-go1-26`/`p102-lab-go1-26-dev` — nada disso existe/foi aplicado
+ainda; são os mesmos valores da proposta em
+[policies/aws/proposals/p102-lab-permissions/](../../policies/aws/proposals/p102-lab-permissions/README.md).
+Ver [plan.md](plan.md#implementação-local-do-job-de-publicação--2026-09-15)
+para a arquitetura completa.
+
+```text
+PUBLICATION_JOB_IMPLEMENTATION = IMPLEMENTED
+PUBLICATION_JOB_LOCAL_VERIFICATION = PASS
+PUBLICATION_INFRA_DESIGN = PROPOSED
+PUBLICATION_INFRA_APPLIED = NO
+AWS_EXECUTION = NOT RUN
+PUBLICATION_CONTINUATION = PENDING
+P1-02 HOSTED_ACCEPTANCE = PENDING
+```
+
+Próximo passo: revisão independente desta implementação antes de qualquer
+integração adicional; decisão externa de Cloud/IAM sobre a role/repos
+isolados continua pendente e é pré-requisito para qualquer execução
+hospedada real.
+
+## Handoff — correção F1/F2 da revisão adversarial — 2026-09-15
+
+Revisão independente retornou CHANGES REQUIRED (F1 HIGH: OCI publicado não
+vinculado por digest ao gate de retry/reuse; F2 MEDIUM: `digest_equal` sem
+validação de formato). Ambos corrigidos — ver
+[plan.md](plan.md#correção-f1f2-da-revisão-adversarial-do-job-de-publicação--2026-09-15)
+para os detalhes. Novo guard `require_gate_layout_binding` (sem import de
+`scripts.pipeline.release`) e novo step no workflow, entre a revalidação
+OCI e a auth AWS. `finalize()` reforça a mesma invariante. Estados
+inalterados quanto à execução:
+
+```text
+PUBLICATION_JOB_IMPLEMENTATION = IMPLEMENTED
+PUBLICATION_JOB_LOCAL_VERIFICATION = PASS
+PUBLICATION_INFRA_APPLIED = NO
+AWS_EXECUTION = NOT RUN
+PUBLICATION_CONTINUATION = PENDING
+P1-02 HOSTED_ACCEPTANCE = PENDING
+```
+
+Próximo passo: nova revisão independente desta correção.

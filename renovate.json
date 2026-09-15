@@ -27,7 +27,7 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^\\.github/workflows/build-base-images\\.yml$/",
+        "/^\\.github/workflows/(?:build-base-images|partial-retry-lab)\\.yml$/",
         "/^scripts/pipeline/runtime/runtime_images\\.py$/"
       ],
       "matchStrings": [
