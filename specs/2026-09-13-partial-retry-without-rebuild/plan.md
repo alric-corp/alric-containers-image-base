@@ -195,3 +195,140 @@ O procedimento acima foi executado após autorização específica no run
 foi validado com falha exclusiva da barreira; `Re-run failed jobs` produziu o
 attempt 2 com reutilização comprovada. A publicação permaneceu fora do fluxo.
 Consulte [evidence.md](evidence.md) para os IDs, hashes e matriz completa.
+
+## Proposta de infraestrutura para publication continuation — 2026-09-15
+
+Investigação read-only da conta sandbox (detalhes completos em
+[evidence.md](evidence.md#investigação-sandbox-read-only-para-infraestrutura-de-publicação--2026-09-15))
+substitui os `EXTERNAL_INPUT_REQUIRED`/`UNKNOWN` do desenho anterior por
+valores observados. Nenhum recurso AWS foi criado, alterado ou assumido.
+
+```text
+AWS_ACCOUNT_ID = 712107929769
+AWS_REGION = us-east-1
+ECR_REPOSITORY_RUNTIME = p102-lab-go1-26 (NOT_FOUND, a criar)
+ECR_REPOSITORY_DEV = p102-lab-go1-26-dev (NOT_FOUND, a criar)
+PUBLICATION_INFRA_DESIGN = PROPOSED
+PUBLICATION_INFRA_APPLIED = NO
+AWS_EXECUTION = NOT RUN
+```
+
+Recomendação de role: **CREATE_ISOLATED_ROLE**
+(`github-actions-image-base-p102-lab`, nome de proposta, recurso não
+aplicado). Motivo observado, não hipotético: a policy anexada à role
+existente (`github-actions-image-base-ecr`) usa `Resource:
+arn:aws:ecr:us-east-1:712107929769:repository/image-base-*` — um prefixo que
+cobre todo o catálogo de produção. Reutilizar a role existente não criaria
+isolamento nenhum por IAM: a mesma credencial que publicaria no laboratório
+já alcança `image-base-go1-26`/`image-base-go1-26-dev` hoje, sem qualquer
+mudança. A role nova deve ser restrita a exatamente:
+
+```text
+arn:aws:ecr:us-east-1:712107929769:repository/p102-lab-go1-26
+arn:aws:ecr:us-east-1:712107929769:repository/p102-lab-go1-26-dev
+```
+
+nunca ao prefixo `image-base-*` — os nomes `p102-lab-go1-26`/
+`p102-lab-go1-26-dev` foram escolhidos deliberadamente fora desse prefixo
+(ver correção abaixo), e a trust primária inclui `job_workflow_ref`
+restringindo a assunção ao workflow do laboratório, além de `sub`/`aud`/
+`repository`/`repository_id`/`repository_owner_id`/`ref` exatos.
+
+Perfil de execução preferido: **preprovisioned + execution-only** (Profile
+A) — Cloud/operador cria os dois repositórios lab previamente como
+`IMMUTABLE` sem exclusão para `stable` (ver correção abaixo), com
+`scanOnPush`/`AES256`, e a role nova recebe apenas as actions de
+leitura/escrita de imagem (sem `CreateRepository`/`PutImageTagMutability`).
+Isso preserva o caminho de publication/integrity real (mesmos comandos de
+publish/read-back/sign/attest) com o provisionamento do repositório
+deliberadamente separado — bookkeeping que R7 não protege como gate, não
+uma redução do que R7 exige (ver justificativa completa na correção
+abaixo). Profile B (self-provisioning, só `CreateRepository` escopado aos
+dois ARNs lab, sem `PutImageTagMutability`) permanece documentado como
+alternativa caso o operador prefira não pré-provisionar; não foi
+descartado, apenas não é a preferência.
+
+Templates de proposta (JSON, não aplicados, não lidos por nenhum workflow):
+[policies/aws/proposals/p102-lab-permissions/](../../policies/aws/proposals/p102-lab-permissions/README.md).
+
+Repositórios de produção `image-base-go1-26`/`image-base-go1-26-dev`
+permanecem fora de qualquer ARN da proposta nova — confirmado por
+`describe-repositories` nesta investigação e nunca incluído nos templates.
+Isolamento de `stable` combina **IAM resource isolation + repository
+isolation + application guard** (dois repositórios inteiramente separados e
+fora do prefixo `image-base-*`, `IMMUTABLE` sem exclusão para `stable`, mais
+um guard de código a implementar que rejeita tag/destino fora do fixo
+computado) — nunca uma condition key IAM por tag Docker, que não existe.
+
+Estado inalterado por esta investigação:
+
+```text
+PUBLICATION_CONTINUATION = PENDING
+P1-02 HOSTED_ACCEPTANCE = PENDING
+```
+
+Decisão externa ainda pendente: Cloud/IAM confirma ou não a criação da role
+isolada e dos dois repositórios lab; Segurança/AppSec confirma que a
+identidade de assinatura do laboratório (`partial-retry-lab.yml@refs/heads/main`,
+distinta de `build-base-images.yml@refs/heads/main`) não entra em
+`policies/release/signing-identities.json`. Sem essas decisões, não há
+implementação nem execução desta fase.
+
+## Correção da proposta após revisão independente adversarial — 2026-09-15
+
+A revisão independente adversarial da proposta acima retornou **CHANGES
+REQUIRED**. Nenhuma coleta AWS anterior foi refeita ou reescrita — os fatos
+observados em
+[evidence.md](evidence.md#investigação-sandbox-read-only-para-infraestrutura-de-publicação--2026-09-15)
+sobre a role/policy/repos **operacionais** permanecem exatamente como
+registrados. O que muda aqui é a proposta/desenho construído sobre esses
+fatos, ainda `PROPOSED`, nunca aplicada.
+
+Findings corrigidos:
+
+- **F1 (HIGH)** — os dois repos lab usariam `IMMUTABLE_WITH_EXCLUSION` com
+  exclusão para `stable`, igual à produção. Corrigido para `IMMUTABLE` sem
+  nenhuma exclusão: o laboratório nunca sobrescreve tag (padrão fixo
+  `p1-02-lab-<run_id>-<attempt>`, único por construção), então a exclusão
+  não tinha uso legítimo e só adicionava a capacidade de o ECR aceitar uma
+  eventual escrita futura em tag `stable` em vez de rejeitá-la por
+  imutabilidade.
+- **F2 (MEDIUM)** — `image-base-p102-lab-go1-26`/`-dev` ainda casavam com o
+  wildcard `arn:aws:ecr:us-east-1:712107929769:repository/image-base-*` da
+  role operacional: a role de produção continuaria alcançando os repos do
+  laboratório, mesmo com a role lab corretamente isolada no sentido
+  contrário. Corrigido para `p102-lab-go1-26`/`p102-lab-go1-26-dev`,
+  confirmado (`"p102-lab-go1-26".startswith("image-base-") == False`) por
+  teste dedicado, não só inspeção visual.
+- **F3 (MEDIUM)** — a trust com `job_workflow_ref` estava descrita como
+  variante opcional/futura; a trust primária usava só `sub`/`aud`, que não
+  distingue qual workflow do repositório assume a role. Invertido: a trust
+  primária agora inclui `job_workflow_ref` (workflow do laboratório) além
+  de `sub`/`aud`/`repository`/`repository_id`/`repository_owner_id`/`ref`
+  exatos; a variante sem `job_workflow_ref` passa a
+  `FALLBACK / COMPATIBILITY OPTION`, não recomendada.
+- **F4 (LOW)** — a escolha de Profile A (sem `ensure`/
+  `PutImageTagMutability` no `lab-publish`) não explicava por que isso não
+  reduz o que R7 exige. Adicionado: R7 protege artifact selecionado,
+  publicação por digest, digest preservation/read-back, Cosign, provenance,
+  SBOM, isolamento M13 e continuação do retry — não o bookkeeping de
+  provisionamento do repositório. Classificação mantida:
+  `ACCEPTABLE_LAB_ADAPTER`.
+- **F5 (PROCESS)** — ausência de teste estático dedicado para o diretório
+  de proposta IAM. Adicionado
+  `tests/unit/pipeline/governance/test_p102_lab_iam_proposal.py`, análogo
+  em espírito a `test_iam_proposal.py` (que continua exclusivo de
+  `factory-permissions`, sem mistura de contratos).
+
+Estado após a correção, ainda inalterado quanto à execução:
+
+```text
+PUBLICATION_INFRA_DESIGN = PROPOSED
+PUBLICATION_INFRA_APPLIED = NO
+AWS_EXECUTION = NOT RUN
+PUBLICATION_CONTINUATION = PENDING
+P1-02 HOSTED_ACCEPTANCE = PENDING
+```
+
+Detalhes completos da arquitetura corrigida:
+[policies/aws/proposals/p102-lab-permissions/README.md](../../policies/aws/proposals/p102-lab-permissions/README.md).

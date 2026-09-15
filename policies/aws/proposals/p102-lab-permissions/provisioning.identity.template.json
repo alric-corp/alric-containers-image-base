@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CreateLabRepositoryOnce",
+      "Effect": "Allow",
+      "Action": ["ecr:CreateRepository"],
+      "Resource": [
+        "arn:aws:ecr:us-east-1:712107929769:repository/p102-lab-go1-26",
+        "arn:aws:ecr:us-east-1:712107929769:repository/p102-lab-go1-26-dev"
+      ],
+      "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}}
+    }
+  ]
+}
