@@ -85,4 +85,66 @@ a barreira registrou `LAB_BARRIER_PASSED`, exit 0.
 
 Assim, `RETRY_REUSE_HOSTED = PASS`, mas a ausência de publicação não satisfaz
 a continuação exigida pelo contrato original. `PUBLICATION_CONTINUATION =
-PENDING` e `P1-02 HOSTED_ACCEPTANCE = PENDING` permanecem deliberadamente.
+PENDING` e `P1-02 HOSTED_ACCEPTANCE = PENDING` permaneceram deliberadamente
+até a seção abaixo.
+
+## Hosted Acceptance Final — 2026-09-15
+
+Este resultado **supera** o parágrafo anterior. A continuação de publicação
+foi implementada, revisada (APPROVE) e provisionada em sandbox isolado.
+Uma execução real (run `34976226951`) encontrou um defeito estrutural em
+`job_inventory()` (não reconhecia o job `Lab publish`) e falhou **antes**
+de qualquer escrita AWS — corrigido, revisado (APPROVE) e integrado via
+PR #68. Um novo ciclo completo, run `34986578076`
+(revisão `b910bd076021fc349615ee7dd191c7da9f3a009e`), executou attempt 1
+(PASS, barreira controlada) e attempt 2 via `Re-run failed jobs` (PASS),
+com publicação real nos dois repositórios ECR isolados. Detalhes completos
+em [evidence.md](evidence.md#hosted-acceptance-final--2026-09-15).
+
+### Mapeamento R1–R8 (spec.md)
+
+| Req | Critério | Evidência do run `34986578076` |
+| --- | --- | --- |
+| R1 | Fronteira repository+run_id; run_attempt só identifica tentativas | Mesmo `run_id=34986578076` e `repository` em attempt 1 e 2; attempt 2 via rerun do mesmo run, não novo dispatch |
+| R2 | Reports amd64/arm64 do mesmo artifact/attempt/framework, run/attempt/repository/revisão coerentes | `report_sha256` amd64/arm64 idênticos entre attempts; `revision=b910bd0...` em ambos |
+| R3 | Selecionar maior attempt compatível; aprovar só com ambos reports passed | `selected_attempt=1` escolhido corretamente; `passed=true` em ambos attempts |
+| R4 | Ausência/corrupção/formato inválido/identidade divergente falham | Não exercitado negativamente nesta execução de sucesso; comprovado por `test_retry_lab.py`/`test_contract_evidence.py` (PASS local, inalterado) |
+| R5 | Falha do producer mais recente bloqueia; success herdado permite reutilizar report anterior | `latest_producer_attempt=2` (job herdado com sucesso), `reused=true`, report do attempt 1 reutilizado |
+| R6 | Não esconder falha mais recente buscando PASS antigo | Não exercitado negativamente nesta execução; comprovado por testes locais (PASS local, inalterado) |
+| R7 | Preservar scan, trust gate, publicação por digest, Cosign, provenance, SBOM, stable read-back, isolamento M13 | Scan/trust gate executados normalmente; Cosign/provenance/SBOM `VERIFIED`; `stable_touched=false`; framework único `go1-26` |
+| R8 | Guardar decisão do gate/artifact/digests com a evidência; hosted acceptance só após rerun real | `gate.json`/`bind.json`/`layout-binding.json`/`final-result.json` preservados em `runtime-lab-p1-02-publication-34986578076-2` (ID `10405325731`); aceite via `gh run rerun --failed` real |
+
+### Mapeamento A01–A08
+
+| ID | Critério | Evidência hospedada |
+| --- | --- | --- |
+| A01 | Primeiro attempt publica com contrato válido | Attempt 1: gate `passed=true`, `Runtime go1-26 (both architectures)` success |
+| A02 | Attempt2 reutiliza report1 aprovado sem rebuild | Attempt 2: `selected_attempt=1`, `reused=true`; `producer_comparison` (12/12 `execution_metadata_equal=true`); nenhum `runtime-go1-26-2` criado |
+| A03 | Índice/manifests correspondem ao candidato atual e par -dev | `index_digest`/`platforms`/`dev_index_digest`/`dev_platforms` idênticos entre attempts e confirmados no ECR real |
+| A04 | Somente mesmo repository/run/revisão | `run_id=34986578076`, `repository=alric-corp/alric-containers-image-base`, `revision=b910bd0...` em ambos attempts |
+| A05 | Maior attempt numérico compatível é escolhido | `selected_attempt=1` (único compatível disponível) |
+| A06 | Ausência não aprova | Não exercitado negativamente nesta execução de sucesso; comprovado por testes locais (PASS local, inalterado por esta rodada) |
+| A07 | Corrupção/conflito/formato inválido falham | Não exercitado negativamente nesta execução; comprovado por testes locais (PASS local, inalterado) |
+| A08 | Gates existentes preservados | Scan, trust gate e publisher productivo (`scripts.pipeline.release.verify_publication`/`publish_sboms`) executados sem bypass, diff/checks normais |
+
+A06/A07 permanecem comprovados exclusivamente por evidência local/unitária,
+como já registrado na abertura deste documento — uma execução hospedada de
+sucesso não exercita, por definição, os caminhos de rejeição. Isso não é
+lacuna: os testes correspondentes continuam no `make test-unit` e não foram
+alterados nesta rodada.
+
+### Veredito final
+
+```text
+P1-02 HOSTED ACCEPTANCE = PASS
+```
+
+Referência: run `34986578076`, artifact de evidência de publicação
+`runtime-lab-p1-02-publication-34986578076-2` (ID `10405325731`), tag
+publicada `p1-02-lab-34986578076-2` em `p102-lab-go1-26`/
+`p102-lab-go1-26-dev`. Isto encerra o P1-02 dentro do escopo desta spec
+(sandbox isolado, revisão independente por Claude Code). Não constitui
+aceite corporativo, homologação AppSec, promoção de stable em produção ou
+conclusão de P1-04 — ver
+[handoff.md](handoff.md#handoff--encerramento-hospedado-do-p1-02--2026-09-15),
+seção "Explicit non-claims".

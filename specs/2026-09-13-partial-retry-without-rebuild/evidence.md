@@ -796,3 +796,123 @@ P1-02 HOSTED_ACCEPTANCE = PENDING
 Nenhuma nova execução hospedada, rerun, dispatch, alteração de IAM/ECR/vars
 ou commit/push/PR foi feita nesta sessão. Pendente: revisão independente
 desta correção antes de qualquer novo attempt hospedado.
+
+## Hosted Acceptance Final — 2026-09-15
+
+Narrativa completa da evolução do controle, preservada integralmente:
+
+1. `34889507318` (revisão `13b50102d29fab89509c5d539e72659529686a37`) —
+   retry/reuse hospedado comprovado sem publicação
+   ([acceptance.md](acceptance.md#resultado-hospedado-do-laboratório--2026-09-14)):
+   `RETRY_REUSE_HOSTED = PASS`, `PUBLICATION_CONTINUATION = PENDING`.
+2. `34976226951` (mesma baseline `25b33b279e4e5a64b3f0fc26595f9afdfb9a2ecc`) —
+   continuação de publicação implementada; attempt 1 PASS, attempt 2
+   **FAILED BEFORE PUBLICATION** por defeito estrutural em
+   `job_inventory()` (não reconhecia o job `Lab publish`) — ver
+   [seção acima](#run-hospedado-34976226951-e-correção-do-job_inventory--2026-09-15).
+3. Correção integrada via PR #68 (merge commit
+   `b910bd076021fc349615ee7dd191c7da9f3a009e`).
+4. `34986578076` (baseline `b910bd076021fc349615ee7dd191c7da9f3a009e`) —
+   novo ciclo completo: attempt 1 PASS (barreira controlada, `exit 42`);
+   attempt 2 PASS via `gh run rerun --failed`, com continuação de
+   publicação hospedada completa.
+
+### Evidência auditável do run `34986578076`
+
+```text
+RUN_ID = 34986578076
+HEAD_SHA = b910bd076021fc349615ee7dd191c7da9f3a009e
+Attempt 1: PASS (barreira controlada, exit_code=42, EXPECTED_LAB_FAILURE)
+Attempt 2: PASS (barreira, exit_code=0, LAB_BARRIER_PASSED; Lab publish: success)
+WORKFLOW_RESULT = success
+```
+
+**selected_attempt / reused / no rebuild** — gate do attempt 2:
+`passed=true`, `selected_attempt=1`, `reused=true`,
+`latest_producer_job_id=104449094404`, `latest_producer_attempt=2`.
+`producer_comparison` (12 entradas) com `execution_metadata_equal: true`
+em todas; nenhum artifact `runtime-go1-26-2` ou `validated-oci-*` novo foi
+criado — apenas os IDs originais do attempt 1 foram reutilizados.
+
+**Artifact identity** (idêntica entre attempt 1 e attempt 2):
+```text
+runtime-go1-26-1           id=10404132249
+validated-oci-go1-26       id=10404235798
+validated-oci-go1-26-dev   id=10403559224
+runtime-lab-p1-02-baseline-34986578076        id=10403179656
+runtime-lab-p1-02-attempt-34986578076-1       id=10403971849
+runtime-lab-p1-02-attempt-34986578076-2       id=10405135745
+runtime-lab-p1-02-publication-34986578076-2   id=10405325731
+```
+
+**Report hash continuity** (idêntico entre attempt 1 e attempt 2):
+```text
+amd64 = b096bf5ca962393d87cd8c09082dcf87def92f13f8a7329fcf0c6cf4c53d29b7
+arm64 = 446b61063e6f8931f049b9540a61a1d06e680dfb515fd84957d3ef59a45ecff3
+```
+
+**OCI digests** (runtime/dev, idênticos em gate/verified/validated/copied/remote):
+```text
+runtime index = sha256:8edf7af9de14483292ad87180d7f66a6969417d7a79e1ab6a95f411e25f60cf4
+runtime amd64 = sha256:4c8820cf627479144d3eaf2bdbf02a8157c40c2e1c57cccfdb13d30403fc88a5
+runtime arm64 = sha256:1425a5d687ed1065ea8aaf60e88ab5eb86bfd15d8df19f348940c3e9d8bf5549
+dev index     = sha256:dd147668bd66b83426c6b9d1bd38c40e2e5b529c1a4e0e39f5256b84666c9a5a
+dev amd64     = sha256:9cbcf196197ff80b5ede38553c7bac9e929b0543d947fd13a3aece6109b5f726
+dev arm64     = sha256:383cc8c11820decc7f7557f87a1ec2df54461a27adaa2f1073625f91064972f8
+```
+
+**Gate-to-layout binding** — `layout-binding.json`: `status:
+LAYOUT_BOUND_TO_GATE`, `gate_index_digest == verified_runtime_digest` e
+`gate_dev_index_digest == verified_dev_digest`, validado antes de
+"Configure AWS credentials" (ordem de step confirmada no log).
+
+**Role OIDC** — `arn:aws:iam::712107929769:role/github-actions-image-base-p102-lab`
+assumida por OIDC (não o fallback `github-actions-image-base`);
+`RoleLastUsed` preenchido pela primeira vez após este run
+(`LastUsedDate=2026-09-15T15:34:39Z`, `Region=us-east-1`).
+
+**ECR preflight** — `p102-lab-go1-26`/`p102-lab-go1-26-dev`: `IMMUTABLE`,
+sem `imageTagMutabilityExclusionFilters`, `status: PREFLIGHT_OK`.
+
+**Publicação / read-back** — confirmado tanto pela evidência do job quanto
+por leitura direta do ECR (`aws ecr describe-images`): tag
+`p1-02-lab-34986578076-2` presente nos dois repositórios, apontando para
+os índices runtime/dev acima; `validated_digest == copied_digest ==
+remote_digest` para ambos.
+
+**Multiarch preservation** — confirmado no registry real: manifests
+amd64/arm64 de runtime e dev presentes com os digests exatos acima.
+
+**Cosign / SBOM / provenance** — `signature-verification-{runtime,dev}.json`,
+`sbom-verification-{runtime,dev}.json` e
+`provenance-verification-{runtime,dev}.json`: todos `status: VERIFIED`,
+identidade `https://github.com/alric-corp/alric-containers-image-base/.github/workflows/partial-retry-lab.yml@refs/heads/main`
+(nunca a identidade de `build-base-images.yml`). SBOM com 3 subjects
+(index + amd64 + arm64) por imagem, todos `attested: true`, vinculados aos
+digests publicados.
+
+**Stable isolation** — `stable_touched=false` em `final-result.json`;
+repositórios operacionais `image-base-go1-26`/`image-base-go1-26-dev` sem
+escrita nova durante a janela do run (últimas imagens com `pushedAt`
+anterior ao início do attempt 2).
+
+**final-result.json** (artifact `runtime-lab-p1-02-publication-34986578076-2`,
+ID `10405325731`): `status: PASS`, `run_id: "34986578076"`,
+`run_attempt: 2`, `selected_attempt: 1`, `reused: true`, `tag:
+"p1-02-lab-34986578076-2"`, cadeia completa
+`gate_digest == verified_digest == validated_digest == copied_digest ==
+remote_digest` para runtime e dev, `stable_touched: false`.
+
+```text
+P1_02_ATTEMPT_1 = PASS
+P1_02_ATTEMPT_2 = PASS
+JOB_INVENTORY_FIX_HOSTED = PASS
+RETRY_REUSE_HOSTED = PASS
+PUBLICATION_CONTINUATION = PASS
+AWS_PUBLICATION_EXECUTION = PASS — SANDBOX LAB ONLY
+P1-02 HOSTED_ACCEPTANCE = PASS
+STABLE_PRODUCTION_PROMOTION = NOT RUN
+```
+
+Nenhuma ação corretiva, novo rerun, novo dispatch, alteração de
+IAM/ECR/vars, promoção de stable ou commit/push/PR foi feita nesta sessão.
