@@ -27,3 +27,11 @@ Os itens anteriores preservam o histórico da implementação/reconciliação.
 - [ ] Executar attempt 1 e Re-run failed jobs para attempt 2; coletar evidência real.
 - [ ] Revisar e autorizar fase futura de publicação em destino isolado.
 - [ ] Avaliar todos os critérios originais antes de encerrar P1-02.
+
+## Execução hospedada — 2026-09-14
+
+- [x] Attempt 1 autorizado, executado e validado no run 34889507318.
+- [x] `Re-run failed jobs` executado uma vez; attempt 2 validado sem rebuild.
+- [x] Evidências, digests e retenção comparados e registrados.
+- [ ] Exercitar continuação da publicação em destino isolado, sob revisão e autorização próprias.
+- [ ] Encerrar o aceite integral P1-02 após publicação e verificações correspondentes.

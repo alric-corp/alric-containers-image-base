@@ -187,3 +187,11 @@ Nenhum ARN sintético vira destino operacional. O desenho dessa extensão deve
 proibir stable, sem modificar as propostas IAM existentes. Não acionar o
 publicador produtivo como substituto. A falta dessa fase impede encerrar o
 HOSTED_ACCEPTANCE integral, mesmo com os dois attempts deste laboratório verdes.
+
+## Execução hospedada registrada — 2026-09-14
+
+O procedimento acima foi executado após autorização específica no run
+`34889507318`, revisão `13b50102d29fab89509c5d539e72659529686a37`. Attempt 1
+foi validado com falha exclusiva da barreira; `Re-run failed jobs` produziu o
+attempt 2 com reutilização comprovada. A publicação permaneceu fora do fluxo.
+Consulte [evidence.md](evidence.md) para os IDs, hashes e matriz completa.

@@ -31,7 +31,7 @@ e as evidências referenciadas, sem reescrever snapshots pré-merge:
 | Fatia | Estado de origem preservado | Aceite corporativo |
 | --- | --- | --- |
 | P1-01 | Hosted PASS limitado a go1-26/go1-26-dev no run 34768459323, commit e3ed682; read_back_status=confirmed e digests iguais, conforme [evidence P1-09](../specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md) | NOT RUN |
-| P1-02 | PENDING para retry real, embora integrado | NOT RUN |
+| P1-02 | Retry/reuse hospedado PASS no run 34889507318; continuação de publicação pendente | PENDING — aceite integral não encerrado |
 | P1-03 | PARTIAL / BLOCKED_UPSTREAM; mínimo hosted PASS observado nos dois Go em 34852458933/1, conforme [nova evidence](../specs/2026-09-13-wolfi-signing-key/evidence.md#reconciliação-hospedada--2026-09-14); coleta sujeita a revisão | NOT RUN |
 | P1-04 | LOCAL_STRUCTURE_VALIDATED=PASS; AWS_VALIDATOR_CHECKED, AWS_SIMULATION_CHECKED e SANDBOX_EXECUTION_VERIFIED=NOT RUN | CORPORATE_ACCEPTED=EXTERNAL_PENDING |
 | P1-08 | Documentação revisada; aceite operacional completo pendente | NOT RUN / EXTERNAL_PENDING |
@@ -373,8 +373,9 @@ de CA são mudanças declarativas revisadas de C, não justificativa para
 renderizador universal ou substituição em massa. Nenhuma foi feita aqui.
 
 ### B. Aceites sandbox ainda pendentes
-P1-02: rerun real controlado, conforme [plano existente](../specs/2026-09-13-partial-retry-without-rebuild/plan.md),
-sem rebuild. P1-03: revisar a nova comprovação do mínimo preflight/chave
+P1-02: retry/reuse hospedado PASS no run `34889507318`, sem rebuild; a
+continuação de publicação permanece pendente, conforme [evidence](../specs/2026-09-13-partial-retry-without-rebuild/evidence.md).
+P1-03: revisar a nova comprovação do mínimo preflight/chave
 local dos dois Go; o lote permanece PARTIAL / BLOCKED_UPSTREAM, sem
 inferir exclusividade. P1-04: validador/simulador/laboratório autorizado; P1-08:
 integração/entrega/ACK e operação após decisões. Resultados futuros entram na

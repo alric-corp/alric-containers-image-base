@@ -81,3 +81,27 @@ a extensão isolada correspondente exige proposta/revisão/autorização própri
 A disponibilidade futura dos pacotes e o comportamento real das APIs entre
 attempts permanecem sujeitos ao ensaio; fixtures não provam execução hospedada.
 Não encerrar outras specs nem alterar pins, IAM, promoção ou health.
+
+## Handoff pós-aceite hospedado — 2026-09-14
+
+O run `34889507318` comprovou o retry/reuse hospedado no mesmo run e sem
+rebuild. Attempt 1 foi validado com falha exclusiva da barreira; o attempt 2,
+via `Re-run failed jobs`, reutilizou `runtime-go1-26-1`, selecionou attempt 1,
+registrou `reused=true` e terminou SUCCESS. A comparação de jobs, artifacts,
+steps, timestamps, índices, manifests e hashes está na evidence incremental.
+
+```text
+LAB_IMPLEMENTATION = IMPLEMENTED
+LOCAL_VERIFICATION = PASS
+INDEPENDENT_REVIEW = APPROVE
+ATTEMPT_1_EXECUTED = VALIDATED
+ATTEMPT_2_EXECUTED = VALIDATED
+RETRY_REUSE_HOSTED = PASS
+PUBLICATION_CONTINUATION = PENDING
+HOSTED_ACCEPTANCE = PENDING — continuação de publicação não exercitada
+```
+
+Não houve AWS, ECR, assinatura, attestation, provenance, SBOM push, stable,
+promotion ou recovery. A próxima fase deve ser separada, usar destino de teste
+isolado, proibir `stable`, coletar os subjects/digests exigidos e obter
+autorização explícita antes de qualquer escrita externa.
