@@ -35,3 +35,27 @@ Os itens anteriores preservam o histórico da implementação/reconciliação.
 - [x] Evidências, digests e retenção comparados e registrados.
 - [ ] Exercitar continuação da publicação em destino isolado, sob revisão e autorização próprias.
 - [ ] Encerrar o aceite integral P1-02 após publicação e verificações correspondentes.
+
+## Implementação local do job de publicação — 2026-09-15
+
+- [x] Job `lab-publish` implementado, condicionado a attempt 2 + `lab-retry` verde.
+- [x] Binding fail-closed antes de qualquer auth AWS, reutilizando `retry_lab.context`/`valid_gate`.
+- [x] Guard de destino (conta/região/role/repos exatos) e tag determinística, sem input livre.
+- [x] Profile A: preflight somente leitura, sem `CreateRepository`/`PutImageTagMutability`.
+- [x] Publicação por digest, read-back, Cosign, provenance e SBOM reutilizando o caminho produtivo.
+- [x] Autoverificação com identidade própria do laboratório; `signing-identities.json` inalterado.
+- [x] Guard de stable/latest/`image-base-*` testado fail-closed; sem caminho de promote/recovery.
+- [x] Testes locais novos e dedicados; `make test-unit`/`test-integration`/lints/actionlint OK.
+- [x] Revisão independente desta implementação (retornou CHANGES REQUIRED: F1/F2).
+
+## Correção F1/F2 da revisão adversarial — 2026-09-15
+
+- [x] F1: `require_gate_layout_binding` liga o OCI revalidado ao `index_digest`/`dev_index_digest` do gate, antes de qualquer auth AWS.
+- [x] F1: `finalize()` reforça a mesma cadeia gate↔verified↔validated↔copied↔remote.
+- [x] F1: teste do cenário `overwrite: true` (artifact substituído, digest B internamente coerente) no guard pré-AWS e em `finalize`.
+- [x] F2: `digest_equal` passou a usar `contract_evidence.digest()` antes de comparar.
+- [x] Novo step no workflow entre revalidação OCI e auth AWS, sem `continue-on-error`, valores via `env:`.
+- [x] `make test-unit`/`test-integration`/lints/actionlint OK após a correção.
+- [ ] Nova revisão independente desta correção.
+- [ ] Decisão externa de Cloud/IAM sobre role/repos isolados (nada aplicado).
+- [ ] Execução hospedada real da continuação de publicação (fase futura, não autorizada nesta sessão).

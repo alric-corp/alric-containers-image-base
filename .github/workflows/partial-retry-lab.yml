@@ -153,3 +153,330 @@ jobs:
           overwrite: false
           retention-days: 30
           if-no-files-found: error
+
+  # P1-02 publication continuation: only after the SAME run's attempt 2 has
+  # already proved retry/reuse (lab-retry green). Profile A — preprovisioned
+  # + execution-only: this job never creates a repository nor reconfigures
+  # mutability (no CreateRepository/PutImageTagMutability/
+  # PutImageScanningConfiguration/TagResource anywhere below); it assumes the
+  # two isolated lab repositories already exist as IMMUTABLE, outside the
+  # image-base-* prefix the operational role's policy is scoped to. Destination
+  # account/region/repositories/role are fixed constants in
+  # retry_lab_publish.py, never accepted as workflow input, matching the
+  # reviewed IAM/ECR proposal (PROPOSED, not applied).
+  lab-publish:
+    name: Lab publish
+    needs: lab-retry
+    if: github.run_attempt == '2' && needs.lab-retry.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      id-token: write         # OIDC for the isolated lab role and cosign keyless
+      attestations: write      # actions/attest-build-provenance
+      artifact-metadata: write # attestation storage record
+    env:
+      SKOPEO_IMAGE: quay.io/skopeo/stable:v1.22.2-immutable@sha256:4a16d57b37617a04b3d643079a477a2848efe892dffcdf0ce56df4262b65f810
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download retained runtime OCI
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: validated-oci-go1-26
+          path: image.oci
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+
+      - name: Download retained dev OCI
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: validated-oci-go1-26-dev
+          path: runtime-dev.oci
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+
+      # Same run, same attempt: the exact evidence lab-retry just produced,
+      # never evidence from another run/SHA/attempt.
+      - name: Download attempt-2 lab evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: runtime-lab-p1-02-attempt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: lab-evidence-in
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+
+      # Fail-closed checkpoint before any AWS auth: revalidates the SAME
+      # gate result lab-retry produced (framework/repository/run/revision/
+      # selected_attempt=1/reused=true/digests), and only then checks the
+      # future LAB_* variables against the exact approved constants. No
+      # parallel selector: scripts.pipeline.runtime.retry_lab.valid_gate is
+      # reused as-is.
+      - name: Validate same-run retry/reuse binding before any AWS auth
+        id: bind
+        env:
+          LAB_AWS_REGION: ${{ vars.LAB_AWS_REGION }}
+          LAB_AWS_ROLE_ARN: ${{ vars.LAB_AWS_ROLE_ARN }}
+          LAB_ECR_REPOSITORY_RUNTIME: ${{ vars.LAB_ECR_REPOSITORY_RUNTIME }}
+          LAB_ECR_REPOSITORY_DEV: ${{ vars.LAB_ECR_REPOSITORY_DEV }}
+        run: |
+          set -eu
+          mkdir -p lab-publish
+          python3 -B -m scripts.pipeline.runtime.retry_lab_publish bind \
+            --gate lab-evidence-in/lab-evidence/runtime-gate-result.json \
+            --output lab-publish/bind.json
+          python3 -B - <<'PY'
+          import json
+          import os
+          binding = json.load(open('lab-publish/bind.json'))
+          json.dump(binding['context'], open('lab-publish/context.json', 'w'), indent=2)
+          json.dump(binding['gate'], open('lab-publish/gate.json', 'w'), indent=2)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f"tag={binding['tag']}\n")
+              output.write(f"runtime_repo={binding['target']['repositories']['runtime']}\n")
+              output.write(f"dev_repo={binding['target']['repositories']['dev']}\n")
+          PY
+
+      - name: Revalidate OCI layouts locally before push
+        id: verified
+        run: |
+          set -eu
+          echo "runtime_digest=$(python3 -B -m scripts.pipeline.artifacts.oci_artifact verify image.oci)" >> "$GITHUB_OUTPUT"
+          echo "dev_digest=$(python3 -B -m scripts.pipeline.artifacts.oci_artifact verify runtime-dev.oci)" >> "$GITHUB_OUTPUT"
+
+      # validated-oci-* is uploaded with overwrite:true (see
+      # validate-apko-images.yml): the OCI just revalidated above is never
+      # assumed to be the one lab-retry's gate approved. Prove it by digest
+      # before any AWS auth — still no credentials requested at this point.
+      - name: Validate revalidated OCI digests against the retry/reuse gate
+        env:
+          RUNTIME_DIGEST: ${{ steps.verified.outputs.runtime_digest }}
+          DEV_DIGEST: ${{ steps.verified.outputs.dev_digest }}
+        run: |
+          set -eu
+          python3 -B -m scripts.pipeline.runtime.retry_lab_publish verify-layout-binding \
+            --gate lab-publish/gate.json \
+            --runtime-digest "$RUNTIME_DIGEST" \
+            --dev-digest "$DEV_DIGEST" \
+            --output lab-publish/layout-binding.json
+
+      - name: Verify pinned Skopeo is available
+        run: |
+          set -euo pipefail
+          docker run --rm --pull=always "$SKOPEO_IMAGE" --version
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # No fallback to the operational role: if the future LAB_AWS_ROLE_ARN
+      # variable is absent/wrong, the bind step above already failed closed.
+      - name: Configure AWS credentials (OIDC, isolated lab role)
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6
+        with:
+          role-to-assume: ${{ vars.LAB_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.LAB_AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+
+      # Profile A: read-only. Never creates a repository, never reconfigures
+      # mutability. Divergent configuration aborts; it is never corrected here.
+      - name: Preflight lab repository configuration (read-only)
+        env:
+          RUNTIME_REPO: ${{ steps.bind.outputs.runtime_repo }}
+          DEV_REPO: ${{ steps.bind.outputs.dev_repo }}
+        run: |
+          set -euo pipefail
+          aws ecr describe-repositories --repository-names "$RUNTIME_REPO" \
+            --query 'repositories[0]' > lab-publish/preflight-runtime-descriptor.json
+          aws ecr describe-repositories --repository-names "$DEV_REPO" \
+            --query 'repositories[0]' > lab-publish/preflight-dev-descriptor.json
+          python3 -B -m scripts.pipeline.runtime.retry_lab_publish preflight \
+            --descriptor lab-publish/preflight-runtime-descriptor.json --repository-key runtime \
+            --output lab-publish/preflight-runtime.json
+          python3 -B -m scripts.pipeline.runtime.retry_lab_publish preflight \
+            --descriptor lab-publish/preflight-dev-descriptor.json --repository-key dev \
+            --output lab-publish/preflight-dev.json
+
+      # Copies the exact bytes already scanned/gated; no rebuild/repack. Tag
+      # is the one bind computed internally — never taken from input.
+      - name: Publish runtime image by digest
+        id: publish-runtime
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPO: ${{ steps.bind.outputs.runtime_repo }}
+          TAG: ${{ steps.bind.outputs.tag }}
+          EXPECTED: ${{ steps.verified.outputs.runtime_digest }}
+        run: |
+          set -eu
+          IMAGE_NAME="${REGISTRY}/${REPO}"
+          mkdir -p "$RUNNER_TEMP/skopeo-auth"
+          trap 'rm -f "$RUNNER_TEMP/skopeo-auth/config.json"' EXIT
+          aws ecr get-login-password | docker run --rm -i \
+            -v "$RUNNER_TEMP/skopeo-auth":/auth "$SKOPEO_IMAGE" \
+            login --authfile /auth/config.json --username AWS --password-stdin "$REGISTRY"
+          docker run --rm -v "$PWD":/work -w /work \
+            -v "$RUNNER_TEMP/skopeo-auth/config.json":/auth/config.json:ro "$SKOPEO_IMAGE" \
+            copy --all --preserve-digests --authfile /auth/config.json \
+            --digestfile /work/lab-publish/runtime.digest \
+            oci:/work/image.oci:image "docker://${IMAGE_NAME}:${TAG}"
+          ACTUAL=$(cat lab-publish/runtime.digest)
+          test "$EXPECTED" = "$ACTUAL"
+          docker run --rm \
+            -v "$RUNNER_TEMP/skopeo-auth/config.json":/auth/config.json:ro "$SKOPEO_IMAGE" \
+            inspect --raw --authfile /auth/config.json \
+            "docker://${IMAGE_NAME}:${TAG}" > lab-publish/runtime-remote-index.json
+          python3 -B -m scripts.pipeline.release.verify_publication \
+            image.oci/validated-index.json lab-publish/runtime.digest \
+            lab-publish/runtime-remote-index.json \
+            "${IMAGE_NAME}@${ACTUAL}" > lab-publish/publication-runtime.json
+          {
+            echo "image_name=${IMAGE_NAME}"
+            echo "digest=${ACTUAL}"
+            echo "image_ref=${IMAGE_NAME}@${ACTUAL}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish dev image by digest
+        id: publish-dev
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPO: ${{ steps.bind.outputs.dev_repo }}
+          TAG: ${{ steps.bind.outputs.tag }}
+          EXPECTED: ${{ steps.verified.outputs.dev_digest }}
+        run: |
+          set -eu
+          IMAGE_NAME="${REGISTRY}/${REPO}"
+          mkdir -p "$RUNNER_TEMP/skopeo-auth"
+          trap 'rm -f "$RUNNER_TEMP/skopeo-auth/config.json"' EXIT
+          aws ecr get-login-password | docker run --rm -i \
+            -v "$RUNNER_TEMP/skopeo-auth":/auth "$SKOPEO_IMAGE" \
+            login --authfile /auth/config.json --username AWS --password-stdin "$REGISTRY"
+          docker run --rm -v "$PWD":/work -w /work \
+            -v "$RUNNER_TEMP/skopeo-auth/config.json":/auth/config.json:ro "$SKOPEO_IMAGE" \
+            copy --all --preserve-digests --authfile /auth/config.json \
+            --digestfile /work/lab-publish/dev.digest \
+            oci:/work/runtime-dev.oci:image "docker://${IMAGE_NAME}:${TAG}"
+          ACTUAL=$(cat lab-publish/dev.digest)
+          test "$EXPECTED" = "$ACTUAL"
+          docker run --rm \
+            -v "$RUNNER_TEMP/skopeo-auth/config.json":/auth/config.json:ro "$SKOPEO_IMAGE" \
+            inspect --raw --authfile /auth/config.json \
+            "docker://${IMAGE_NAME}:${TAG}" > lab-publish/dev-remote-index.json
+          python3 -B -m scripts.pipeline.release.verify_publication \
+            runtime-dev.oci/validated-index.json lab-publish/dev.digest \
+            lab-publish/dev-remote-index.json \
+            "${IMAGE_NAME}@${ACTUAL}" > lab-publish/publication-dev.json
+          {
+            echo "image_name=${IMAGE_NAME}"
+            echo "digest=${ACTUAL}"
+            echo "image_ref=${IMAGE_NAME}@${ACTUAL}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Lab identity (partial-retry-lab.yml@refs/heads/main), never the
+      # product's build-base-images.yml identity. Not added to
+      # policies/release/signing-identities.json: this is lab-only evidence.
+      - name: Sign and verify runtime image (lab identity)
+        env:
+          IMAGE_REF: ${{ steps.publish-runtime.outputs.image_ref }}
+        run: |
+          set -eu
+          cosign sign --yes "${IMAGE_REF}"
+          python3 -B -m scripts.pipeline.runtime.retry_lab_publish verify-signature \
+            --image-ref "${IMAGE_REF}" --output lab-publish/signature-verification-runtime.json
+
+      - name: Sign and verify dev image (lab identity)
+        env:
+          IMAGE_REF: ${{ steps.publish-dev.outputs.image_ref }}
+        run: |
+          set -eu
+          cosign sign --yes "${IMAGE_REF}"
+          python3 -B -m scripts.pipeline.runtime.retry_lab_publish verify-signature \
+            --image-ref "${IMAGE_REF}" --output lab-publish/signature-verification-dev.json
+
+      - name: Attest and verify SBOM for runtime (lab identity)
+        env:
+          IMAGE_REF: ${{ steps.publish-runtime.outputs.image_ref }}
+        run: |
+          set -eu
+          python3 -B -m scripts.pipeline.release.publish_sboms image.oci "${IMAGE_REF}" \
+            --output lab-publish/sbom-publication-runtime.json
+          python3 -B -m scripts.pipeline.runtime.retry_lab_publish verify-sbom \
+            --image-ref "${IMAGE_REF}" --output lab-publish/sbom-verification-runtime.json
+
+      - name: Attest and verify SBOM for dev (lab identity)
+        env:
+          IMAGE_REF: ${{ steps.publish-dev.outputs.image_ref }}
+        run: |
+          set -eu
+          python3 -B -m scripts.pipeline.release.publish_sboms runtime-dev.oci "${IMAGE_REF}" \
+            --output lab-publish/sbom-publication-dev.json
+          python3 -B -m scripts.pipeline.runtime.retry_lab_publish verify-sbom \
+            --image-ref "${IMAGE_REF}" --output lab-publish/sbom-verification-dev.json
+
+      - name: Attest build provenance for runtime (SLSA)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-name: ${{ steps.publish-runtime.outputs.image_name }}
+          subject-digest: ${{ steps.publish-runtime.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify provenance for runtime (lab identity)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REF: ${{ steps.publish-runtime.outputs.image_ref }}
+        run: |
+          set -eu
+          python3 -B -m scripts.pipeline.runtime.retry_lab_publish verify-provenance \
+            --image-ref "${IMAGE_REF}" --output lab-publish/provenance-verification-runtime.json
+
+      - name: Attest build provenance for dev (SLSA)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-name: ${{ steps.publish-dev.outputs.image_name }}
+          subject-digest: ${{ steps.publish-dev.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify provenance for dev (lab identity)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REF: ${{ steps.publish-dev.outputs.image_ref }}
+        run: |
+          set -eu
+          python3 -B -m scripts.pipeline.runtime.retry_lab_publish verify-provenance \
+            --image-ref "${IMAGE_REF}" --output lab-publish/provenance-verification-dev.json
+
+      - name: Finalize publication result
+        run: |
+          set -eu
+          python3 -B -m scripts.pipeline.runtime.retry_lab_publish finalize \
+            --bind lab-publish/bind.json \
+            --layout-binding lab-publish/layout-binding.json \
+            --runtime-publication lab-publish/publication-runtime.json \
+            --dev-publication lab-publish/publication-dev.json \
+            --runtime-signature lab-publish/signature-verification-runtime.json \
+            --dev-signature lab-publish/signature-verification-dev.json \
+            --runtime-provenance lab-publish/provenance-verification-runtime.json \
+            --dev-provenance lab-publish/provenance-verification-dev.json \
+            --runtime-sbom lab-publish/sbom-verification-runtime.json \
+            --dev-sbom lab-publish/sbom-verification-dev.json \
+            --output lab-publish/final-result.json
+
+      - name: Preserve lab publication evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: runtime-lab-p1-02-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: lab-publish/
+          overwrite: false
+          retention-days: 30
+          if-no-files-found: error

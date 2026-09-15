@@ -332,3 +332,152 @@ P1-02 HOSTED_ACCEPTANCE = PENDING
 
 Detalhes completos da arquitetura corrigida:
 [policies/aws/proposals/p102-lab-permissions/README.md](../../policies/aws/proposals/p102-lab-permissions/README.md).
+
+## Implementação local do job de publicação — 2026-09-15
+
+Estende `.github/workflows/partial-retry-lab.yml` com o job `lab-publish`,
+implementado localmente e verificado; nenhum recurso AWS foi criado,
+alterado ou assumido, nenhum workflow foi despachado.
+
+`lab-publish` só executa quando `github.run_attempt == '2' &&
+needs.lab-retry.result == 'success'` — não existe caminho de publicação no
+attempt 1. Antes de qualquer autenticação AWS, o step "Validate same-run
+retry/reuse binding before any AWS auth" chama
+`scripts.pipeline.runtime.retry_lab_publish bind`, que:
+
+- reutiliza `retry_lab.context()` e `retry_lab.valid_gate()` sem seletor
+  paralelo, vinculando à evidência real que `lab-retry` já produziu no
+  mesmo run (`lab-evidence/runtime-gate-result.json`);
+- exige `run_attempt == 2`, `selected_attempt == 1` e `reused is True`;
+- valida as futuras variáveis `LAB_AWS_REGION`/`LAB_AWS_ROLE_ARN`/
+  `LAB_ECR_REPOSITORY_RUNTIME`/`LAB_ECR_REPOSITORY_DEV` contra os
+  valores exatos aprovados (712107929769/us-east-1/
+  `github-actions-image-base-p102-lab`/`p102-lab-go1-26`/
+  `p102-lab-go1-26-dev`), sem fallback para a role operacional;
+- computa a tag `p1-02-lab-<run_id>-<attempt>` internamente — o workflow
+  não tem nenhum input de tag/destino/framework livre.
+
+Após a autenticação (role isolada, nunca `github-actions-image-base`), um
+preflight somente leitura (`DescribeRepositories`) confirma que os dois
+repositórios lab existem, têm o nome exato e `imageTagMutability ==
+IMMUTABLE` sem `imageTagMutabilityExclusionFilters`; qualquer divergência
+aborta sem correção automática (Profile A: nenhum
+`CreateRepository`/`PutImageTagMutability` em nenhum ponto do job). A
+publicação reutiliza o padrão produtivo (`skopeo copy --all
+--preserve-digests`, `cosign sign`, `attest-build-provenance`,
+`publish_sboms.py`) e delega a leitura de volta a
+`scripts.pipeline.release.verify_publication` diretamente do workflow —
+exatamente como o publicador real já faz — em vez de importar esse módulo
+dentro de `retry_lab_publish.py`, que pertence ao domínio `runtime` e não
+pode depender do domínio `release`
+(`tests/unit/pipeline/governance/test_repository_layout.py`). A
+autoverificação de assinatura/provenance/SBOM usa comandos próprios
+(`cosign verify`, `gh attestation verify`, `cosign verify-attestation`) com
+a identidade do próprio laboratório
+(`https://github.com/alric-corp/alric-containers-image-base/.github/workflows/partial-retry-lab.yml@refs/heads/main`),
+nunca a identidade do produto, e não altera
+`policies/release/signing-identities.json`. `finalize` só produz `PASS` se
+`validated_digest == copied_digest == remote_digest` para runtime e dev,
+mais assinatura/provenance/SBOM verificados com a identidade correta;
+qualquer divergência aborta.
+
+O job nunca chama `promote-stable.yml`, `recover-stable.yml`,
+`verify_stable.py` nem `docker buildx imagetools create --tag stable` —
+confirmado por teste dedicado, não apenas por ausência observada. A
+evidência é preservada em
+`runtime-lab-p1-02-publication-<run_id>-<attempt>` (retenção 30 dias,
+`overwrite: false`, `if-no-files-found: error`).
+
+Testes novos: `tests/unit/pipeline/runtime/test_retry_lab_publish.py` (36
+testes cobrindo role/conta/região exatos, rejeição de `image-base-*`/
+`stable`/`latest`/tag externa, determinismo da tag, attempt 1 nunca publica,
+attempt 2 exige `reused=true`, `selected_attempt` deve ser 1, run/revisão
+incompatíveis falham, mismatch runtime/dev falha, assinatura/provenance/SBOM
+obrigatórios com a identidade certa, `signing-identities.json` inalterado,
+nenhuma chamada de criação/reconfiguração de repositório) e extensões em
+`tests/unit/pipeline/runtime/test_retry_lab.py` (job novo no inventário,
+permissões mínimas exatas em `lab-publish`, ausência de privilégio de
+publicação nos demais jobs, bind antes de qualquer auth AWS, artifact de
+publicação sem overwrite, reuso direto de `verify_publication`/
+`publish_sboms` em vez de wrapper). `renovate.json` passou a cobrir também
+o pin do Skopeo dentro de `partial-retry-lab.yml`
+(`test_actual_skopeo_pins_are_both_visible_and_managed` atualizado para 3
+ocorrências, todas geridas).
+
+```text
+PUBLICATION_JOB_IMPLEMENTATION = IMPLEMENTED
+PUBLICATION_JOB_LOCAL_VERIFICATION = PASS
+PUBLICATION_INFRA_DESIGN = PROPOSED
+PUBLICATION_INFRA_APPLIED = NO
+AWS_EXECUTION = NOT RUN
+PUBLICATION_CONTINUATION = PENDING
+P1-02 HOSTED_ACCEPTANCE = PENDING
+```
+
+Pendente: revisão independente desta implementação; decisão externa de
+Cloud/IAM sobre a role/repos isolados (nada aplicado); só depois disso uma
+execução hospedada real poderia ser autorizada — não ocorreu nesta sessão.
+
+## Correção F1/F2 da revisão adversarial do job de publicação — 2026-09-15
+
+A revisão independente adversarial retornou **CHANGES REQUIRED** com dois
+achados concretos e reproduzidos, ambos corrigidos nesta rodada. Nenhum
+recurso AWS foi criado/alterado; nenhum workflow foi despachado.
+
+- **F1 (HIGH)** — o OCI que `lab-publish` efetivamente revalida e publica
+  nunca era comparado, por digest, ao `index_digest`/`dev_index_digest` que
+  o gate de retry/reuse aprovou. Como `validated-oci-<framework>` é
+  publicado com `overwrite: true` no reusable
+  (`.reusable-workflows/.github/workflows/validate-apko-images.yml`), o
+  artifact baixado por `lab-publish` não era garantidamente o mesmo,
+  bit a bit, que `lab-retry` gateou. Reproduzido: `finalize()` retornava
+  `PASS` com um digest de runtime completamente diferente do aprovado pelo
+  gate. Corrigido com uma nova função,
+  `retry_lab_publish.require_gate_layout_binding(gate, verified_runtime_digest,
+  verified_dev_digest)`, que não importa `scripts.pipeline.release` (domínio
+  `runtime` preservado) e exige `verified_runtime_digest == gate.index_digest`
+  e `verified_dev_digest == gate.dev_index_digest`, com os dois digests já
+  validados em formato canônico. Um novo step, "Validate revalidated OCI
+  digests against the retry/reuse gate", roda logo após "Revalidate OCI
+  layouts locally before push" e antes de "Configure AWS credentials" — sem
+  `continue-on-error`, sem `if`, com os outputs anteriores passados por
+  `env:` (não interpolados em `${{ }}` dentro de `run:`, conforme o guard de
+  hardening já existente). `finalize()` agora também recebe esse
+  `layout-binding.json` e reexige a mesma cadeia
+  (`gate_digest == verified_digest == validated_digest == copied_digest ==
+  remote_digest`) para runtime e dev antes de declarar `PASS` — a
+  invariante não depende só do step bash.
+- **F2 (MEDIUM)** — `digest_equal()` comparava só igualdade de string, sem
+  validar que os valores eram digests sha256 reais. Reproduzido: três
+  cópias da string `"not-a-real-digest"` passavam como iguais. Corrigido
+  reutilizando o validador canônico já existente,
+  `contract_evidence.digest()` (mesmo usado por `retry_lab.valid_gate`),
+  aplicado a cada um dos três valores antes de compará-los.
+
+`final-result.json` passou a registrar também `gate_digest`/
+`verified_digest` por imagem (runtime e dev), tornando a comparação
+auditável sem depender de reconstruir o raciocínio a partir de
+`gate.json`/`layout-binding.json` separados.
+
+Testes novos: `GateLayoutBindingTests` e `DigestFormatTests` em
+`test_retry_lab_publish.py` (o cenário de substituição de artifact via
+`overwrite: true` é testado explicitamente, tanto no guard pré-AWS quanto
+em `finalize`), mais extensões em `FinalizeTests` (publicação
+internamente coerente mas divergente do gate; runtime/dev trocados;
+`layout_binding` referenciando outro gate). `test_retry_lab.py` ganhou
+testes confirmando a posição exata do novo step (por nome de step real,
+não só por texto) entre a revalidação OCI e a autenticação AWS, e que ele
+usa `env:` em vez de interpolação direta.
+
+```text
+PUBLICATION_JOB_IMPLEMENTATION = IMPLEMENTED
+PUBLICATION_JOB_LOCAL_VERIFICATION = PASS
+PUBLICATION_INFRA_DESIGN = PROPOSED
+PUBLICATION_INFRA_APPLIED = NO
+AWS_EXECUTION = NOT RUN
+PUBLICATION_CONTINUATION = PENDING
+P1-02 HOSTED_ACCEPTANCE = PENDING
+```
+
+Nenhuma execução real foi feita. Pendente: nova revisão independente desta
+correção antes de qualquer integração adicional.
