@@ -46,19 +46,46 @@ on:
     - cron: "0 3 * * *"   # build diário: 00:00 America/Sao_Paulo (03:00 UTC)
     - cron: "17 * * * *"  # promoção horária; soak mínimo contado desde o push
   workflow_dispatch:
-    inputs:
-      frameworks:
-        description: 'JSON array de frameworks para build manual (ex.: ["go1-26"])'
-        type: string
-        default: '["go1-26"]'
+    # P0-04: o primeiro E2E corporativo tem seleção fixa e auditável.
+    # A capacidade FULL continua disponível nos workflows reutilizáveis;
+    # este entrypoint não aceita ampliar o escopo sem mudança revisada.
 
 # PRs recebem apenas leitura. Escrita/OIDC são concedidos nos jobs autorizados.
 permissions:
   contents: read
 
 jobs:
-  validate-pr:
+  pr_execution_scope:
+    name: Resolve PR execution profile
     if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      profile: ${{ steps.scope.outputs.profile }}
+    steps:
+      - name: Checkout PR history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Resolve changed-path profile
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CHANGED_PATHS: ${{ runner.temp }}/pr-changed-paths
+        run: |
+          set -euo pipefail
+          if ! git diff --name-only "$BASE_SHA" "$HEAD_SHA" > "$CHANGED_PATHS"; then
+            # Missing/unavailable history is ambiguous and must fail safe to FULL.
+            printf '%s\n' '__unknown_changed_path__' > "$CHANGED_PATHS"
+          fi
+          python3 -B -m scripts.pipeline.governance.pr_execution_scope \
+            --paths-file "$CHANGED_PATHS" >> "$GITHUB_OUTPUT"
+
+  validate-pr:
+    if: github.event_name == 'pull_request' && needs.pr_execution_scope.outputs.profile == 'P0_04'
+    needs: [pr_execution_scope]
     # M14: um novo commit no mesmo PR cancela a validação obsoleta (apko +
     # Trivy, sem AWS) em vez de rodar as duas até o fim; PRs diferentes têm
     # grupos diferentes e não se cancelam. Grupo próprio, nunca compartilhado
@@ -69,7 +96,15 @@ jobs:
       cancel-in-progress: true
     uses: ./.github/workflows/validate-base-images.yml
     with:
-      frameworks: '["java21", "java21-dev", "java25", "java25-dev", "python3-13", "python3-14", "go1-25", "go1-25-dev", "go1-26", "go1-26-dev", "nodejs22", "nodejs24", "nodejs22-dev", "nodejs24-dev", "dotnet10", "dotnet10-dev"]'
+      frameworks: '["go1-26", "go1-26-dev"]'
+
+  validate-pr-full:
+    name: Validate full catalog for shared-impact PR
+    if: github.event_name == 'pull_request' && needs.pr_execution_scope.outputs.profile == 'FULL'
+    needs: [pr_execution_scope]
+    uses: ./.github/workflows/validate-base-images.yml
+    with:
+      frameworks: '["dotnet10", "dotnet10-dev", "go1-25", "go1-25-dev", "go1-26", "go1-26-dev", "java21", "java21-dev", "java25", "java25-dev", "nodejs22", "nodejs22-dev", "nodejs24", "nodejs24-dev", "python3-13", "python3-14"]'
 
   build-base-images:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * *')
@@ -83,7 +118,7 @@ jobs:
     with:
       aws-region: ${{ vars.AWS_REGION }}
       aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
-      frameworks: ${{ github.event_name == 'workflow_dispatch' && inputs.frameworks || '["java21", "java21-dev", "java25", "java25-dev", "python3-13", "python3-14", "go1-25", "go1-25-dev", "go1-26", "go1-26-dev", "nodejs22", "nodejs24", "nodejs22-dev", "nodejs24-dev", "dotnet10", "dotnet10-dev"]' }}
+      frameworks: '["go1-26", "go1-26-dev"]'
 
   promote-stable:
     if: github.ref == 'refs/heads/main' && github.event.schedule == '17 * * * *'
@@ -97,5 +132,5 @@ jobs:
       aws-region: ${{ vars.AWS_REGION }}
       aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
       soak-hours: 6
-      frameworks: '["java21", "java21-dev", "java25", "java25-dev", "python3-13", "python3-14", "go1-25", "go1-25-dev", "go1-26", "go1-26-dev", "nodejs22", "nodejs24", "nodejs22-dev", "nodejs24-dev", "dotnet10", "dotnet10-dev"]'
+      frameworks: '["go1-26", "go1-26-dev"]'
 # no-op, testing M14 cancel-in-progress

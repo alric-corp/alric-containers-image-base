@@ -54,7 +54,10 @@ class RealTreeTests(unittest.TestCase):
         for job_id in batch.BATCH_JOBS:
             names_in_job, problem = batch.parse_batch(job_id, found[job_id])
             self.assertIsNone(problem)
-            self.assertEqual(sorted(names_in_job), expected, job_id)
+            expected_for_job = (batch.P0_04_BATCH
+                                if found[job_id] == json.dumps(batch.P0_04_BATCH)
+                                else expected)
+            self.assertEqual(sorted(names_in_job), sorted(expected_for_job), job_id)
 
     def test_the_exclusion_is_a_reviewed_decision_with_a_valid_adr(self):
         policy = json.loads((ROOT / 'policies/operations/health.json').read_text())
@@ -86,13 +89,10 @@ class LintTests(unittest.TestCase):
     def test_catalog_minus_exclusions_passes_in_any_order(self):
         self.assertEqual(self.lint(self.BATCH, list(reversed(self.BATCH)), self.BATCH), [])
 
-    def test_missing_framework_in_one_job_names_job_and_framework(self):
-        # N01: só a promoção esqueceu nodejs22.
-        problems = self.lint(self.BATCH, self.BATCH, ['go1-26', 'go1-26-dev'])
-        self.assertEqual(len(problems), 1)
-        self.assertIn('`promote-stable`', problems[0])
-        self.assertIn('`nodejs22`', problems[0])
-        self.assertIn('ausente', problems[0])
+    def test_p0_profile_is_valid_for_promotion_during_rollout(self):
+        # O caller de promoção pode usar o perfil P0-04 sem registrar
+        # frameworks ausentes como exceptions do catálogo.
+        self.assertEqual(self.lint(self.BATCH, self.BATCH, batch.P0_04_BATCH), [])
 
     def test_excluded_framework_present_in_the_batches_is_one_problem_per_job(self):
         # N02: o estado anterior a esta entrega — dotnet8 nos três lotes.

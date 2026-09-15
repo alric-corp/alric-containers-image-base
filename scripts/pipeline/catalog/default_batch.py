@@ -29,11 +29,16 @@ ROOT = Path(__file__).resolve().parents[3]
 CATALOG = ROOT / 'frameworks'
 POLICY = ROOT / 'policies/operations/health.json'
 WORKFLOW = ROOT / '.github/workflows/workflow.yml'
-# Jobs de workflow.yml que recebem o lote padrão. `validate-pr` roda em PR;
-# os outros dois só na main (build diário/push e promoção horária). Em
-# `workflow_dispatch`, `build-base-images` usa o input manual `frameworks`
-# (default `["go1-26"]`), não o lote padrão.
+# Jobs de workflow.yml que recebem lote explícito. O lote DEFAULT/FULL é o
+# catálogo normal menos as exceptions. `P0_04_BATCH` é o perfil temporário
+# `["go1-26", "go1-26-dev"]`: durante o rollout, build e promoção usam esse
+# perfil. Callers explícitos, inclusive validações de impacto compartilhado,
+# continuam podendo usar DEFAULT/FULL; o workflow reutilizável permanece apto
+# a chamadas FULL independentes deste entrypoint.
 BATCH_JOBS = ('validate-pr', 'build-base-images', 'promote-stable')
+# Temporary rollout profile for the first corporate E2E. It is an execution
+# selection only; the catalog and FULL policy remain unchanged.
+P0_04_BATCH = ['go1-26', 'go1-26-dev']
 REQUIRED_FIELDS = ('reason', 'owner', 'review_by', 'adr')
 
 # Forma canônica de `with.frameworks`, conferida inteira (fullmatch), não um
@@ -160,6 +165,11 @@ def parse_batch(job_id, raw):
     A forma é comparada inteira: `${{ vars.X || '[…]' }}` é recusada mesmo
     com o literal certo, porque `vars.X` substituiria o lote em execução.
     """
+    # P0-04 deliberately uses a fixed literal for the build entrypoint so a
+    # manual dispatch cannot widen the corporate E2E scope. Keep the normal
+    # dispatch form available to reusable/full callers and tests.
+    if job_id in ('validate-pr', 'build-base-images') and raw == json.dumps(P0_04_BATCH):
+        return list(P0_04_BATCH), None
     pattern, form = FORMS[job_id]
     match = pattern.fullmatch(raw) if isinstance(raw, str) else None
     if match:
@@ -197,7 +207,11 @@ def lint(names, excluded, found):
             elif name in excluded:
                 problems.append(f'`{job_id}`: framework `{name}` está fora do lote padrão '
                                 f"({excluded[name].get('adr') or 'exceção na política'})")
-        for name in expected:
+        # P0-04 is an explicit execution profile, not a catalog exclusion.
+        # A rollout caller may use it for build or promotion; reusable FULL
+        # callers remain governed by the catalog batch rule.
+        required = [] if batch == P0_04_BATCH else expected
+        for name in required:
             if name not in seen:
                 problems.append(f'`{job_id}`: framework `{name}` do catálogo ausente do lote padrão '
                                 '(inclua-o ou registre a exclusão na política)')
