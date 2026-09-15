@@ -53,3 +53,36 @@ Os resultados locais abaixo são fixtures/estrutura, não execução hospedada.
 Um scan bloqueado ou falha antes da barreira não satisfaz L03. Campos de fixture
 não encerram qualquer critério hospedado. A coleta posterior deverá seguir a
 checklist do plan, inclusive conclusão final do consumer após o snapshot.
+
+## Resultado hospedado do laboratório — 2026-09-14
+
+O run `34889507318`, na revisão `13b50102d29fab89509c5d539e72659529686a37`,
+foi executado uma vez e depois submetido a **Re-run failed jobs**. A revisão
+independente do Claude Code retornou **APPROVE**.
+
+O attempt 1 terminou em FAILURE esperado: `request`, `lab-build` e
+`lab-contract` foram SUCCESS; `lab-retry` falhou exclusivamente em
+`Controlled attempt-1 barrier`, com exit 42 e `EXPECTED_LAB_FAILURE`, após o
+gate e o upload da baseline.
+
+O attempt 2 terminou SUCCESS. O gate real registrou `passed=true`,
+`run_attempt=2`, `selected_attempt=1`, `reused=true` e selecionou
+`runtime-go1-26-1` (artifact `10365489260`). O consumer terminou sem falhas e
+a barreira registrou `LAB_BARRIER_PASSED`, exit 0.
+
+### Matriz hospedada
+
+| Critério | Estado observado |
+| --- | --- |
+| mesmo run, revisão e framework/par runtime-dev | PASS |
+| evidence funcional anterior reutilizada | PASS |
+| selected_attempt=1 / reused=true / passed=true | PASS |
+| producers não reconstruídos | PASS — jobs herdados conservaram timestamps/steps; artifacts originais permaneceram |
+| índices, manifests e hashes de reports | PASS — revalidados por hash |
+| ausência de falha relevante mais recente | PASS |
+| consumer do attempt 2 concluído | PASS |
+| publicação, ECR, assinatura, provenance, SBOM, read-back ou stable | OBSERVED: NO PUBLICATION PERFORMED |
+
+Assim, `RETRY_REUSE_HOSTED = PASS`, mas a ausência de publicação não satisfaz
+a continuação exigida pelo contrato original. `PUBLICATION_CONTINUATION =
+PENDING` e `P1-02 HOSTED_ACCEPTANCE = PENDING` permanecem deliberadamente.

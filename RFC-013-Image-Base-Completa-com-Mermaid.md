@@ -206,7 +206,7 @@ continua NOT RUN e acesso privado NOT VERIFIED. Ver [contrato de reuso](docs/m09
 | Fatia | Estado do código na main | Aceite hospedado específico |
 | --- | --- | --- |
 | P1-01 — stable read-back | IMPLEMENTED; confirmação ECR antes de promoted=true | PASS — go1-26 e go1-26-dev no [run 34768459323](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34768459323), commit e3ed682 |
-| P1-02 — partial retry | IMPLEMENTED; merge PR #55 | PENDING — requer rerun real com evidence anterior e mesmo digest |
+| P1-02 — partial retry | IMPLEMENTED; merge PR #64; laboratório comprovou reuse hospedado sem rebuild | PENDING — continuação de publicação ainda não exercitada |
 | P1-03 — Wolfi defense-in-depth | IMPLEMENTED; merge PR #54 | PARTIAL / BLOCKED_UPSTREAM — mínimo hosted PASS observado em go1-26/go1-26-dev, run 34852458933/1; reconciliação sujeita a revisão |
 | P1-04 — contrato de permissões IAM | [Inventário e templates locais propostos](docs/iam-permission-contract.md), sem aplicação IAM | Validação AWS/sandbox NOT RUN; aceite corporativo EXTERNAL_PENDING; PutImage no mesmo ECR não isola stable por principal |
 | P1-05 — Sigstore Trust Model ADR | [ADR-0002](docs/adr/0002-sigstore-trust-model.md) PROPOSED; documenta o modelo existente | Decisão corporativa EXTERNAL / PENDING; sem novo controle ou aceite hospedado |

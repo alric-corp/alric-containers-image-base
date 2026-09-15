@@ -385,3 +385,101 @@ ATTEMPT_1_EXECUTED=NOT RUN; ATTEMPT_2_EXECUTED=NOT RUN;
 P1-02 HOSTED_ACCEPTANCE=PENDING. A publicação real prevista pelo aceite original
 não foi implementada neste workflow e requer extensão e autorização separadas.
 A aprovação desta rodada ainda será feita por revisão independente.
+
+## Resultado hospedado do laboratório — 2026-09-14
+
+Registro incremental posterior à implementação local; os snapshots anteriores
+não foram reescritos. Coleta somente leitura concluída após o attempt 2 do run
+`34889507318`, na revisão `13b50102d29fab89509c5d539e72659529686a37`.
+Operação realizada: `Re-run failed jobs`; não houve novo dispatch, attempt 3,
+AWS ou publicação.
+
+### Attempt 1
+
+O workflow terminou FAILURE esperado. Jobs: `request` SUCCESS (`104128348177`),
+`lab-build` SUCCESS em todos os producers, `lab-contract` SUCCESS
+(`104129684652`) e `lab-retry` FAILURE (`104130985194`). A única falha foi o
+step `Controlled attempt-1 barrier`, exit code 42, marker
+`EXPECTED_LAB_FAILURE`. Gate e baseline foram concluídos antes da barreira;
+upload da evidência terminou SUCCESS.
+
+Gate real (`runtime-gate-result.json`): `passed=true`, `run_attempt=1`,
+`selected_attempt=1`, `reused=false`, framework `go1-26`, artifact
+`runtime-go1-26-1`, ID `10365489260`.
+
+Artifacts de baseline/produção: `validated-oci-go1-26` ID `10365723347`,
+`validated-oci-go1-26-dev` ID `10366560899`, baseline
+`runtime-lab-p1-02-baseline-34889507318` ID `10366571924`, evidence attempt 1
+ID `10366556964`. Todos estavam `expired=false` durante a coleta.
+
+### Attempt 2
+
+O mesmo run terminou SUCCESS no attempt 2. O consumer `Lab retry gate`
+(`104141878086`) baixou a baseline, executou o gate real e registrou:
+
+```text
+passed=true
+run_id=34889507318
+run_attempt=2
+revision=13b50102d29fab89509c5d539e72659529686a37
+framework=go1-26
+selected_attempt=1
+reused=true
+selected_artifact=runtime-go1-26-1
+selected_artifact_id=10365489260
+latest_producer_job_id=104141878260
+latest_producer_attempt=2
+```
+
+`latest_producer_attempt=2` é a representação do job herdado/copiado pelo
+GitHub. Os 12 producers observados no attempt 2 conservaram exatamente os
+timestamps e steps do attempt 1; seus novos IDs não representam nova execução.
+Os artifacts produtores mantiveram IDs, criação, tamanho e digest; não surgiu
+`runtime-go1-26-2` nem artifact OCI substituto. O artifact de evidência do
+attempt 2 é `runtime-lab-p1-02-attempt-34889507318-2`, ID `10368037207`.
+
+O barrier registrou `LAB_BARRIER_PASSED`, exit code 0. Nenhum step do consumer
+falhou. A evidência do attempt 2 declara `publication=NOT_IMPLEMENTED`.
+
+### Digests e reports revalidados
+
+Os hashes dos ZIPs foram conferidos contra os digests do GitHub. Os layouts
+OCI foram re-hasheados, incluindo blobs, índice e manifests de ambas as
+plataformas:
+
+```text
+runtime index   sha256:78d52b14e6d10befbffd5d8144f8b1d75ccd3bfbd98ee7f66c2a18e897115208
+runtime amd64   sha256:7da4cb558944fa44050706d4f12106509400b7b1527c4ed2de6d592e42977ef0
+runtime arm64   sha256:de503854a670e0112c7e2516a142e2a6332799389e7e0e11a5e9744178a9dd90
+dev index       sha256:1b7ac732011843ad9a19a2dfd58fab6233d8012b9b466926cfef59410f34ca97
+dev amd64       sha256:751bfe2db1fb313842c0229ee8aef95624deeeb6e5773b44bbeda6e2e0de64be
+dev arm64       sha256:7f4d8e0f455e3bd04dcf1e3a18d7f86acbf1c685df0eeb2ff53c80a9ec09274b
+report amd64    a76f5f5ae6cc7987688278acb64735b7d08a62129395cb999c7e4a5a6f7498fc
+report arm64    54757284c4072cc52b5e86ec4487657b76324e9abe4e4131461fe6fb5787fd91
+```
+
+Os bytes dos reports foram idênticos no artifact funcional original e nas
+evidências dos attempts 1 e 2. A baseline permaneceu única, íntegra e ligada
+ao mesmo run/SHA/framework. A coleta consultou uma página completa de jobs
+(26 registros dos dois attempts) e uma página completa de artifacts (17).
+
+### Estados e limite
+
+```text
+LAB_IMPLEMENTATION = IMPLEMENTED
+LOCAL_VERIFICATION = PASS
+INDEPENDENT_REVIEW = APPROVE
+ATTEMPT_1_EXECUTED = VALIDATED
+ATTEMPT_2_EXECUTED = VALIDATED
+RETRY_REUSE_HOSTED = PASS
+PUBLICATION_CONTINUATION = PENDING
+P1-02 HOSTED_ACCEPTANCE = PENDING
+```
+
+O ensaio comprova retry/reuse hospedado sem rebuild. Não comprova publicação
+por digest, ECR, Cosign, provenance, SBOM attestation, read-back remoto ou
+stable promotion. Reports, baseline e evidence expiram em 30 dias; OCI expira
+em 3 dias. A revisão independente re-hasheou os OCI enquanto disponíveis.
+Próxima fase única: **P1-02 — Publication continuation after reused evidence**,
+com destino de teste isolado, stable proibida, inputs externos, revisão e
+autorização próprios. Nenhuma implementação ou execução dessa fase ocorreu.
