@@ -16,6 +16,7 @@ REPOSITORY = 'alric-corp/alric-containers-image-base'
 WORKFLOW = '.github/workflows/partial-retry-lab.yml'
 CONFIRMATION = 'P1-02-evidence-only'
 CONSUMER = 'Lab retry gate'
+PUBLISHER = 'Lab publish'
 BARRIER = 'Controlled attempt-1 barrier'
 RECORD = 'Record lab execution and compare inherited evidence'
 BASELINE_UPLOAD = 'Preserve attempt-1 baseline'
@@ -109,6 +110,13 @@ def job_inventory(document, ctx):
             if attempt == ctx['run_attempt']:
                 require(consumer is None, 'ambiguous current consumer')
                 consumer = job
+            continue
+        if name == PUBLISHER:
+            # Publication continuation is a consumer of the retry/reuse gate,
+            # never a producer: its GitHub metadata (queued/skipped/success/
+            # failure, with or without steps) is legitimate at any attempt,
+            # but it must stay outside by_name so it can never influence
+            # latest_producer_attempt, rebuild detection or reuse.
             continue
         require(name == 'Lab request' or name.startswith(PRODUCER_PREFIXES),
                 'unexpected job in laboratory run')

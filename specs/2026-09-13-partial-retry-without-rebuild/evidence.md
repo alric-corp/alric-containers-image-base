@@ -700,3 +700,99 @@ make lint-workflows (actionlint) → OK
 python3 -B tools/check_ai_context.py → OK
 git diff --check  → sem erros
 ```
+
+## Run hospedado 34976226951 e correção do `job_inventory` — 2026-09-15
+
+Attempt 1 (`workflow_dispatch` explícito, `confirmation=P1-02-evidence-only`,
+`reviewed-sha=25b33b279e4e5a64b3f0fc26595f9afdfb9a2ecc`) executou e concluiu
+**PASS**: gate real, barreira controlada (`exit 42`), `Lab publish`
+corretamente `skipped` (attempt 1), zero atividade AWS.
+
+Attempt 2 (`gh run rerun 34976226951 --failed`) **FALHOU ANTES DE QUALQUER
+PUBLICAÇÃO** — não no gate de retry/reuse em si, mas no step anterior a
+ele:
+
+```json
+{"status": "INVALID_SCENARIO", "error": "unexpected job in laboratory run"}
+```
+
+### Causa raiz
+
+`scripts/pipeline/runtime/retry_lab.py::job_inventory()` só reconhecia
+`Lab request` e nomes iniciados por `PRODUCER_PREFIXES` (`'Lab build / '`,
+`'Lab contract / '`), além do tratamento dedicado do consumidor
+(`Lab retry gate`). O job `Lab publish`, introduzido pela implementação da
+continuação de publicação (seção acima), nunca foi adicionado a esse
+allowlist. A API `jobs?filter=all` do GitHub inclui a entrada de
+`Lab publish` mesmo quando ele ainda vai ser `skipped` (o registro do job
+já existe assim que o grafo do run é criado), então `job_inventory()`
+rejeitava deterministicamente **todo** attempt 2 a partir desse ponto —
+um defeito estrutural, não um evento pontual do run 34976226951.
+
+Reproduzido isoladamente antes de qualquer alteração: um documento de jobs
+sintético contendo `Lab request`, um `Lab build / ...`, um
+`Lab contract / ...`, o consumidor `Lab retry gate` e um `Lab publish`
+gera exatamente o mesmo erro (`unexpected job in laboratory run`) fora do
+contexto hospedado, confirmando que a causa é unicamente essa função.
+
+### Efeitos AWS confirmados (nenhum)
+
+```text
+Lab publish: skipped, steps: []
+RoleLastUsed da role isolada do laboratório: {} (nunca assumida)
+p102-lab-go1-26:     imageIds = []
+p102-lab-go1-26-dev: imageIds = []
+```
+
+### Correção aplicada (somente local nesta sessão)
+
+Nova constante `PUBLISHER = 'Lab publish'` em `retry_lab.py`; dentro do
+laço de `job_inventory()`, uma segunda ramificação explícita (`if name ==
+PUBLISHER: continue`), simétrica ao tratamento já existente do consumidor,
+mas sem capturar o job em nenhuma estrutura: `Lab publish` nunca entra em
+`by_name`/`latest` (o dicionário de producers), então sua presença — em
+qualquer estado (`queued`, `in_progress`, `completed/success`,
+`completed/skipped`, `completed/failure`, com ou sem `steps`) — não pode
+alterar `latest_producer_attempt`, `selected_attempt`, `reused` ou a
+detecção de rebuild/nova falha. Nomes não reconhecidos continuam rejeitados
+(`'Lab unknown'`, `'Lab publisher'`, `'Lab publish unexpected'`, `'Random
+job'`, `'Build go1-26'`, `'Lab security bypass'` etc.) — a correção não
+introduziu um `startswith('Lab ')` permissivo.
+
+`scripts/pipeline/runtime/retry_lab_publish.py`, a lógica de publicação
+AWS/ECR/Cosign/SBOM/provenance, os guards de stable e a proposta IAM **não
+foram alterados** — o achado é anterior à publicação em si e nenhum teste
+demonstrou dependência inevitável dessas áreas.
+
+```text
+python3 -B -m unittest tests.unit.pipeline.runtime.test_retry_lab -v
+  → 39 testes, OK (4 novos: presença de Lab publish em qualquer estado não
+    altera o manifesto/producers; reuse válido com Lab publish presente;
+    newer-producer-failure continua invalidando reuse com Lab publish
+    presente; nomes desconhecidos continuam fail-closed) + 1 teste de
+    drift (nomes de job do workflow ↔ constantes de job_inventory)
+python3 -B -m unittest tests.unit.pipeline.runtime.test_retry_lab_publish -v
+  → 48 testes, OK (inalterado — retry_lab_publish.py não foi tocado)
+make test-unit    → 458 testes, OK
+make test-integration → 24 testes, OK
+make lint-local   → OK
+make lint-shared  → OK
+make lint-workflows (actionlint) → OK
+python3 -B tools/check_ai_context.py → OK
+git diff --check  → sem erros
+```
+
+```text
+P1_02_ATTEMPT_1 = PASS
+P1_02_ATTEMPT_2 = FAILED — HISTORICAL RUN 34976226951
+RETRY_REUSE_HOSTED = PASS
+PUBLICATION_JOB_FIX = IMPLEMENTED
+PUBLICATION_JOB_FIX_LOCAL_VERIFICATION = PASS
+AWS_PUBLICATION_EXECUTION = NOT RUN
+PUBLICATION_CONTINUATION = PENDING
+P1-02 HOSTED_ACCEPTANCE = PENDING
+```
+
+Nenhuma nova execução hospedada, rerun, dispatch, alteração de IAM/ECR/vars
+ou commit/push/PR foi feita nesta sessão. Pendente: revisão independente
+desta correção antes de qualquer novo attempt hospedado.

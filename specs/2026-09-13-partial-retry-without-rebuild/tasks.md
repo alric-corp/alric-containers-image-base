@@ -56,6 +56,20 @@ Os itens anteriores preservam o histórico da implementação/reconciliação.
 - [x] F2: `digest_equal` passou a usar `contract_evidence.digest()` antes de comparar.
 - [x] Novo step no workflow entre revalidação OCI e auth AWS, sem `continue-on-error`, valores via `env:`.
 - [x] `make test-unit`/`test-integration`/lints/actionlint OK após a correção.
+- [x] Nova revisão independente desta correção.
+- [x] Decisão externa de Cloud/IAM sobre role/repos isolados — infraestrutura real provisionada e verificada.
+- [x] GitHub Repository Variables `LAB_*` configuradas e verificadas.
+- [x] Execução hospedada real do run `34976226951`: attempt 1 PASS.
+- [ ] Execução hospedada real do run `34976226951`: attempt 2 — FAILED antes do gate de retry/reuse (`job_inventory` rejeitava `Lab publish`).
+
+## Correção do job_inventory para reconhecer Lab publish — 2026-09-15
+
+- [x] Bug reproduzido isoladamente (fora do contexto hospedado) antes de qualquer alteração de código.
+- [x] Causa raiz confirmada: `job_inventory()` não reconhecia o job `Lab publish`.
+- [x] Nova constante `PUBLISHER = 'Lab publish'`; `job_inventory()` passou a reconhecê-lo e ignorá-lo, sem tratá-lo como producer.
+- [x] Fail-closed preservado: nomes desconhecidos (`'Lab unknown'`, `'Lab publisher'`, etc.) continuam rejeitados; sem `startswith('Lab ')` permissivo.
+- [x] Testes novos: presença de `Lab publish` em qualquer estado não altera manifesto/producers/`latest_producer_attempt`/`selected_attempt`/`reused`; reuse válido com `Lab publish` presente; newer-producer-failure continua invalidando reuse; teste de drift nomes-do-workflow ↔ constantes.
+- [x] `retry_lab_publish.py`/AWS/ECR/IAM não alterados (nenhuma dependência demonstrada).
+- [x] `make test-unit`/`test-integration`/lints/actionlint/`check_ai_context`/`git diff --check` OK.
 - [ ] Nova revisão independente desta correção.
-- [ ] Decisão externa de Cloud/IAM sobre role/repos isolados (nada aplicado).
-- [ ] Execução hospedada real da continuação de publicação (fase futura, não autorizada nesta sessão).
+- [ ] Novo attempt hospedado (dispatch novo, não rerun) após a revisão — fase futura, não autorizada nesta sessão.

@@ -329,6 +329,86 @@ class RetryLabTests(unittest.TestCase):
         self.assertEqual(rejected.returncode, 1)
         self.assertEqual(json.loads(rejected.stdout)['status'], 'INVALID_SCENARIO')
 
+    def publish_job(self, identifier, run_attempt, **overrides):
+        """A 'Lab publish' GitHub job entry, as it appears in jobs?filter=all
+        regardless of whether it ran, at any legitimate metadata state."""
+        defaults = {'status': 'completed', 'conclusion': 'success',
+                    'steps': [{'number': 1, 'name': 'Publish runtime image by digest',
+                               'status': 'completed', 'conclusion': 'success',
+                               'started_at': '2026-09-14T11:05:00Z',
+                               'completed_at': '2026-09-14T11:06:00Z'}]}
+        defaults.update(overrides)
+        return self.job(identifier, lab.PUBLISHER, run_attempt=run_attempt, **defaults)
+
+    def test_lab_publish_presence_in_any_state_never_changes_the_manifest_or_becomes_a_producer(self):
+        # A-H: queued/in_progress/skipped/success/failure Lab publish metadata
+        # is legitimate at attempt 1, but must never alter the manifest,
+        # latest_producer_attempt, selected_attempt or reused, and must never
+        # appear in the producers dict.
+        baseline_manifest = self.assess()
+        states = [
+            {'status': 'queued', 'conclusion': None, 'steps': [],
+             'started_at': None, 'completed_at': None},
+            {'status': 'in_progress', 'conclusion': None, 'steps': [],
+             'started_at': '2026-09-14T10:02:00Z', 'completed_at': None},
+            {'status': 'completed', 'conclusion': 'skipped', 'steps': [],
+             'started_at': None, 'completed_at': None},
+            {'status': 'completed', 'conclusion': 'success'},
+            {'status': 'completed', 'conclusion': 'failure', 'steps': [
+                {'number': 1, 'name': 'Publish runtime image by digest', 'status': 'completed',
+                 'conclusion': 'failure', 'started_at': '2026-09-14T11:05:00Z',
+                 'completed_at': '2026-09-14T11:06:00Z'}]},
+        ]
+        for state in states:
+            with self.subTest(state=state):
+                self.jobs.append(self.publish_job(500, 1, **state))
+                manifest = self.assess()
+                self.jobs.pop()
+                self.assertEqual(manifest, baseline_manifest)
+                self.assertNotIn(lab.PUBLISHER, manifest['producers'])
+        # K: attempt 1 controlled-barrier behavior is unaffected.
+        code, result = lab.barrier(self.ctx, baseline_manifest)
+        self.assertEqual(code, 42)
+        self.assertEqual(result['status'], 'EXPECTED_LAB_FAILURE')
+
+    def test_lab_publish_present_during_valid_reuse_does_not_change_producer_selection_or_reuse(self):
+        # L: a valid attempt-2 reuse still resolves selected_attempt=1,
+        # reused=true, with the real (copied) attempt-2 producer attempt,
+        # whether or not Lab publish is present in the job inventory.
+        baseline = self.retry()
+        self.jobs.append(self.publish_job(501, 2, status='completed', conclusion='success'))
+        manifest = self.assess(baseline)
+        self.assertEqual(manifest['status'], 'REUSE_OBSERVED')
+        self.assertTrue(manifest['gate']['reused'])
+        self.assertEqual(manifest['gate']['selected_attempt'], 1)
+        self.assertEqual(manifest['gate']['latest_producer_attempt'], 2)
+        self.assertNotIn(lab.PUBLISHER, manifest['producers'])
+        self.assertEqual(lab.barrier(self.ctx, manifest)[0], 0)
+
+    def test_newer_producer_failure_still_invalidates_reuse_even_with_lab_publish_present(self):
+        # I: Lab publish presence must never rescue a rebuild/newer-failure
+        # scenario that the contract requires to invalidate reuse.
+        baseline = self.retry()
+        self.jobs.append(self.publish_job(502, 2, status='completed', conclusion='success'))
+        runtime_job = next(j for j in self.jobs if j['run_attempt'] == 2
+                           and j['name'].endswith('Runtime go1-26 (both architectures)'))
+        runtime_job['conclusion'] = 'failure'
+        self.assertFalse(self.gate()['passed'])
+        with self.assertRaises(ValueError):
+            self.assess(baseline)
+
+    def test_unknown_lab_job_names_still_fail_closed(self):
+        # J: the fix must not become a permissive wildcard; only the exact
+        # known control/producer names are ever accepted.
+        for bad_name in ('Lab unknown', 'Lab publisher', 'Lab publish unexpected',
+                         'Random job', 'Build go1-26', 'Lab security bypass'):
+            with self.subTest(name=bad_name):
+                self.jobs.append(self.job(600, bad_name, status='completed',
+                                          conclusion='skipped', steps=[]))
+                with self.assertRaisesRegex(ValueError, 'unexpected job in laboratory run'):
+                    self.assess()
+                self.jobs.pop()
+
 
 class LabWorkflowTests(unittest.TestCase):
     def setUp(self):
@@ -506,6 +586,17 @@ class LabWorkflowTests(unittest.TestCase):
         self.assertEqual(publish_text.count('scripts.pipeline.release.verify_publication'), 2)
         self.assertEqual(publish_text.count('scripts.pipeline.release.publish_sboms'), 2)
         self.assertNotIn('retry_lab_publish verify-publication', publish_text)
+
+    def test_job_inventory_control_and_producer_names_match_the_workflow_graph(self):
+        # Drift detector: if the workflow's job `name:` fields ever diverge
+        # from retry_lab's control/producer constants, this fails loudly
+        # instead of job_inventory silently rejecting a legitimate job again.
+        jobs = self.workflow['jobs']
+        self.assertEqual(jobs['request']['name'], 'Lab request')
+        self.assertEqual(jobs['lab-retry']['name'], lab.CONSUMER)
+        self.assertEqual(jobs['lab-publish']['name'], lab.PUBLISHER)
+        self.assertEqual(lab.PRODUCER_PREFIXES,
+                         tuple(f"{jobs[key]['name']} / " for key in ('lab-build', 'lab-contract')))
 
     def test_lab_publish_evidence_artifact_retention_and_no_overwrite(self):
         upload = next(s for s in self.workflow['jobs']['lab-publish']['steps']

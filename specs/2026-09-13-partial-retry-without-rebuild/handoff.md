@@ -158,3 +158,35 @@ P1-02 HOSTED_ACCEPTANCE = PENDING
 ```
 
 Próximo passo: nova revisão independente desta correção.
+
+## Handoff — correção do job_inventory (Lab publish) — 2026-09-15
+
+Execução hospedada real do run `34976226951`: attempt 1 **PASS**; attempt
+2 (`gh run rerun --failed`) **FAILED** antes de qualquer verificação de
+retry/reuse, com `INVALID_SCENARIO — "unexpected job in laboratory run"`.
+Causa: `retry_lab.py::job_inventory()` nunca foi atualizado para tolerar
+o job `Lab publish` (adicionado na fase de implementação anterior) no
+mesmo grafo. Zero efeito AWS confirmado (`RoleLastUsed={}`, ambos os ECRs
+vazios). Detalhes completos em
+[plan.md](plan.md#correção-do-job_inventory-para-reconhecer-lab-publish--2026-09-15)
+e [evidence.md](evidence.md#run-hospedado-34976226951-e-correção-do-job_inventory--2026-09-15).
+
+Corrigido localmente: nova constante `PUBLISHER = 'Lab publish'`;
+`job_inventory()` passou a reconhecer e ignorar esse job (sem tratá-lo
+como producer), simétrico ao tratamento já existente do consumidor.
+Nomes desconhecidos continuam fail-closed (sem `startswith('Lab ')`
+permissivo). `retry_lab_publish.py`/AWS/ECR/IAM não foram tocados.
+
+```text
+P1_02_ATTEMPT_1 = PASS
+P1_02_ATTEMPT_2 = FAILED — HISTORICAL RUN 34976226951
+RETRY_REUSE_HOSTED = PASS
+PUBLICATION_JOB_FIX = IMPLEMENTED
+PUBLICATION_JOB_FIX_LOCAL_VERIFICATION = PASS
+AWS_PUBLICATION_EXECUTION = NOT RUN
+PUBLICATION_CONTINUATION = PENDING
+P1-02 HOSTED_ACCEPTANCE = PENDING
+```
+
+Próximo passo: revisão independente desta correção; só depois disso um
+novo attempt hospedado (dispatch novo, não rerun) pode ser autorizado.
