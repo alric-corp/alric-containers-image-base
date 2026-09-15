@@ -22,19 +22,19 @@ Os itens anteriores preservam o histórico da implementação/reconciliação.
 - [x] Comparar artifacts, reports e execução dos producers através de metadados reais.
 - [x] Testar CLI, ambos attempts e negativos em fixtures locais.
 - [x] Preparar plano de execução, retenção e checklist de evidências.
-- [ ] Revisão independente desta implementação.
-- [ ] Integração Git e autorização específica do ensaio.
-- [ ] Executar attempt 1 e Re-run failed jobs para attempt 2; coletar evidência real.
-- [ ] Revisar e autorizar fase futura de publicação em destino isolado.
-- [ ] Avaliar todos os critérios originais antes de encerrar P1-02.
+- [x] Revisão independente desta implementação — concluído posteriormente: revisões independentes retornaram CHANGES REQUIRED (F1/F2, ver "Implementação local do job de publicação — 2026-09-15") e depois APPROVE ("Correção F1/F2..." e "Correção do job_inventory para reconhecer Lab publish — 2026-09-15").
+- [x] Integração Git e autorização específica do ensaio — concluído posteriormente: PRs #63/#64/#66/#67/#68 mergeados; autorização explícita concedida para cada attempt hospedado (execução hospedada — 2026-09-14 e ciclo final do run 34986578076).
+- [x] Executar attempt 1 e Re-run failed jobs para attempt 2; coletar evidência real — concluído posteriormente: run 34889507318 (primeiro ciclo) e, principalmente, o ciclo final no run 34986578076 (Attempt 1 + Attempt 2, ver "Hosted acceptance final — 2026-09-15" abaixo).
+- [x] Revisar e autorizar fase futura de publicação em destino isolado — concluído posteriormente: proposta de infraestrutura revisada/corrigida/entregue, provisionamento real e execução hospedada com `PUBLICATION_CONTINUATION = PASS` (run 34986578076, publication artifact ID `10405325731`).
+- [x] Avaliar todos os critérios originais antes de encerrar P1-02 — concluído posteriormente: ver [acceptance.md](acceptance.md#hosted-acceptance-final--2026-09-15), mapeamento final R1–R8/A01–A08 e revisão independente final (APPROVE WITH MINOR CHANGES).
 
 ## Execução hospedada — 2026-09-14
 
 - [x] Attempt 1 autorizado, executado e validado no run 34889507318.
 - [x] `Re-run failed jobs` executado uma vez; attempt 2 validado sem rebuild.
 - [x] Evidências, digests e retenção comparados e registrados.
-- [ ] Exercitar continuação da publicação em destino isolado, sob revisão e autorização próprias.
-- [ ] Encerrar o aceite integral P1-02 após publicação e verificações correspondentes.
+- [x] Exercitar continuação da publicação em destino isolado, sob revisão e autorização próprias — concluído no run 34986578076.
+- [x] Encerrar o aceite integral P1-02 após publicação e verificações correspondentes — ver seção "Hosted acceptance final" abaixo.
 
 ## Implementação local do job de publicação — 2026-09-15
 
@@ -71,5 +71,22 @@ Os itens anteriores preservam o histórico da implementação/reconciliação.
 - [x] Testes novos: presença de `Lab publish` em qualquer estado não altera manifesto/producers/`latest_producer_attempt`/`selected_attempt`/`reused`; reuse válido com `Lab publish` presente; newer-producer-failure continua invalidando reuse; teste de drift nomes-do-workflow ↔ constantes.
 - [x] `retry_lab_publish.py`/AWS/ECR/IAM não alterados (nenhuma dependência demonstrada).
 - [x] `make test-unit`/`test-integration`/lints/actionlint/`check_ai_context`/`git diff --check` OK.
-- [ ] Nova revisão independente desta correção.
-- [ ] Novo attempt hospedado (dispatch novo, não rerun) após a revisão — fase futura, não autorizada nesta sessão.
+- [x] Nova revisão independente desta correção (retornou APPROVE).
+- [x] Novo attempt hospedado (dispatch novo, não rerun) após a revisão — run 34986578076, attempt 1.
+
+## Hosted acceptance final — 2026-09-15
+
+- [x] Novo `workflow_dispatch` (run `34986578076`, baseline `b910bd076021fc349615ee7dd191c7da9f3a009e`); attempt 1 PASS (barreira controlada, exit 42).
+- [x] `gh run rerun --failed` (mesmo run); attempt 2 PASS — `job_inventory` reconhece `Lab publish` em produção hospedada, sem "unexpected job".
+- [x] No rebuild confirmado: `execution_metadata_equal=true` em 12/12 producers; digests/report hashes idênticos; nenhum `runtime-go1-26-2` criado.
+- [x] Gate-to-layout binding validado (`layout-binding.json`, `LAYOUT_BOUND_TO_GATE`) antes de qualquer auth AWS.
+- [x] Role OIDC isolada (`github-actions-image-base-p102-lab`) assumida pela primeira vez; `RoleLastUsed` preenchido.
+- [x] ECR preflight `IMMUTABLE` sem exclusion filters, ambos os repositórios.
+- [x] Publicação runtime+dev por digest com read-back idêntico (`gate == verified == validated == copied == remote`).
+- [x] Multiarch (amd64/arm64) preservado para runtime e dev, confirmado no registry real.
+- [x] Cosign (assinatura) verificado com identidade do laboratório (não a identidade produtiva).
+- [x] SBOM SPDX attestado e verificado, subjects vinculados aos digests publicados.
+- [x] Provenance SLSA attestado e verificado, `signer-workflow` do laboratório.
+- [x] Stable isolation: `stable_touched=false`; repositórios operacionais `image-base-go1-26`/`-dev` sem escrita nova.
+- [x] Evidência de publicação preservada (`runtime-lab-p1-02-publication-34986578076-2`, ID `10405325731`).
+- [ ] Aceite corporativo, P1-04, homologação AppSec, promoção de stable em produção — fora de escopo desta spec, não iniciados.

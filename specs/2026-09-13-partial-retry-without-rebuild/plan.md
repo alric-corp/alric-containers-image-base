@@ -543,3 +543,36 @@ P1-02 HOSTED_ACCEPTANCE = PENDING
 Nenhuma execução AWS, workflow_dispatch, rerun ou commit/push/PR foi feita
 nesta sessão. Pendente: revisão independente desta correção antes de
 qualquer novo attempt hospedado.
+
+## Encerramento hospedado do P1-02 — 2026-09-15
+
+A correção do `job_inventory()` foi revisada (APPROVE) e integrada via
+PR #68 (merge `b910bd076021fc349615ee7dd191c7da9f3a009e`). Um novo ciclo
+completo foi executado no run `34986578076`: attempt 1 via
+`workflow_dispatch` (PASS, barreira controlada) e attempt 2 via
+`gh run rerun --failed` (PASS), com a continuação de publicação hospedada
+completa nos dois repositórios ECR isolados. Detalhes em
+[evidence.md](evidence.md#hosted-acceptance-final--2026-09-15) e
+[acceptance.md](acceptance.md#hosted-acceptance-final--2026-09-15).
+
+Isso fecha o ciclo desenhado nas seções anteriores deste plano: o
+"Hosted acceptance" original (linha 58) exigia justamente rerun real de
+attempt 2 com cópia por digest a um destino de teste autorizado — cumprido
+sem alterar IAM, sem mover stable e sem reconstrução automática.
+
+```text
+P1_02_ATTEMPT_1 = PASS
+P1_02_ATTEMPT_2 = PASS
+JOB_INVENTORY_FIX_HOSTED = PASS
+RETRY_REUSE_HOSTED = PASS
+PUBLICATION_CONTINUATION = PASS
+AWS_PUBLICATION_EXECUTION = PASS — SANDBOX LAB ONLY
+P1-02 HOSTED_ACCEPTANCE = PASS
+STABLE_PRODUCTION_PROMOTION = NOT RUN
+```
+
+Isso não representa aceite corporativo, homologação AppSec, promoção de
+stable em produção ou conclusão de P1-04 — ver
+[handoff.md](handoff.md#handoff--encerramento-hospedado-do-p1-02--2026-09-15).
+Nenhuma nova execução AWS, workflow_dispatch, rerun, alteração de
+IAM/ECR/vars, promoção de stable ou commit/push/PR foi feita nesta sessão.

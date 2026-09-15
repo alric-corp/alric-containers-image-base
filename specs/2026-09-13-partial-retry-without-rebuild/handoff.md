@@ -190,3 +190,71 @@ P1-02 HOSTED_ACCEPTANCE = PENDING
 
 Próximo passo: revisão independente desta correção; só depois disso um
 novo attempt hospedado (dispatch novo, não rerun) pode ser autorizado.
+
+## Handoff — encerramento hospedado do P1-02 — 2026-09-15
+
+Revisão independente da correção do `job_inventory` retornou **APPROVE**
+e foi integrada via PR #68 (merge
+`b910bd076021fc349615ee7dd191c7da9f3a009e`). Um novo ciclo hospedado
+completo foi executado: run `34986578076`, attempt 1 via
+`workflow_dispatch` (PASS, barreira controlada) e attempt 2 via
+`gh run rerun --failed` (PASS), com publicação real na conta/região
+sandbox. Detalhes completos em
+[plan.md](plan.md#encerramento-hospedado-do-p1-02--2026-09-15),
+[evidence.md](evidence.md#hosted-acceptance-final--2026-09-15) e
+[acceptance.md](acceptance.md#hosted-acceptance-final--2026-09-15).
+
+### Final proven state
+
+- Mesmo run, mesmo SHA (`b910bd076021fc349615ee7dd191c7da9f3a009e`) entre
+  attempt 1 e attempt 2 — attempt 2 via rerun, nunca novo dispatch.
+- `selected_attempt=1`, `reused=true`.
+- No rebuild: `execution_metadata_equal=true` em todos os 12 producers;
+  `report_sha256`/`index_digest`/`platforms` idênticos entre attempts;
+  nenhum artifact equivalente novo (`runtime-go1-26-2`) criado.
+- Preservação exata de digest OCI, runtime e dev, incluindo ambas as
+  plataformas (amd64/arm64), do gate até o registry remoto.
+- OIDC sandbox: role isolada `github-actions-image-base-p102-lab`
+  assumida pela primeira vez; sem fallback para a role operacional.
+- ECR isolado: `p102-lab-go1-26`/`p102-lab-go1-26-dev`, `IMMUTABLE`, tag
+  determinística `p1-02-lab-34986578076-2`.
+- Cosign (assinatura), SBOM SPDX e provenance SLSA attestados e
+  verificados sob a identidade própria do laboratório.
+- Stable jamais tocada (`stable_touched=false`; repositórios operacionais
+  sem escrita nova durante a janela do run).
+
+### Explicit non-claims
+
+Não comprovado por este P1-02:
+
+- ambiente corporativo (esta execução usa apenas o sandbox AWS isolado
+  712107929769/us-east-1, com role e repositórios ECR dedicados ao
+  laboratório, fora do prefixo `image-base-*` operacional);
+- IAM/PKI/rede corporativa;
+- homologação AppSec;
+- ECR corporativo/operacional (`image-base-go1-26`/`-dev` permanecem
+  intocados);
+- promoção de stable em produção;
+- P1-04;
+- nível SLSA formal (a attestation de provenance é produzida e
+  verificada, mas nenhuma classificação de nível SLSA foi avaliada ou
+  reivindicada nesta spec).
+
+```text
+P1_02_ATTEMPT_1 = PASS
+P1_02_ATTEMPT_2 = PASS
+JOB_INVENTORY_FIX_HOSTED = PASS
+RETRY_REUSE_HOSTED = PASS
+PUBLICATION_CONTINUATION = PASS
+AWS_PUBLICATION_EXECUTION = PASS — SANDBOX LAB ONLY
+P1-02 HOSTED_ACCEPTANCE = PASS
+STABLE_PRODUCTION_PROMOTION = NOT RUN
+```
+
+A infraestrutura sandbox (role `github-actions-image-base-p102-lab`,
+repositórios `p102-lab-go1-26`/`p102-lab-go1-26-dev`, conteúdo publicado
+sob a tag `p1-02-lab-34986578076-2`) permanece existente e não foi
+deletada nesta sessão; não é infraestrutura de produção. Próximo passo:
+revisão final de evidências e decisão externa sobre quaisquer fases
+subsequentes (aceite corporativo, P1-04, etc.), fora do escopo desta
+spec.
