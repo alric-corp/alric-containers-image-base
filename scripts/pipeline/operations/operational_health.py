@@ -246,6 +246,15 @@ def evaluate(metrics, policy, now):
     """Alertas, separando falha real de exceção conhecida e documentada."""
     thresholds = policy['thresholds']
     exceptions = policy.get('exceptions') or {}
+    # ADR-0004: `execution_scope` é distinto de `exceptions` -- não alimenta
+    # default_batch.py::exclusions() nem remove nada do lote FULL/DEFAULT.
+    # Ausente = sem restrição (todo framework é "em escopo", igual ao
+    # comportamento anterior a este campo). Presente = frameworks fora de
+    # `current` não geram `alert` de publicação/stable ausente; geram
+    # `out_of_scope`, visível e não bloqueante, pela mesma razão de
+    # `known`: visibilidade sem alarme, nunca ausência de visibilidade.
+    execution_scope = policy.get('execution_scope') or {}
+    current_scope = execution_scope.get('current')
     alerts = []
 
     def add(level, metric, subject, message):
@@ -257,11 +266,19 @@ def evaluate(metrics, policy, now):
     truncated = metrics['frameworks']['truncated']
     for framework, entry in sorted(metrics['frameworks']['frameworks'].items()):
         exception = exceptions.get(framework)
-        suffix = f" (exceção conhecida: {exception['reason']})" if exception else ''
+        in_scope = current_scope is None or framework in current_scope
+        if not in_scope:
+            level = 'out_of_scope'
+            suffix = f" (fora do escopo de execução atual: {execution_scope.get('reason', '')})"
+        elif exception:
+            level = 'known'
+            suffix = f" (exceção conhecida: {exception['reason']})"
+        else:
+            level = 'alert'
+            suffix = ''
         for metric, limit in (('publication_age_hours', thresholds['publication_age_hours']),
                               ('stable_age_hours', thresholds['stable_age_hours'])):
             age = entry.get(metric)
-            level = 'known' if exception else 'alert'
             if age is None:
                 add('unknown' if truncated else level, metric, framework,
                     'sem dado na janela analisada'
@@ -296,6 +313,21 @@ def evaluate(metrics, policy, now):
         elif review < now:
             add('alert', 'exception_review', framework,
                 f"exceção vencida em {exception['review_by']}, dono {exception.get('owner')}")
+
+    # Mesma disciplina de revisão de `exceptions`, agora para o escopo de
+    # execução (ADR-0004): sem isso, `execution_scope` poderia congelar o
+    # catálogo Go-only indefinidamente sem nunca virar um alerta próprio.
+    if current_scope is not None:
+        review = moment(execution_scope.get('review_by') + 'T00:00:00+00:00'
+                        if execution_scope.get('review_by') else None)
+        subject = 'execution_scope'
+        if review is None:
+            add('alert', 'execution_scope_review', subject,
+                '`execution_scope` sem `review_by` definido')
+        elif review < now:
+            add('alert', 'execution_scope_review', subject,
+                f"escopo de execução vencido em {execution_scope['review_by']}, "
+                f"dono {execution_scope.get('owner')}")
     return alerts
 
 
@@ -446,7 +478,9 @@ def render(metrics, alerts):
                   'não quer dizer "nunca aconteceu".']
     lines += ['', '### Alertas', '',
               '`alert` rompe limite da política; `known` é exceção documentada com dono e data '
-              'de revisão; `unknown` é medida que faltou dado, não falha comprovada.', '']
+              'de revisão; `out_of_scope` está fora do escopo de execução atual (ADR-0004), '
+              'não é exceção nem exclusão de catálogo; `unknown` é medida que faltou dado, '
+              'não falha comprovada.', '']
     if not alerts:
         lines.append('Nenhum alerta.')
     else:

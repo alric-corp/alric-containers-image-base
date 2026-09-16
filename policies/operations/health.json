@@ -56,5 +56,15 @@
       "adr": "docs/adr/0001-dotnet8-fora-do-lote-padrao.md",
       "$comment": "Exceção reportada como conhecida em vez de alerta novo a cada run, para não treinar quem lê a ignorar o alerta. A data de revisão é obrigatória: exceção vencida gera alerta própria. Desde o ADR-0001 o framework também fica fora do lote padrão (validate-pr, build diário e promoção); o catálogo, o repositório ECR e o gate de CVE não mudam, e a reinclusão é testada por workflow_dispatch quando o Wolfi publicar dotnet-8-sdk >= 8.0.129-r1."
     }
+  },
+  "execution_scope": {
+    "current": [
+      "go1-26",
+      "go1-26-dev"
+    ],
+    "reason": "V1 de referencia (P0-04, ADR-0004): build e promocao automaticos ficam restritos a go1-26/go1-26-dev enquanto a expansao aguarda (a) decisoes corporativas do Stage 1 de specs/2026-09-15-first-corporate-e2e e (b) o zlib corrigido publicar no Wolfi (CVE-2026-85091, ver ADR-0004). Frameworks fora daqui permanecem no catalogo e no lote FULL/DEFAULT; ausencia de publicacao/stable aqui e escopo, nao falha.",
+    "owner": "@alric-corp/github_xj7_maintainer",
+    "review_by": "2026-09-30",
+    "adr": "docs/adr/0004-v1-referencia-go126.md"
   }
 }

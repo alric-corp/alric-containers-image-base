@@ -162,6 +162,56 @@ class EvaluateTests(unittest.TestCase):
         self.assertNotIn('nodejs22', levels)
         self.assertTrue(all(alert['level'] == 'known' for alert in alerts))
 
+    # ADR-0004: execution_scope não deve interferir quando ausente (padrão
+    # anterior a este campo) nem afetar frameworks que estão em `current`.
+    def test_absent_execution_scope_behaves_exactly_as_before(self):
+        alerts = health.evaluate(self.metrics(), self.POLICY, NOW)
+        self.assertNotIn('out_of_scope', {alert['level'] for alert in alerts})
+
+    def test_framework_outside_execution_scope_is_out_of_scope_not_alert(self):
+        metrics = self.metrics()
+        # Sem publicação/stable, como qualquer framework fora do lote
+        # automático atual -- exatamente o caso real que este ADR cobre.
+        metrics['frameworks']['frameworks']['nodejs22'] = {
+            'publication_age_hours': None, 'stable_age_hours': None}
+        policy = dict(self.POLICY, execution_scope={
+            'current': ['go1-26', 'go1-26-dev'], 'reason': 'V1 de referência',
+            'owner': '@owner', 'review_by': '2026-09-30'})
+        alerts = health.evaluate(metrics, policy, NOW)
+        levels = {alert['subject']: alert['level'] for alert in alerts
+                  if alert['subject'] == 'nodejs22'}
+        self.assertTrue(levels)
+        self.assertTrue(all(level == 'out_of_scope' for level in levels.values()))
+
+    def test_framework_inside_execution_scope_still_alerts_when_stale(self):
+        metrics = self.metrics()
+        metrics['frameworks']['frameworks']['nodejs22']['publication_age_hours'] = 40.0
+        policy = dict(self.POLICY, execution_scope={
+            'current': ['nodejs22'], 'reason': 'teste',
+            'owner': '@owner', 'review_by': '2026-09-30'})
+        alerts = health.evaluate(metrics, policy, NOW)
+        stale = [a for a in alerts if a['subject'] == 'nodejs22'
+                and a['metric'] == 'publication_age_hours']
+        self.assertEqual(stale[0]['level'], 'alert')
+
+    def test_execution_scope_without_review_by_is_flagged(self):
+        policy = dict(self.POLICY, execution_scope={
+            'current': ['go1-26'], 'reason': 'teste', 'owner': '@owner'})
+        alerts = health.evaluate(self.metrics(), policy, NOW)
+        flagged = [a for a in alerts if a['metric'] == 'execution_scope_review']
+        self.assertEqual(len(flagged), 1)
+        self.assertEqual(flagged[0]['level'], 'alert')
+
+    def test_expired_execution_scope_review_alerts(self):
+        policy = dict(self.POLICY, execution_scope={
+            'current': ['go1-26'], 'reason': 'teste', 'owner': '@owner',
+            'review_by': '2026-08-01'})
+        alerts = health.evaluate(self.metrics(), policy, NOW)
+        flagged = [a for a in alerts if a['metric'] == 'execution_scope_review']
+        self.assertEqual(len(flagged), 1)
+        self.assertEqual(flagged[0]['level'], 'alert')
+        self.assertIn('2026-08-01', flagged[0]['message'])
+
     def test_expired_exception_becomes_an_alert_of_its_own(self):
         policy = dict(self.POLICY,
                       exceptions={'dotnet8': dict(self.POLICY['exceptions']['dotnet8'],
