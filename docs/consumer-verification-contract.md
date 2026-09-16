@@ -151,6 +151,24 @@ segurança do código ou execução bem-sucedida de todos os gates. O workflow
 produz a declaração; a confiança nele depende de governança da origem.
 O formato SLSA v1 não atribui um **SLSA level formal** à plataforma.
 
+### Script único (sem checkout do repositório)
+
+[`scripts/verify-image.sh`](../scripts/verify-image.sh) executa exatamente
+os três comandos acima (assinatura, SBOM attestation, provenance) em
+sequência, contra uma tag ou um digest, sem depender de contexto interno
+do CI — apenas `aws`, `docker`, `cosign` e `gh` na máquina de quem consome.
+Copie o arquivo (não precisa clonar o repositório) e rode:
+
+```bash
+verify-image.sh go1-26 "$INDEX_DIGEST" \
+  --account "$AWS_ACCOUNT_ID" --region "$AWS_REGION"
+```
+
+Sai `0` só se as três verificações passarem; reporta cada falha
+individualmente e continua as demais (uma falha de assinatura não impede
+ver se SBOM/provenance também falham). Não confere os IDs numéricos da
+policy do projeto — para isso, use o módulo abaixo com um checkout revisado.
+
 ### Aplicar a política completa do projeto
 
 Os comandos diretos acima não conferem sozinhos os IDs numéricos da policy.
