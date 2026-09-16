@@ -51,17 +51,20 @@ permissions:
 jobs:
   promote:
     name: Promote ${{ matrix.framework }}
-    # STABLE_AUTOMATIC_PROMOTION = DISABLED_FOR_V1_REFERENCE (P0-04): a V1 de
-    # referência Go 1.26 declara stable como OUT_OF_SCOPE (ver
-    # specs/2026-09-15-first-corporate-e2e/tasks.md, Stage 6). Os dois ECRs
-    # Go são IMMUTABLE sem exclusion filter para "stable" — a primeira
-    # promoção criaria a tag, mas a segunda falharia ao tentar movê-la
-    # (immutable tag mutation), quebrando o job em todo ciclo seguinte,
-    # além de não ter autorização explícita/separada exigida pelo Stage 6.
-    # A variável de repositório abaixo é o kill switch: ausente/diferente de
-    # "true" -> job não roda, em nenhum trigger (schedule ou dispatch
-    # manual). Definir `STABLE_PROMOTION_AUTHORIZED=true` só depois de
-    # autorização explícita do Stage 6 e do filtro de exclusão em Infra.
+    # RFC-013/ADR-0005: stable restaurado como referência oficial de consumo.
+    # O kill switch abaixo continua existindo por design -- não é um relaxamento
+    # temporário, é o controle operacional permanente que permite desligar a
+    # promoção automática sem reverter código (ex.: durante uma reconciliação
+    # de Infra, ou se um ciclo de promoção precisar de pausa manual). Os dois
+    # ECRs Go só aceitam a escrita de `stable` de forma sustentável depois que
+    # `alric-containers-registry` aplica `IMMUTABLE_WITH_EXCLUSION` com a
+    # exclusão exata `stable` (ver alric-containers-registry/main.tf) -- sem
+    # isso, a primeira promoção teria sucesso mas a segunda falharia ao tentar
+    # mover a tag (immutable tag mutation). A variável de repositório abaixo
+    # é o kill switch: ausente/diferente de "true" -> job não roda, em nenhum
+    # trigger (schedule ou dispatch manual). `STABLE_PROMOTION_AUTHORIZED=true`
+    # só depois de confirmar (fresh `aws ecr describe-repositories`) que os
+    # dois repositórios já refletem a exclusão de Infra.
     if: |
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
@@ -248,6 +251,53 @@ jobs:
         with:
           name: promotion-${{ matrix.framework }}-${{ github.run_attempt }}
           path: reports/promotion-evidence.json
+          retention-days: 30
+          if-no-files-found: warn
+
+  # RFC-013/ADR-0005: promover runtime e -dev de forma coordenada exige que
+  # os dois venham do mesmo release aprovado -- cada leg da matrix acima
+  # seleciona seu candidato de forma independente, então esta verificação
+  # roda depois, sobre a evidência já escrita, e falha alto (sem desfazer
+  # nada) se runtime e -dev não corresponderem ao mesmo run/attempt. Um
+  # framework sem par -dev pedido no mesmo run (ex.: python3-13) não tem o
+  # que verificar aqui -- não é falha.
+  verify-pair:
+    name: Verify runtime/dev promotion pair binding
+    needs: promote
+    if: ${{ !cancelled() && needs.promote.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download promotion evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          path: evidence
+          pattern: 'promotion-*'
+          github-token: ${{ github.token }}
+
+      - name: Verify runtime/dev pair binding
+        env:
+          FRAMEWORKS: ${{ inputs.frameworks }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          python3 -B -m scripts.pipeline.release.verify_promotion_pairs \
+            "$FRAMEWORKS" evidence "$RUN_ATTEMPT" \
+            --json reports/promotion-pair-binding.json
+
+      - name: Preserve pair binding evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: promotion-pair-binding-${{ github.run_attempt }}
+          path: reports/promotion-pair-binding.json
           retention-days: 30
           if-no-files-found: warn
 
