@@ -17,7 +17,7 @@ O [trust ativo versionado](../../github-actions-image-base-trust.json) permanece
 Na trust proposta, `repository` usa `StringEquals` e exige o nome exato.
 Uma renomeação exige atualizar essa condição mesmo com IDs preservados;
 enquanto o nome não corresponder, a autenticação falha. Consulte o
-[procedimento de renomeação](../../../../docs/repository-rename.md), incluindo
+procedimento de renomeação, incluindo
 as demais referências e condições envolvidas.
 
 O [renderizador](../../../../tools/render_iam_proposal.py) produz JSON local

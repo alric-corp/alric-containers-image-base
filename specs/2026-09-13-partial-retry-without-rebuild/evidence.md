@@ -38,7 +38,7 @@ só publicador no attempt2: OCI antigo é encontrado, runtime-X-2 pode não exis
 
 ## Histórico, sem novo hosted aceite
 
-[R03](../../docs/old-checklist-closure.md) e M13 registram retry no run
+R03 e M13 registram retry no run
 34402226000 (09/09/2026), anterior ao gate funcional atual. API filter=all
 preserva attempts1/2/3: job Validate go1-26 da tentativa2 e sua cópia na3
 têm mesmos timestamps/steps, mas publicação3 reexecutou. Job.run_attempt

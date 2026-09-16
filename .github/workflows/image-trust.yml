@@ -1,4 +1,4 @@
-name: Image trust contract (no AWS)
+name: Image trust
 on:
   workflow_call:
     outputs:

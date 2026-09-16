@@ -10,7 +10,6 @@ ROOT = Path(__file__).resolve().parents[4]
 PIPELINE_DOMAINS = {'artifacts', 'catalog', 'governance', 'operations', 'release', 'runtime'}
 LEGACY_ADAPTERS = {'runtime_images.py', 'validate_inputs.py', 'oci_artifact.py',
                    'scan_images.py', 'tool_versions.py', 'report_unfixed_cves.py'}
-GENERATED_WORKFLOWS = {'cve-triage.lock.yml'}
 DEPENDENCIES = {
     'artifacts': {'governance'}, 'catalog': set(), 'governance': set(),
     'runtime': {'artifacts'}, 'release': {'artifacts'},
@@ -85,8 +84,6 @@ class RepositoryLayoutTests(unittest.TestCase):
     def test_product_workflows_do_not_execute_legacy_script_paths(self):
         workflows = ROOT / '.github/workflows'
         for path in workflows.glob('*.yml'):
-            if path.name in GENERATED_WORKFLOWS:
-                continue
             document = yaml.safe_load(path.read_text())
             for job in (document.get('jobs') or {}).values():
                 for step in job.get('steps') or []:

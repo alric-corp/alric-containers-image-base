@@ -1,4 +1,4 @@
-name: Pipeline health (M09/M11/M04)
+name: Pipeline health
 
 # Mede a saúde operacional do pipeline e a manutenção das ferramentas com
 # dados reais da API do GitHub, sem AWS e sem credencial de publicação:

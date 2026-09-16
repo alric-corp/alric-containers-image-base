@@ -5,9 +5,6 @@ que o M16 exige valer daqui pra frente, não só uma vez: checkout sem
 credencial Git persistida, nenhum dado de entrada interpolado dentro de um
 `run`, limite de duração em todo job executor, permissões declaradas e
 Actions externas fixadas por SHA completo.
-
-`cve-triage.lock.yml` é gerado por `gh aw compile` e fica de fora: o lock não
-é editado à mão para satisfazer lint.
 """
 import re
 import sys
@@ -15,7 +12,6 @@ from pathlib import Path
 
 import yaml
 
-GENERATED = {'cve-triage.lock.yml'}
 SHA = re.compile(r'[^@]+@[0-9a-f]{40}$')
 EXPRESSION = re.compile(r'\$\{\{.*?\}\}', re.DOTALL)
 
@@ -92,8 +88,6 @@ def main(root=Path('.github/workflows')):
     problems = []
     documents = {}
     for path in sorted(root.glob('*.yml')):
-        if path.name in GENERATED:
-            continue
         documents[path.name] = yaml.safe_load(path.read_text())
         problems += check(path.name, documents[path.name])
     problems += local_call_permissions(documents)

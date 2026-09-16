@@ -37,7 +37,6 @@ import sys
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
-GENERATED = {'cve-triage.lock.yml'}
 PUBLISH_JOB = 'Build & push {framework}'
 PROMOTE_JOB = 'Promote {framework}'
 PROMOTE_STEP = 'Promote to stable'

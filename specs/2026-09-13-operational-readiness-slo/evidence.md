@@ -58,7 +58,7 @@ serviço; não estabelecem requisitos corporativos:
 ## Evidências anteriores usadas primeiro
 
 - [Timing 09/09](../../docs/evidence/ci-timing-2026-09-09.json): 8 runs fast checks e 5 de validação, IDs/amostras explícitos; não mede atualização até stable.
-- [Checklist 09/09](../../docs/old-checklist-closure.md) e [release-readiness 10/09](../../docs/evidence/release-readiness-2026-09-10.json): execuções e falhas históricas, não disponibilidade atual.
+- Checklist 09/09 e [release-readiness 10/09](../../docs/evidence/release-readiness-2026-09-10.json): execuções e falhas históricas, não disponibilidade atual.
 - [Spec dotnet8](../2026-09-12-dotnet8-fora-do-lote-padrao/evidence.md): health 34586962957 em 11/09, lacuna histórica/known; não reaproveitado como medição corrente.
 - [P1-09/P1-10](../2026-09-13-consumer-contract-rfc-refresh/evidence.md): P1-01 hosted PASS limitado, P1-02/P1-03 PENDING. Estados preservados.
 

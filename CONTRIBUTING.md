@@ -92,6 +92,3 @@ validados. Eles são executados no pipeline de imagens e não fazem parte do
   credenciais, chaves privadas, caches, ambientes virtuais ou saídas de build.
 - Registre evidências com commit e escopo da execução. Testes locais não
   equivalem a publicação ECR nem a promoção/recuperação real de stable.
-
-O workflow gerado `cve-triage.lock.yml` é mantido pelo compilador de agentic
-workflows a partir de `cve-triage.md`; não edite o lock para satisfazer lint.

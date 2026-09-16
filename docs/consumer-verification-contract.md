@@ -189,7 +189,8 @@ A policy também admite o nome histórico `alric-corp/itau-xj7-containers-image-
 somente com os mesmos IDs assinados. Para uma release histórica, use o módulo
 e obtenha `signer_repository` da decisão verificada antes de construir a
 identidade de verificação do SBOM. Não amplie regex nem aceite o alias por
-nome apenas. Detalhes na [migração de nomes](repository-rename.md).
+nome apenas. O alias histórico aceito está em
+`policies/release/signing-identities.json`.
 
 ## Verificar e consumir SBOM
 

@@ -55,30 +55,36 @@ arquiteturais já documentadas) e `docs/adr/README.md` (decisões).
 | `docs/iam-permission-contract.md`, `docs/corporate-adoption.md` | Pacotes de adoção corporativa — o objetivo deles é justamente virar o roteiro de migração |
 | `specs/2026-09-15-first-corporate-e2e/` | Planejamento do primeiro E2E corporativo (Stage 1 ainda bloqueado por decisões externas) |
 
-### DO_NOT_MIGRATE (as-is) — lab-only por desenho, não por descuido
+### DO_NOT_MIGRATE — removidos na limpeza corporativa de 16/09/2026
 
-| Caminho | Motivo |
-| --- | --- |
-| `policies/aws/proposals/p102-lab-permissions/` | Testado (`test_p102_lab_iam_proposal.py`), mas explicitamente escopado ao laboratório isolado do P1-02 (`FORBIDDEN_PREFIX = 'image-base-'`, `FORBIDDEN_TAGS = {stable, latest}` no próprio código) — nunca deveria existir um equivalente corporativo com esse nome |
-| `.github/workflows/partial-retry-lab.yml`, `scripts/pipeline/runtime/retry_lab_publish.py`, `scripts/pipeline/runtime/retry_lab.py` | Harness de teste do P1-02, repositórios `p102-lab-*` fixos no código — não é o caminho de produção |
-| `AI-WORKSPACE.md` (no diretório pai, fora deste repositório) | Fora de qualquer um dos três repositórios git; não migra por definição |
+O harness de laboratório do P1-02 e suas permissões IAM de lab foram
+**removidos do repositório** (`.github/workflows/partial-retry-lab.yml`,
+`scripts/pipeline/runtime/retry_lab.py`, `retry_lab_publish.py`, seus testes
+e `policies/aws/proposals/p102-lab-permissions/`). O comportamento útil do
+P1-02 permanece no produto, em `scripts/pipeline/runtime/contract_evidence.py`
+e `runtime_images.py` — o lab importava do produto, nunca o contrário.
+O histórico Git preserva o conteúdo removido.
 
-### ARCHIVE (recomendado, não executado nesta rodada)
+`AI-WORKSPACE.md` (no diretório pai, fora deste repositório) continua fora de
+qualquer um dos três repositórios git; não migra por definição.
 
-| Caminho | Motivo | Ação recomendada |
-| --- | --- | --- |
-| `specs/2026-09-11-ai-workflow/` | Único spec sem nenhuma citação ativa de RFC/ADR/doc/teste (verificado por grep completo); tarefa de setup de tooling de IA, concluída e mesclada | Mover para `docs/history/` numa rodada dedicada, não nesta (baixo valor, baixo risco, mas nenhuma pressa) |
-| `docs/evidence/repository-organization-2026-09-10.json` | Único arquivo de `docs/evidence/` sem nenhuma referência em lugar nenhum do repositório (os outros 8 são todos citados por specs/docs ativos) | Mesma recomendação — mover para `docs/history/`, não apagar |
+### Documentação histórica — removida na mesma rodada
 
-**Todos os outros specs e evidências foram verificados como ativamente
-citados** por `RFC-013...md`, algum ADR, `docs/corporate-adoption.md`, ou
+Os documentos de milestone (`m09-m16-review.md`, `m12-gate-inventory.md`,
+`m09-m16-cache-policy.md`, `old-checklist-closure.md`,
+`release-readiness-2026-09-10.md`, `repository-rename.md`,
+`rfc-013-historico-de-entregas.md`), o spec `2026-09-11-ai-workflow/` e as
+evidências sem citação ativa foram removidos: o estado final está consolidado
+na RFC-013, nos ADRs e na documentação ativa, e o histórico Git preserva o
+detalhe. As citações que apontavam para eles foram reescritas como prosa
+autossuficiente nos documentos ativos.
+
+**Os specs e evidências que permanecem são os ativamente citados** por
+`RFC-013...md`, algum ADR, `docs/corporate-adoption.md`, ou
 `tests/unit/pipeline/governance/test_consumer_documentation.py`
 (`SPEC`/`TRUST_SPEC`/`FEDERATED_SPEC`/`OPERATIONS_SPEC`/`ADOPTION_SPEC`/
 `ORIGIN_SPEC`) — não são clutter, são a trilha de evidência que a própria
-RFC cita para sustentar suas afirmações. `docs/README.md` já declara
-explicitamente a política: "Documentos históricos e evidências conservam
-seus nomes para preservar links de PRs e rastreabilidade." Esta rodada
-respeita essa política já existente em vez de contrariá-la.
+RFC cita para sustentar suas afirmações.
 
 ### AI development files — TEAM_DEVELOPMENT_TOOLING (não PERSONAL_ONLY)
 

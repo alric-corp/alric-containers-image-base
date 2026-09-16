@@ -1,10 +1,9 @@
-name: Build & Push Multi-Arch Distroless Image
+name: Build & publish base images
 
 on:
   # Allow-list (em vez de paths-ignore): só dispara pra mudanças que
-  # realmente afetam a imagem publicada. paths-ignore com só "**.md" tinha
-  # um buraco — qualquer outro arquivo não-.md (ex.: cve-triage.lock.yml,
-  # que é .yml) disparava o build inteiro das 12 imagens sem necessidade.
+  # realmente afetam a imagem publicada. paths-ignore com só "**.md" deixava
+  # qualquer outro arquivo não-.md disparar o build inteiro sem necessidade.
   push:
     branches: [main]
     paths:
@@ -15,7 +14,7 @@ on:
       - '.github/workflows/build-base-images.yml'
       - '.github/workflows/validate-base-images.yml'
       - '.github/workflows/test-runtime-images.yml'
-      - '.github/workflows/test-image-composition.yml'
+      - '.github/workflows/image-trust.yml'
       - '.github/scripts/**'
       - 'scripts/**'
       - 'policies/**'
@@ -33,7 +32,7 @@ on:
       - '.github/workflows/build-base-images.yml'
       - '.github/workflows/validate-base-images.yml'
       - '.github/workflows/test-runtime-images.yml'
-      - '.github/workflows/test-image-composition.yml'
+      - '.github/workflows/image-trust.yml'
       - '.github/scripts/**'
       - 'scripts/**'
       - 'policies/**'

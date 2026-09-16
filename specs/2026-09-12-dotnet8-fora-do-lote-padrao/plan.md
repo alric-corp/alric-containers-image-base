@@ -29,7 +29,7 @@ Estado observado em 12/09/2026 (branch `main` = `517d2bf`, origin igual):
   scanner, Sigstore público) e a RFC prevê "ADRs extraídos listados".
 
 Fontes: `README.md`, `RFC-013-*.md`, `docs/m11-m04-operational-health.md`,
-`docs/release-readiness-2026-09-10.md`, `docs/rfc-013-historico-de-entregas.md`,
+os documentos históricos daquela rodada,
 `policies/`, `scripts/pipeline/{catalog,operations,governance}/`, testes
 unitários, `gh run list`/`gh run view` (leitura), APKINDEX do Wolfi (leitura).
 

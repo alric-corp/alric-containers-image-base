@@ -62,8 +62,8 @@ e do [contrato de consumo](../consumer-verification-contract.md).
 | Soak, promoção e read-back | [promote-stable.yml](../../.github/workflows/promote-stable.yml), [verify_stable.py](../../scripts/pipeline/release/verify_stable.py); seleção, assinatura/provenance, re-scan por arquitetura e leitura ECR exigem igualdade antes de promoted=true | Soak padrão 6h com input manual validado; read-back confirma o instante observado; sem gate específico de SBOM attestation |
 | Retry sem rebuild | [contract_evidence.py](../../scripts/pipeline/runtime/contract_evidence.py); mesmo run, framework/revisão, digest/plataformas e par aplicável, sem falha mais recente do producer relevante | Artifact expirado, ausente, inválido ou conflitante não vira aprovação; aceite hospedado específico P1-02 continua pendente |
 | Recuperação e quarentena | [recover-stable.yml](../../.github/workflows/recover-stable.yml) e [policy](../../policies/release/promotion-quarantine.json); verifica origem, re-scan e read-back, sem reconstrução | Quarentena exige alteração explícita revisada; não é bypass de CVE |
-| Trust de composição | [integração de CAs](../../.github/workflows/test-image-composition.yml), [Wolfi](../wolfi-signing-key.md), preflight local/pin e drift detect-only | CAs corporativas reais pendentes; chave Wolfi não é trust set exclusivo por causa de discovery/JWKS Apko |
-| Governança e operação | [test-promotion.yml](../../.github/workflows/test-promotion.yml), [CODEOWNERS](../../.github/CODEOWNERS), lints/pins e [saúde](../m11-m04-operational-health.md) | Proteções/aplicação corporativa a confirmar; enforce_admins=false é decisão do sandbox. Alerta externo e SLA ainda pendentes |
+| Trust de composição | [integração de CAs](../../.github/workflows/image-trust.yml), [Wolfi](../wolfi-signing-key.md), preflight local/pin e drift detect-only | CAs corporativas reais pendentes; chave Wolfi não é trust set exclusivo por causa de discovery/JWKS Apko |
+| Governança e operação | [ci.yml](../../.github/workflows/ci.yml), [CODEOWNERS](../../.github/CODEOWNERS), lints/pins e [saúde](../m11-m04-operational-health.md) | Proteções/aplicação corporativa a confirmar; enforce_admins=false é decisão do sandbox. Alerta externo e SLA ainda pendentes |
 
 Evidências já registradas: [reconciliação P1-09/P1-10](../../specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md)
 e [observações P1-05](../../specs/2026-09-13-sigstore-trust-model-adr/evidence.md).
@@ -108,7 +108,7 @@ imagem local não comprova análise do candidato por digest. Erro operacional,
 warning, execução pulada e cache não devem ser confundidos com análise
 concluída e aprovada.
 
-O [planejamento histórico de migração](../rfc-013-historico-de-entregas.md)
+O planejamento histórico de migração
 fica preservado como hipótese anterior; a premissa e o escopo atuais são os
 deste ADR. Não nasce dali um backlog obrigatório de substituição da fábrica.
 Os levantamentos integrais e seus identificadores internos permanecem fora

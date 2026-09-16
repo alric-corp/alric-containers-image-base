@@ -180,7 +180,7 @@ repo:alric-corp@178685987/alric-containers-image-base@1360616627:ref:refs/heads/
 ```
 
 Owner ID `178685987`, repository ID `1360616627`, role `github-actions-image-base`.
-Aplicação/read-back históricos na [migração](repository-rename.md); nenhuma
+Aplicação/read-back históricos na migração de nomes de 10/09/2026; nenhuma
 releitura IAM atual nesta sessão. Não registrar JWTs, tokens ECR ou credenciais.
 A audience Sigstore é outra solicitação OIDC, não a sessão AWS.
 
@@ -223,7 +223,7 @@ A condição `token.actions.githubusercontent.com:repository`, comparada por
 renomeação, essa condição precisa ser atualizada; IDs preservados não tornam
 a trust inteira independente do nome. A autenticação falha enquanto o nome
 configurado não corresponder à identidade apresentada. Consulte o
-[procedimento de renomeação do repositório](repository-rename.md), que também
+procedimento de renomeação do repositório, que também
 abrange outras referências e condições.
 
 O template mantém sub/aud e adiciona repository/IDs/ref sem IfExists. Não

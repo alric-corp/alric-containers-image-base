@@ -33,7 +33,7 @@ Consequências observadas enquanto `dotnet8` fica no lote automático:
   `dotnet10`/`dotnet10-dev` como trilha LTS corrente.
 - O critério de saída da Fase 1 do roadmap exige build diário `success` e
   saúde sem alerta além dos históricos que expiram da janela.
-- O [inventário de gates do M12](../m12-gate-inventory.md) registrou que
+- O inventário de gates do M12 registrou que
   `dotnet8` **não** seria reclassificado como consultivo para deixar o CI
   verde. Este ADR mantém isso: o scan continua gate real e continua
   bloqueando `dotnet8` sempre que ele for buildado; o que muda é o lote que o

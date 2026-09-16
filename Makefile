@@ -3,7 +3,7 @@ PYTHON ?= python3
 ACTIONLINT ?= actionlint
 REUSABLE_WORKFLOWS_PATH ?= .reusable-workflows
 # Generated agent workflows are validated by their compiler, not edited by hand.
-WORKFLOWS := $(filter-out .github/workflows/%.lock.yml,$(wildcard .github/workflows/*.yml))
+WORKFLOWS := $(wildcard .github/workflows/*.yml)
 
 UNAME_ARCH := $(shell uname -m)
 ifeq ($(UNAME_ARCH),arm64)

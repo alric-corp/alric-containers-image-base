@@ -27,7 +27,7 @@ como caminho relativo `docs/adr/NNNN-titulo.md` na
 Estes arquivos não armazenam credenciais ou estado gerado de execução.
 
 A policy IAM é a configuração desejada; editar o arquivo não a aplica na AWS.
-A [migração de nomes](../docs/repository-rename.md) registra aplicação, verificação
+A migração de nomes de 10/09/2026 registrou aplicação, verificação
 e limites. Nomes históricos só são aceitos para assinaturas/provenance, com
 IDs assinados iguais aos do repositório atual; eles não têm acesso OIDC à role.
 

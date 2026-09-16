@@ -16,8 +16,8 @@
 
 Esta RFC descreve o que a plataforma entrega hoje e o que separa esse estado
 de uma liberação para produção. O caminho até aqui — diagnóstico original da
-POC, cada entrega, achados reais e links de PR/run — está preservado na
-íntegra em [docs/rfc-013-historico-de-entregas.md](docs/rfc-013-historico-de-entregas.md).
+POC, cada entrega, achados reais e links de PR/run — está preservado no
+histórico Git e nas specs versionadas em `specs/`.
 A reconciliação desta revisão e suas fontes estão na
 [spec P1-09/P1-10](specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md).
 Implementado significa presente no código identificado; não implica aceite
@@ -592,8 +592,7 @@ não relaxa o scan. Motivo, owner e revisão em
 ## Melhorias M01–M16: estado
 
 Diagnóstico original, critérios de aceite completos e as evidências de cada
-item estão no [histórico](docs/rfc-013-historico-de-entregas.md). Aqui, só
-o estado.
+item estão nas specs versionadas e no histórico Git. Aqui, só o estado.
 
 Nesta tabela, IMPLEMENTED descreve código entregue no sandbox; PARTIAL
 preserva lacunas de cobertura/operação; EXTERNAL exige decisão/execução fora
@@ -677,7 +676,7 @@ pendentes. Não substitui os contratos nem encerra aceites hospedados anteriores
 
 A main publica os frameworks que passam seus gates. Os bloqueios de 10/09
 por renomeação, Skopeo removido e permissões aninhadas foram corrigidos;
-os detalhes permanecem no [registro histórico de release](docs/release-readiness-2026-09-10.md).
+os detalhes permanecem no histórico Git.
 O [run 34735740791](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34735740791)
 no commit 285ada4 publicou Go 1.26 e sua variante -dev, embora o lote tenha
 falhas. Não se exige um lote inteiro verde para reconhecer uma publicação
@@ -962,4 +961,3 @@ com scan e testes. Exemplos para Node.js, .NET e Java no [README](README.md#como
 - [GitHub Actions: reuso de workflows e identidade OIDC](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).
 - [Wolfi: definição do OpenJDK 21 e subpacote JRE](https://github.com/wolfi-dev/os/blob/main/openjdk-21.yaml).
 - [Veracode SCA — scan de containers](https://docs.veracode.com/r/c_sc_container_scan).
-- Histórico completo de entregas, aceites e achados: [docs/rfc-013-historico-de-entregas.md](docs/rfc-013-historico-de-entregas.md).

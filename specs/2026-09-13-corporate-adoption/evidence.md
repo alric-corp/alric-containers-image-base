@@ -43,7 +43,7 @@ sem alterar os contratos utilizados como fonte:
   e decisões externas separadas da autoria dos workflows.
 - [Reuso](../../docs/m09-m12-reusable-workflows.md),
   [arquitetura](../../docs/repository-architecture.md) e
-  [renomeação](../../docs/repository-rename.md), conferidos com callers,
+  renomeação, conferidos com callers,
   resolvedor e checkout: origem literal, referências internas por SHA,
   permissões aninhadas e acesso privado não resolvido pelo token padrão.
 - [Composição](../../docs/image-composition.md), manifesto/receitas/helpers

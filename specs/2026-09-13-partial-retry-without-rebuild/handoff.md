@@ -118,7 +118,7 @@ A (preprovisioned + execution-only): nenhum `CreateRepository`/
 us-east-1, role `github-actions-image-base-p102-lab`, repos
 `p102-lab-go1-26`/`p102-lab-go1-26-dev` — nada disso existe/foi aplicado
 ainda; são os mesmos valores da proposta em
-[policies/aws/proposals/p102-lab-permissions/](../../policies/aws/proposals/p102-lab-permissions/README.md).
+`policies/aws/proposals/p102-lab-permissions/` (removido nesta limpeza; ver histórico Git).
 Ver [plan.md](plan.md#implementação-local-do-job-de-publicação--2026-09-15)
 para a arquitetura completa.
 
