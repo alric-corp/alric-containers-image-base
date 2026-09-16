@@ -5,6 +5,10 @@ composição das imagens, regras de automação, políticas, orquestração e te
 Os diretórios consumidos pelo contrato Apko (`frameworks/`, `distroless/`,
 `melange/` e `tests/runtime/`) mantêm seus caminhos públicos.
 
+Antes do mapa de diretórios: por que essas imagens são tratadas como um
+produto de segurança e supply chain, não só como filesystems mínimos, está
+na RFC-013, ["O que significa \"hardened\""](../RFC-013-Image-Base-Completa-com-Mermaid.md#o-que-significa-hardened).
+
 ## Mapa de responsabilidades
 
 | Área | Responsabilidade |

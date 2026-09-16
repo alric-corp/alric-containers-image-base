@@ -66,18 +66,6 @@ Origem: POC funcional em https://github.com/gersontpc/image-base. A stack e a
 forma do catálogo vieram de lá e foram mantidas; o que mudou foi a engenharia
 de release em volta delas.
 
-### Relação com a POC de referência
-
-| Mantido da POC | Substituído ou acrescentado |
-| --- | --- |
-| Melange + Apko sobre pacotes Wolfi, sem Dockerfile de base | Docker Hub → ECR no sandbox, um repositório por definição; destino corporativo pendente |
-| Um YAML por framework em `frameworks/`, `distroless/image-base.yaml` como base comum | `wolfi-base` retirado da base (trazia `apk` e shell para toda imagem "distroless") |
-| Pacote de certificados compilado pelo melange e consumido pelo apko | Scan nas **duas** arquiteturas (a POC escaneava só `latest-amd64` e publicava as duas) |
-| Usuário non-root `uid/gid 10000`, `work-dir: /app` | Publicação sem rebuild: o mesmo OCI escaneado é o que vai para o registry, digest comparado |
-| `Makefile` de build local via `docker run` | `stable` deixa de ser publicada no build: só promovida após soak com re-scan |
-| Duas versões por linguagem | Variantes runtime e `-dev` para Go, Java e .NET; contrato funcional por framework |
-| Toolkit de troubleshooting para ephemeral container | Assinatura keyless, provenance no formato SLSA, SBOM attestations, pins, testes e gates de merge |
-
 ### Componentes
 
 1. **Catálogo declarativo** — `distroless/image-base.yaml` (`ca-certificates-bundle`, `tzdata` e âncoras adicionais aprovadas) e `frameworks/<nome>.yaml`, um por runtime/variante.
@@ -122,10 +110,82 @@ diretos, com cinco pares compilados. Uma falha de framework não aprova nem
 bloqueia automaticamente todos os outros. Os caminhos de PR/fork de validação
 não recebem credenciais AWS ou permissão OIDC.
 
+### O que significa "hardened"
+
+A plataforma não trata uma imagem base apenas como um filesystem mínimo. A
+imagem base é mantida como um produto de segurança e supply chain, e uma
+imagem hardened combina quatro propriedades principais: minimalismo,
+imutabilidade, manutenção contínua e verificabilidade. Distroless cobre
+fortemente o minimalismo, mas sozinho não garante política de atualização,
+SBOM, assinatura ou provenance.
+
+**Minimalismo** — a imagem contém somente o necessário para executar a
+aplicação: runtime, bibliotecas necessárias, certificados, configuração
+essencial e arquivos da aplicação. Ferramentas que não pertencem ao
+runtime — shell, package manager, debuggers, download utilities — são
+removidas sempre que possível, reduzindo superfície de ataque, quantidade
+de pacotes, CVEs para triagem e possibilidades de abuso após
+comprometimento.
+
+**Imutabilidade** — a imagem publicada representa um artifact definido e
+reproduzível; o runtime não depende de `apk add`, instalação dinâmica de
+pacotes ou modificação da imagem durante a inicialização. As três
+identidades de consumo (`stable`, build tag, OCI index digest) estão em
+["Convenção de imagens"](#convenção-de-imagens).
+
+**Manutenção contínua** — uma imagem hardened não é produzida uma única vez
+e abandonada. A factory executa rebuilds recorrentes para incorporar
+correções de segurança, novas versões de dependências e atualização de
+certificados; o scan de vulnerabilidades roda de novo a cada build, e uma
+imagem só avança no fluxo quando satisfaz os gates definidos.
+
+**Verificabilidade** — o consumidor precisa responder três perguntas
+diferentes: o que existe na imagem (SBOM, formato SPDX), como e onde ela
+foi construída (provenance, vinculando o artifact ao processo que o
+produziu) e quem publicou o artifact, íntegro (assinatura Cosign). O fluxo
+completo está em ["Fluxo da fábrica de imagens"](#fluxo-da-fábrica-de-imagens).
+
+#### Distroless não é sinônimo de hardened
+
+Os conceitos são relacionados, mas não equivalentes:
+
+- **Slim** — remove parte dos componentes de uma imagem convencional.
+  Reduz tamanho, mas não estabelece por si só um contrato de segurança,
+  supply chain ou atualização.
+- **Distroless** — orientada ao runtime, normalmente sem shell, package
+  manager ou ferramentas administrativas. Reduz fortemente a superfície de
+  ataque, mas minimalismo sozinho não garante frequência de atualização,
+  vulnerability management, SBOM, assinatura, provenance ou política de
+  manutenção.
+- **Scratch** — filesystem vazio. Útil para aplicações que operam com um
+  conjunto extremamente pequeno de arquivos, como binários estáticos; não
+  é necessariamente a melhor base para runtimes que precisam de
+  bibliotecas, certificados ou estruturas adicionais, como Java.
+- **Hardened** — pode ser distroless. A diferença é que o produto adiciona
+  ao minimalismo: conteúdo definido, vulnerability management, atualização
+  contínua, assinatura, SBOM, provenance, rastreabilidade e política de
+  release.
+
+```text
+Distroless + Security gates + Maintenance + Supply-chain evidence + Verification
+    =
+Hardened Base Image
+```
+
+#### O que hardened images não resolvem
+
+A imagem base é uma camada da segurança da aplicação, não substitui código
+seguro, gestão de secrets, políticas de runtime, `runAsNonRoot`, Linux
+capabilities, seccomp, `NetworkPolicy`, configurações seguras do Kubernetes
+ou segurança da aplicação em si. A responsabilidade da factory é fornecer
+uma base menor, rastreável, atualizável e verificável sobre a qual essas
+outras camadas podem operar.
+
 ### Nível de maturidade
 
 "Slim", "distroless" e "hardened" não são sinônimos. A solução está no
-patamar distroless e cobre parte dos controles de hardened:
+patamar distroless e cobre parte dos controles de hardened — estado atual
+por pilar:
 
 | Pilar | Estado em 13/09/2026 |
 | --- | --- |
@@ -133,6 +193,378 @@ patamar distroless e cobre parte dos controles de hardened:
 | Imutabilidade | Tags de build imutáveis no ECR (exceção só para `stable`), rejeição de sobrescrita comprovada no conjunto histórico de 15 ECRs (09/09); o catálogo atual tem 17 definições. Raiz somente leitura testada em contrato; continua dependendo da configuração do consumidor em runtime. |
 | Manutenção | Rebuild diário e promoção por soak em execução; ferramentas por SHA/digest com lint de cobertura. Cron é de melhor esforço; suas lacunas e falhas de pins são monitoradas. A amostra histórica de 10% não é SLA atual. Renovate configurado não comprova instalação ativa; destino externo de alertas e SLA corporativo continuam pendentes. |
 | Verificabilidade | SPDX gerado e atestado por digest; assinatura Cosign e provenance GitHub sobre o índice, verificadas na promoção com IDs numéricos de origem. SBOM verification no consumo é uma etapa distinta; evidence disponível não é enforcement no cluster, nem atribui SLSA level formal. |
+
+## Relação com a POC de referência
+
+O repositório [gersontpc/image-base](https://github.com/gersontpc/image-base)
+prova a ideia da fábrica. Esta solução transforma essa ideia numa plataforma
+de imagens base hardened, governada e verificável — e boa parte do que há de
+bom aqui nasceu diretamente daquele desenho inicial. Esta seção registra a
+continuidade e as diferenças, dimensão por dimensão, para servir de base a
+uma conversa técnica com quem projetou a POC.
+
+### 1. O que a ideia inicial já entrega
+
+O repositório de referência já tinha um núcleo muito bom:
+
+- Melange + Apko + Wolfi, sem Dockerfile para as bases;
+- Java, Node.js, Python, Go e .NET;
+- duas versões por linguagem;
+- `amd64` + `arm64`;
+- usuário non-root;
+- base comum compartilhada;
+- pacote de certificados customizado via Melange;
+- Trivy antes da publicação;
+- `stable` + tag timestamp;
+- schedule diário;
+- workflow reutilizável;
+- troubleshooting separado via ephemeral container;
+- build local via Makefile.
+
+```mermaid
+flowchart TD
+    F["framework.yaml"] --> W["base Wolfi"]
+    W --> M["Melange"]
+    M --> A["Apko"]
+    A --> B["build amd64 + arm64"]
+    B --> T["Trivy"]
+    T --> P["apko publish"]
+    P --> DH[("Docker Hub")]
+    DH --> S["stable"]
+    DH --> TS["timestamp"]
+```
+
+Isso já resolve uma parte muito importante do problema: centralizar a
+construção das imagens e parar de cada time inventar sua própria base.
+Vale chamar esse repositório de **POC funcional / V0 da fábrica**.
+
+### 2. A primeira diferença grande: "distroless" versus "hardened"
+
+A POC é centrada em `distroless + multiarch + vulnerability scanning`. Esta
+solução foi para `distroless + minimalismo + imutabilidade + manutenção +
+verificabilidade + governança` (ver ["O que significa hardened"](#o-que-significa-hardened)).
+
+Em outras palavras, a POC pergunta **"como construir imagens base
+melhores?"**; esta solução pergunta **"como operar imagens base como um
+produto de segurança e supply chain?"**. Esse é provavelmente o maior salto
+conceitual entre as duas.
+
+### 3. Runtime e build tooling
+
+No repositório original, algumas imagens chamadas de base/runtime ainda
+carregam toolchains completos (`go-1.26`, `dotnet-10-sdk`, `openjdk-21`,
+`node` + `npm` + `busybox`) — uma mistura entre build environment e runtime
+environment.
+
+Esta solução formaliza a separação, e o catálogo atual já modela
+explicitamente as variantes runtime/`-dev` (17 definições em
+`frameworks/`):
+
+```text
+-dev                          runtime
+├── compiler                  ├── runtime mínimo
+├── shell quando necessário   ├── CA
+├── build tooling             ├── libs necessárias
+└── dependencies de build     └── aplicação
+```
+
+`go1-26-dev` é toolchain/build; `go1-26` é runtime — e o mesmo conceito
+existe nas demais famílias que precisam de companion. Esse avanço aproxima
+a solução do conceito real de hardened/distroless.
+
+### 4. O problema mais importante do pipeline original: ele não é "build once"
+
+No repositório original:
+
+```mermaid
+flowchart LR
+    B1["apko build amd64"] --> T["Trivy"]
+    B2["apko build arm64"] --> T
+    T --> PUB["apko publish<br/>(builda de novo)"]
+```
+
+A premissa do README é que Apko é reprodutível, logo o que for publicado
+será igual ao que foi escaneado — uma hipótese razoável, mas sem *binding*
+criptográfico no pipeline que a prove.
+
+Esta solução muda para o fluxo já descrito em
+["Fluxo da fábrica de imagens"](#fluxo-da-fábrica-de-imagens): build once,
+e o mesmo artifact validado é o que é publicado. Verificamos
+`validated digest == copied digest == remote digest`. Não dizemos "deve ser
+o mesmo" — provamos "é exatamente o mesmo artifact".
+
+### 5. Scan
+
+No workflow original, apesar de construir `amd64` e `arm64`, o step do
+Trivy mostrado escaneia `image-ref: "${IMAGE_NAME}:latest-amd64"` e só
+depois publica o índice multiarch.
+
+Nesta solução o contrato é `amd64 → scan`, `arm64 → scan`, e ambas
+precisam passar — uma diferença material. O gate também permanece
+bloqueante mesmo quando isso passou a impedir frameworks inteiros pela
+CVE de zlib (ver [ADR-0004](docs/adr/0004-v1-referencia-go126.md) e
+[ADR-0006](docs/adr/0006-java21-zlib-blocker-remediation-options.md)), o que
+mostra que o controle deixou de ser decorativo.
+
+### 6. Contrato funcional
+
+O repositório original responde "a imagem foi construída e não tem CVEs
+bloqueantes?". Esta solução também pergunta "ela realmente funciona como
+base daquela linguagem?": o candidate OCI executa um workload mínimo real
+e confere runtime correto, usuário correto, filesystem correto, TLS
+correto e arquitetura correta — já comprovado em `amd64` e `arm64` para Go.
+É um nível diferente de qualidade.
+
+### 7. Stable
+
+Na ideia original, build e promoção são a mesma operação: `scan passou →
+apko publish → stable + timestamp`.
+
+Esta solução separa build de promoção:
+
+```mermaid
+flowchart LR
+    B["build"] --> S["scan"]
+    S --> C["contract"]
+    C --> PC["publish candidate<br/>signing + SBOM + provenance + evidence"]
+    PC -.-> PR["PROMOTION"]
+    PR --> ST["stable"]
+```
+
+`stable` deixa de significar "último build que não falhou no Trivy" e
+passa a significar "artifact candidato que passou pelo contrato completo
+de release". A esse desenho somam-se stable read-back, runtime/dev pair
+binding e stable recovery — nada disso existia na POC inicial.
+
+A formalização mais recente desse mecanismo — lifecycle de 7 dias com
+`stable` protegida por prioridade de regra, e o binding runtime/dev via
+`verify_promotion_pairs.py` — está em
+[ADR-0005](docs/adr/0005-stable-lifecycle-realinhamento-rfc013.md), proposto em
+16/09/2026 e ainda pendente de aceite; é a intenção original desta RFC,
+não uma invenção nova, mas vale conferir o estado corrente do ADR antes de
+citar como já aplicado em produção.
+
+### 8. Supply chain
+
+No repositório original existe geração de SBOM pelo Apko, mas funciona
+mais como output de build — não há ali um contrato completo de
+distribuição/verificação de supply chain.
+
+Esta solução entrega um artifact com OCI digest, assinatura Cosign
+keyless, SPDX SBOM attestation, provenance e read-back remoto — e isso já
+foi validado de fora do CI (`cosign verify`, `cosign verify-attestation`,
+`gh attestation verify`). Isso muda o significado do SBOM: na POC, "o
+build produz SBOM"; aqui, "o consumidor consegue verificar a SBOM
+associada ao artifact que recebeu".
+
+### 9. Registry
+
+O repositório original publica diretamente no Docker Hub
+(`login com token → publish`). Esta solução separa infraestrutura de
+conteúdo:
+
+```text
+containers-registry          containers-image-base
+      ↓                            ↓
+  Terraform                    Describe
+      ↓                            ↓
+     ECR                       Validate
+                                    ↓
+                                Publish
+```
+
+Princípio: *Infra provides the destination. Containers provides the
+trusted artifact.* O publisher não pode criar repositório, mudar
+mutability, scanning, lifecycle ou policy — mesmo quando a IAM
+tecnicamente permitiria algumas dessas operações.
+
+### 10. Autenticação
+
+Na proposta inicial, `DOCKERHUB_TOKEN` é um secret estático. Nesta
+solução, GitHub OIDC → AWS STS → role específica do repositório, sem
+`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`. As roles seguem o padrão
+`alric-github-repo-<github-repository-id>`, transformando autenticação
+numa propriedade da identidade do workflow, não num segredo compartilhado.
+
+### 11. Infraestrutura como código
+
+A POC não administra o registry. Nesta solução existe um produto separado,
+`alric-containers-registry`, responsável por ECR, mutability, exclusão de
+`stable`, `scanOnPush`, AES256, lifecycle, IAM/OIDC de Infra e o Terraform
+state — e já provamos que `image-base` publica e, em seguida,
+`terraform plan` não mostra mudanças. É uma evidência forte de ownership.
+
+### 12. Lifecycle
+
+Não existe esse conceito de lifecycle de produto no repositório inicial —
+imagens publicadas se acumulam indefinidamente. Hoje, a policy aplicada
+(`policies/operations/ecr-lifecycle.json`) expira apenas imagens **sem
+tag** após 30 dias; toda imagem tagueada, incluindo build tags, é
+preservada. A refinaria proposta em
+[ADR-0005](docs/adr/0005-stable-lifecycle-realinhamento-rfc013.md) fecha essa
+lacuna: build tags expiram em 7 dias, e `stable` é protegida por prioridade
+de regra (a primeira regra reivindica qualquer imagem tagueada `stable`
+antes que a segunda possa expirá-la por idade) — não por exclusão de
+padrão de tag, já que uma mesma imagem pode ter as duas tags. Isso permite
+`stable` movível e build tags imutáveis, simultaneamente, versionado em
+Terraform.
+
+### 13. Certificates
+
+A ideia original já introduzia algo interessante: um pacote Melange
+próprio (`bundle-pem-test`) somado ao Mozilla CA bundle — uma boa POC para
+provar "consigo produzir um pacote próprio e incorporá-lo via Apko", ainda
+que instalando um `bundle.pem` adicional.
+
+Esta solução passou a tratar certificados como um contrato de trust store,
+com mecanismo para âncoras controladas e testes de runtime. Uma dependência
+corporativa permanece, no entanto: o mecanismo evoluiu, mas o conteúdo de
+PKI real ainda precisa vir do ambiente corporativo (ver
+[Pacote de adoção](docs/corporate-adoption.md)).
+
+### 14. Reusable workflow
+
+A reutilização via `workflow_call` já estava na ideia original
+(`build-base-images.yml` com inputs `registry`/`frameworks`) — uma boa
+ideia que esta solução manteve e não deveria perder. A diferença é que hoje
+o reusable workflow é tratado como interface de plataforma, com contratos,
+testes, pinning e governança, incluindo um repositório dedicado
+(`alric-containers-reusable-workflows`). A evolução foi de "um YAML pode
+ser chamado por outro repo" para "reusable workflow é uma API de CI/CD com
+contrato, versão, inputs, outputs e testes".
+
+### 15. Tool pinning
+
+O repositório original usa `cgr.dev/chainguard/apko:latest` e
+`cgr.dev/chainguard/melange:latest` — o próprio comentário reconhece que
+`APKO_VERSION`/`MELANGE_VERSION` são apenas informativos, então o pipeline
+pode mudar mesmo sem nenhum commit no repositório. Esta solução evoluiu
+para governança de pins, inventário (`pin_inventory.py`) e Renovate,
+melhorando reprodutibilidade e auditabilidade.
+
+### 16. Operação
+
+O repositório original tem CI badge e schedule diário. Esta solução
+adiciona pipeline health, monitoramento de schedule, estado de release,
+saúde de promoção, escopo de execução explícito, visibilidade de CVE,
+verificação pelo consumidor e recovery. Ainda há uma lacuna conhecida:
+`external_destination` (canal corporativo/e-mail de plantão) segue
+indefinido em `policies/operations/health.json` — mas já existe um modelo
+operacional que não existia antes.
+
+### Resumo lado a lado
+
+| Dimensão | POC de referência | Esta solução |
+| --- | --- | --- |
+| Melange/Apko/Wolfi | ✅ | ✅ |
+| Distroless | ✅ | ✅ mais estrito, runtime/`-dev` separados |
+| Non-root | ✅ | ✅ |
+| Multiarch | ✅ | ✅ |
+| Catálogo multi-framework | 10 imagens | 17 definições |
+| Scan | Trivy `amd64` | Trivy `amd64` + `arm64` |
+| Build once | ❌ rebuild no publish | ✅ artifact único |
+| Digest binding | ❌ assumido | ✅ comprovado (validated == copied == remote) |
+| Contrato funcional | ❌ | ✅ |
+| SBOM | gerado | ✅ publicado/atestado, verificável pelo consumidor |
+| Assinatura | ❌ | ✅ Cosign keyless |
+| Provenance | ❌ | ✅ SLSA |
+| Verificação pelo consumidor | ❌ | ✅ |
+| Registry | Docker Hub | ECR governado (Terraform) |
+| Autenticação | token estático | OIDC (GitHub → AWS STS) |
+| Infra as Code | ❌ | ✅ Terraform |
+| Publisher preflight | ❌ | ✅ fail-closed |
+| Build tag imutável | ✅ | ✅ |
+| `stable` | direto no build | promoção separada, com soak e re-scan |
+| Stable read-back | ❌ | ✅ |
+| Stable recovery | ❌ | ✅ |
+| Lifecycle | ❌ | ✅ 30 dias (sem tag); 7 dias com proteção por prioridade proposto em ADR-0005 |
+| Runtime/dev pair binding | ❌ | ✅ |
+| Retry sem rebuild | ❌ | ✅ |
+| Health | ❌ | ✅ |
+| Reusable workflow | ✅ básico | ✅ governado, com contrato e testes |
+| Tool pinning | ❌ (`:latest`) | ✅ inventário + Renovate |
+
+### Como apresentar isso ao autor da POC
+
+A narrativa sugerida evita "eu refiz e deixei melhor" e usa continuidade:
+
+> Usei a sua POC como baseline. Mantive os princípios principais — Melange,
+> Apko, Wolfi, distroless, multiarch, Trivy, catálogo por framework,
+> `stable` + tag de build, schedule e reusable workflow. A partir disso fui
+> fechando os gaps necessários para transformar a POC numa fábrica
+> operável: separar runtime de build toolchain, garantir build once com
+> preservação de digest, validar as duas arquiteturas, adicionar contratos
+> funcionais, assinatura/SBOM/provenance verificáveis pelo consumidor,
+> separar publicação de promoção de `stable`, adicionar recovery e
+> lifecycle, e tirar o ownership do ECR do publisher para Infra/Terraform.
+
+Essa narrativa é forte porque mostra continuidade real:
+
+```text
+Ideia original → POC funcional → hardening → supply chain → governança → operação → produto de plataforma
+```
+
+### Questões em aberto para a conversa com Gerson
+
+Para não gastar tempo da conversa pedindo aprovação para coisas que já têm
+direção técnica definida, valem só quatro perguntas reais.
+
+#### 1. Um repositório ou dois
+
+- Um único repositório para factory + Terraform/ECR; ou
+- Dois repositórios separados — o desenho atual: `image-base`
+  (build/publicação/supply chain) e `alric-containers-registry`
+  (Terraform/ECR/lifecycle/policies). Ver
+  [Fronteira entre produto e workflows compartilhados](docs/repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados)
+  para a separação equivalente entre produto e executor.
+
+#### 2. Como tratar o bloqueio do zlib
+
+- Aguardar o Wolfi publicar a correção; ou
+- Manter temporariamente um package `zlib` próprio via Melange, a partir do
+  commit oficial já corrigido no upstream (`madler/zlib`), ainda não
+  lançado como release do Wolfi.
+- Nos dois casos, o Trivy continua bloqueante, sem exceção.
+
+Esta é literalmente a mesma pergunta já formalizada em
+[ADR-0006](docs/adr/0006-java21-zlib-blocker-remediation-options.md)
+("Pergunta objetiva para o Tech Lead"), com o spike de viabilidade e o
+commit exato já investigados — a conversa com Gerson é o mecanismo para
+resolvê-la.
+
+#### 3. Estratégia de rollout das linguagens
+
+Go 1.26 já está com o contrato completo ([ADR-0004](docs/adr/0004-v1-referencia-go126.md)).
+
+- Liberar framework por framework, conforme cada um atingir o mesmo
+  contrato; ou
+- Esperar mais famílias ficarem prontas antes da adoção.
+
+#### 4. Provisionamento dos ECRs
+
+Depende diretamente da decisão do item 1. Se Infra ficar separada, decidir
+se os ECRs são provisionados todos de uma vez ou conforme cada framework
+entra no catálogo ativo.
+
+#### O que já está decidido (fora da conversa)
+
+- **Scanner** — Trivy.
+- **CA corporativa** — buscar no S3 durante o build, usando o equivalente
+  corporativo de [`certificados.sh`](scripts/certificates/certificados.sh)
+  já provado no lab (ver [Pacote de adoção](docs/corporate-adoption.md), PAR-13).
+- **Consumo** — `stable` oficial + build tag imutável + digest (ver
+  [Consumer Verification Contract](docs/consumer-verification-contract.md)).
+- **Lifecycle** — 7 dias preservando `stable`; direção já formalizada em
+  [ADR-0005](docs/adr/0005-stable-lifecycle-realinhamento-rfc013.md), pendente
+  de aceite de code owner — não uma decisão do Tech Lead, ao contrário dos
+  quatro pontos acima.
+
+### Em uma frase
+
+O repositório original demonstra como construir imagens distroless
+padronizadas. Esta solução define como construir, validar, publicar,
+promover, verificar, operar e governar essas imagens como um produto de
+plataforma.
 
 ## Catálogo
 

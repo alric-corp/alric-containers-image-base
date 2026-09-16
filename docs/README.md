@@ -7,6 +7,7 @@
 | Escolher e verificar uma base por digest | [Consumer Verification Contract](consumer-verification-contract.md) |
 | Construir imagens e consultar exemplos | [README do produto](../README.md) |
 | Localizar responsabilidades e dependências | [Arquitetura](repository-architecture.md) |
+| Entender por que distroless não é sinônimo de hardened | [RFC-013 — O que significa "hardened"](../RFC-013-Image-Base-Completa-com-Mermaid.md#o-que-significa-hardened) |
 | Preparar ambiente e validar uma mudança | [Contribuição](../CONTRIBUTING.md) |
 | Entender contratos com o executor compartilhado | [Workflows reutilizáveis](m09-m12-reusable-workflows.md) |
 | Entender a renomeação e a confiança AWS | [Migração de nomes](repository-rename.md) |
@@ -31,6 +32,7 @@
 | Consultar aceites, entregas e achados de cada etapa | [Histórico da RFC-013](rfc-013-historico-de-entregas.md) |
 | Auditar resultados históricos | [Evidências](evidence/), [fechamento do checklist](old-checklist-closure.md) |
 | Planejar a migração para o repositório corporativo | [Manifesto de migração corporativa](corporate-migration-manifest.md) |
+| Comparar esta solução com a POC de referência, dimensão por dimensão | [RFC-013 — Relação com a POC de referência](../RFC-013-Image-Base-Completa-com-Mermaid.md#relação-com-a-poc-de-referência) |
 
 Documentos históricos e evidências usam os nomes atuais dos repositórios
 (o GitHub redireciona as URLs antigas de qualquer forma); a exceção é a
