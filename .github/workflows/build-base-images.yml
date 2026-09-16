@@ -251,32 +251,32 @@ jobs:
           role-to-assume: ${{ inputs.aws-role-arn }}
           aws-region: ${{ inputs.aws-region }}
 
+      # Infra é source of truth da configuração do ECR; Containers valida o
+      # destino pré-provisionado e falha fechado sem criar ou reparar recursos.
+      - name: Validate pre-provisioned ECR repository
+        env:
+          FRAMEWORK: ${{ matrix.framework }}
+          EXPECTED_REGION: ${{ inputs.aws-region }}
+        run: |
+          set -euo pipefail
+          REPO="image-base-${FRAMEWORK}"
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          if ! aws ecr describe-repositories --region "$EXPECTED_REGION" \
+            --repository-names "$REPO" > ecr-repository.json 2>ecr-error.txt; then
+            if grep -q 'RepositoryNotFoundException' ecr-error.txt; then
+              echo "::error::Pre-provisioned ECR repository not found. Provision it through alric-containers-registry before publishing: ${REPO}" >&2
+            else
+              cat ecr-error.txt >&2
+            fi
+            exit 1
+          fi
+          python3 -B -m scripts.pipeline.release.validate_ecr_repository \
+            ecr-repository.json "$REPO" "$ACCOUNT" "$EXPECTED_REGION" \
+            > ecr-repository-validation.json
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
-
-      # ECR não cria repositório automaticamente no primeiro push (diferente
-      # do Docker Hub) — garante que ele existe antes do apko publicar.
-      - name: Ensure ECR repository exists
-        env:
-          FRAMEWORK: ${{ matrix.framework }}
-        run: |
-          set -eu
-          REPO="image-base-${FRAMEWORK}"
-          if ! aws ecr describe-repositories --repository-names "$REPO" >/dev/null 2>ecr-error.txt; then
-            if ! grep -q 'RepositoryNotFoundException' ecr-error.txt; then
-              cat ecr-error.txt >&2
-              exit 1
-            fi
-            aws ecr create-repository \
-              --repository-name "$REPO" \
-              --image-tag-mutability IMMUTABLE_WITH_EXCLUSION \
-              --image-tag-mutability-exclusion-filters filterType=WILDCARD,filter=stable \
-              --image-scanning-configuration scanOnPush=true >/dev/null
-          fi
-          aws ecr put-image-tag-mutability --repository-name "$REPO" \
-            --image-tag-mutability IMMUTABLE_WITH_EXCLUSION \
-            --image-tag-mutability-exclusion-filters filterType=WILDCARD,filter=stable >/dev/null
 
       # Referência da imagem: <registry-ecr>/image-base-<framework>, com uma
       # tag imutável <ddmmaa-hhmm> (GMT-3 / America/Sao_Paulo). A tag "stable"
@@ -370,6 +370,7 @@ jobs:
             image.oci/sbom/
             image.oci/apko.lock.json
             image.oci/build-inputs.json
+            ecr-repository-validation.json
             skopeo-version.txt
             tool-versions.json
           retention-days: 30

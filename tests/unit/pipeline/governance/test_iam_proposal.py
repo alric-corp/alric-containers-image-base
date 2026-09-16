@@ -206,6 +206,10 @@ class InventoryAndDocumentationTests(unittest.TestCase):
     def test_inventory_covers_every_statement_action_and_has_executable_sources(self):
         inventory = renderer.read_json(PROPOSAL / 'inventory.json')
         operations = {op['id']: op for op in inventory['operations']}
+        # The IAM proposal remains intentionally unchanged: its separate
+        # provisioning profile still documents grants not yet removed from the
+        # real role. The recurring publisher must no longer execute them.
+        retired_from_publisher = {'O04', 'O05'}
         self.assertEqual(len(operations), len(inventory['operations']))
         documents = renderer.render(fixture())
         expected = {(name.removesuffix('.json'), statement['Sid']): statement
@@ -235,7 +239,11 @@ class InventoryAndDocumentationTests(unittest.TestCase):
                 for source in operation['code_sources']:
                     path = (ROOT / source['path']).resolve()
                     self.assertTrue(path.is_relative_to(ROOT))
-                    self.assertIn(source['contains'], path.read_text())
+                    if operation['id'] in retired_from_publisher:
+                        self.assertEqual(operation['phase'], 'provisioning')
+                        self.assertNotIn(source['contains'], path.read_text())
+                    else:
+                        self.assertIn(source['contains'], path.read_text())
                 for url in operation['official_sources']:
                     self.assertEqual(urlsplit(url).scheme, 'https')
                     self.assertIn(urlsplit(url).netloc, {

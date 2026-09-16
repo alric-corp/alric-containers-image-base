@@ -141,15 +141,20 @@ além do 0 está autorizado a iniciar nesta entrega.
 - **Allowed actions**: leitura (`aws iam get-role`, `aws ecr
   describe-repositories`, `aws ecr describe-images`, verificação de
   proteções de repositório GitHub) — somente consulta.
+- **Publisher contract**: `DescribeRepositories` produz JSON validado
+  localmente antes do login/publicação. Nome, ARN/account, URI/região,
+  `IMMUTABLE` sem exclusions, `scanOnPush=true` e `AES256` precisam coincidir.
 - **Forbidden actions**: qualquer escrita, criação ou alteração de
-  configuração.
+  configuração; em especial `CreateRepository`, `PutImageTagMutability`,
+  `PutImageScanningConfiguration`, lifecycle, policy ou tags de recurso.
 - **Owner**: Containers Products, com suporte de Cloud/IAM.
 - **Entry criteria**: recursos existem e credenciais de leitura
   disponíveis.
 - **Exit criteria**: configuração observada corresponde exatamente ao
   aprovado em Stage 1 (trust, permissões, mutabilidade, encryption).
 - **Stop conditions**: qualquer divergência entre o observado e o
-  aprovado — devolver a Cloud/IAM, não prosseguir.
+  aprovado — devolver a Cloud/IAM, não prosseguir e não reparar
+  automaticamente.
 - **Evidence produced**: snapshot sanitizado da configuração observada.
 
 ### Stage 3 — Dry-run/build only
