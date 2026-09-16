@@ -3,6 +3,7 @@
 | Necessidade | Documento |
 | --- | --- |
 | Trabalhar com Codex, Claude Code e Copilot | [Guia de engenharia com IA](ai/README.md) |
+| Estudar os fundamentos do domínio (Wolfi, apko, Melange, Sigstore, admission) | [Fundamentos](fundamentals/00-README.md) |
 | Escolher e verificar uma base por digest | [Consumer Verification Contract](consumer-verification-contract.md) |
 | Construir imagens e consultar exemplos | [README do produto](../README.md) |
 | Localizar responsabilidades e dependências | [Arquitetura](repository-architecture.md) |
