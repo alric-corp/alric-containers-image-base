@@ -51,7 +51,21 @@ permissions:
 jobs:
   promote:
     name: Promote ${{ matrix.framework }}
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    # STABLE_AUTOMATIC_PROMOTION = DISABLED_FOR_V1_REFERENCE (P0-04): a V1 de
+    # referência Go 1.26 declara stable como OUT_OF_SCOPE (ver
+    # specs/2026-09-15-first-corporate-e2e/tasks.md, Stage 6). Os dois ECRs
+    # Go são IMMUTABLE sem exclusion filter para "stable" — a primeira
+    # promoção criaria a tag, mas a segunda falharia ao tentar movê-la
+    # (immutable tag mutation), quebrando o job em todo ciclo seguinte,
+    # além de não ter autorização explícita/separada exigida pelo Stage 6.
+    # A variável de repositório abaixo é o kill switch: ausente/diferente de
+    # "true" -> job não roda, em nenhum trigger (schedule ou dispatch
+    # manual). Definir `STABLE_PROMOTION_AUTHORIZED=true` só depois de
+    # autorização explícita do Stage 6 e do filtro de exclusão em Infra.
+    if: |
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      vars.STABLE_PROMOTION_AUTHORIZED == 'true'
     runs-on: ubuntu-latest
     # Observado: 11-40s num run real contra o ECR de verdade (M14). Margem
     # cobre o re-scan Trivy e variância de rede nas chamadas AWS/ECR.
