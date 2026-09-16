@@ -4,7 +4,7 @@
   "git_base_commit": "5c03d97b6da7e1a864e7d5cc6ab2e01d889e3bf6",
   "source_state": "Uncommitted working tree, including work already present before this task.",
   "shared_workflows": {
-    "repository": "alric-corp/itau-xj7-reusable-workflows",
+    "repository": "alric-corp/alric-containers-reusable-workflows",
     "commit": "081270ccf18ee4d98da23f22f761846d29f71486",
     "verified_against_published_main": true
   },

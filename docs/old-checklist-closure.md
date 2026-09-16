@@ -8,14 +8,14 @@ ainda faltavam foram executados nesta rodada, conforme a tabela.
 | Item | Evidência e resultado |
 | --- | --- |
 | Seleção com ECR real | Snapshot de 102 entradas de `image-base-go1-26`: um digest `stable`, 82 entradas auxiliares/sem tag de build e quatro builds não estáveis ainda dentro de seis horas. Com soak 6, nenhum candidato; com soak 0, selecionado o build mais recente elegível. |
-| Publicação OCI e promoção positiva antigas | [Publicação 34371208971](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34371208971) e [promoção 34372447340](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34372447340), já registradas nas entregas anteriores. O digest promovido foi `sha256:53f9a106b88e00773513d6cd3e2a62a3adaadef3e9f21d3720993793af2dd63e`. |
-| R03 — reexecução completa | [Run 34402226000](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34402226000), tentativas 1 e 2: melange, build OCI, scans, publicação, assinatura e provenance concluídos. A tentativa 2 substituiu os artifacts reutilizáveis e publicou a tag `a2` sem colisão. |
+| Publicação OCI e promoção positiva antigas | [Publicação 34371208971](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34371208971) e [promoção 34372447340](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34372447340), já registradas nas entregas anteriores. O digest promovido foi `sha256:53f9a106b88e00773513d6cd3e2a62a3adaadef3e9f21d3720993793af2dd63e`. |
+| R03 — reexecução completa | [Run 34402226000](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34402226000), tentativas 1 e 2: melange, build OCI, scans, publicação, assinatura e provenance concluídos. A tentativa 2 substituiu os artifacts reutilizáveis e publicou a tag `a2` sem colisão. |
 | R03 — retry parcial | Tentativa 3 do mesmo run: publicador executado novamente; o GitHub exibiu os jobs de validação com novos IDs, mas manteve seus horários e steps da tentativa 2. Publicação 2 e 3 têm exatamente os mesmos digests de índice/manifests. Não houve novo build. |
-| M03 — negativo autenticado | [Run 34402648331](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34402648331): OIDC e ECR login aprovados, seleção aprovada, cosign rejeitou o candidato com `no signatures found`, saída 10. Scan e promoção ficaram `skipped`. |
+| M03 — negativo autenticado | [Run 34402648331](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34402648331): OIDC e ECR login aprovados, seleção aprovada, cosign rejeitou o candidato com `no signatures found`, saída 10. Scan e promoção ficaram `skipped`. |
 | M04 — cron real | Execuções `schedule` de build diário e promoção horária identificadas; horários medidos abaixo. O evento real foi observado, incluindo falhas visíveis, sem presumir cadência ou pontualidade garantidas. |
-| M05 — PR de fork | [PR #33](https://github.com/alric-corp/itau-xj7-containers-image-base/pull/33), [run 34402787717](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34402787717): head no fork `TomasAlric/itau-xj7-containers-image-base`, SHA `819130a`. Token somente `Contents: read`/`Metadata: read`, `Secret source: None`; nenhuma etapa AWS, publicação e promoção puladas. 14 frameworks passaram; dotnet8 falhou no scan. Fast checks passaram. PR fechado sem merge. |
+| M05 — PR de fork | [PR #33](https://github.com/alric-corp/alric-containers-image-base/pull/33), [run 34402787717](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34402787717): head no fork `TomasAlric/alric-containers-image-base`, SHA `819130a`. Token somente `Contents: read`/`Metadata: read`, `Secret source: None`; nenhuma etapa AWS, publicação e promoção puladas. 14 frameworks passaram; dotnet8 falhou no scan. Fast checks passaram. PR fechado sem merge. |
 | M06 — último ECR mutável | `image-base-dotnet8` recebeu `IMMUTABLE_WITH_EXCLUSION`, com único filtro `stable`. Leitura de volta confirmou os 15 repositórios do catálogo com essa configuração. A mudança não publica imagens nem resolve/excepciona a CVE de dotnet8. |
-| M14 — timeout real | [PR #34](https://github.com/alric-corp/itau-xj7-containers-image-base/pull/34), [run 34403555339](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34403555339): espera de 180s em job com limite de 1 minuto. Anotação do GitHub: `The job has exceeded the maximum execution time of 1m0s`. PR fechado sem merge. |
+| M14 — timeout real | [PR #34](https://github.com/alric-corp/alric-containers-image-base/pull/34), [run 34403555339](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34403555339): espera de 180s em job com limite de 1 minuto. Anotação do GitHub: `The job has exceeded the maximum execution time of 1m0s`. PR fechado sem merge. |
 
 ## Identidade, isolamento e limites dos testes
 
@@ -56,8 +56,8 @@ usado somente na branch descartável; os limites de produção permanecem os mes
 
 | Run | Cron no commit executado | Slot anterior mais próximo (UTC) | Criação do run (UTC) | Diferença mínima slot→criação | Criação→primeiro job ativo |
 | --- | --- | --- | --- | --- | --- |
-| [34324698241](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34324698241) | `0 3 * * *` | 09/09 03:00:00 | 09/09 07:36:28 | 4h36m28s | 3s |
-| [34390576742](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34390576742) | `17 * * * *` | 09/09 18:17:00 | 09/09 18:41:43 | 24m43s | 3s |
+| [34324698241](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34324698241) | `0 3 * * *` | 09/09 03:00:00 | 09/09 07:36:28 | 4h36m28s | 3s |
+| [34390576742](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34390576742) | `17 * * * *` | 09/09 18:17:00 | 09/09 18:41:43 | 24m43s | 3s |
 
 O campo `event=schedule`, os workflows nos respectivos commits e o roteamento dos
 jobs distinguem build e promoção. A API consultada não fornece o instante nominal
@@ -83,7 +83,7 @@ O snapshot do seletor deve ser reproduzido usando `observed_at` da evidência co
 
 M07 ainda precisa separar go1-25/dotnet8/java25 e comprovar as promoções das novas
 variantes. A publicação autenticada das seis variantes já existentes ocorreu no
-[run 34398032502](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34398032502),
+[run 34398032502](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34398032502),
 portanto a antiga frase “depende do merge na main” deixou de ser atual para a
 publicação. M08/M10 têm a entrega parcial no PR #32; M09/M16 seguem no PR #28.
 Esses itens, M11 e M15 não foram marcados como completos por esta reconciliação.

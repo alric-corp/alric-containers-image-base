@@ -1089,7 +1089,7 @@
         "run_started_at": "2026-09-09T07:36:28Z",
         "status": "completed",
         "conclusion": "failure",
-        "html_url": "https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34324698241"
+        "html_url": "https://github.com/alric-corp/alric-containers-image-base/actions/runs/34324698241"
       },
       "cron_at_source_commit": "0 3 * * *",
       "nearest_prior_schedule_slot": "2026-09-09T03:00:00+00:00",
@@ -1188,7 +1188,7 @@
         "run_started_at": "2026-09-09T18:41:43Z",
         "status": "completed",
         "conclusion": "failure",
-        "html_url": "https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34390576742"
+        "html_url": "https://github.com/alric-corp/alric-containers-image-base/actions/runs/34390576742"
       },
       "cron_at_source_commit": "17 * * * *",
       "nearest_prior_schedule_slot": "2026-09-09T18:17:00+00:00",
@@ -1297,7 +1297,7 @@
   "m05_fork": {
     "pr": 33,
     "run": 34402787717,
-    "head_repository": "TomasAlric/itau-xj7-containers-image-base",
+    "head_repository": "TomasAlric/alric-containers-image-base",
     "head_sha": "819130aead093121301bc778aa5153cbc6200117",
     "closed_without_merge": true,
     "permissions": {

@@ -4,12 +4,12 @@
   "trivy_action_commit": "eea2d2f4c4102ded74204e4131c1417f444ae3fc",
   "consumer_commit": "974384c7de7c71356093dbb8b292cf6c45e87923",
   "pull_requests": {
-    "shared": "https://github.com/alric-corp/itau-xj7-reusable-workflows/pull/1",
-    "consumer": "https://github.com/alric-corp/itau-xj7-containers-image-base/pull/45"
+    "shared": "https://github.com/alric-corp/alric-containers-reusable-workflows/pull/1",
+    "consumer": "https://github.com/alric-corp/alric-containers-image-base/pull/45"
   },
   "runs": {
     "shared_ci": {
-      "url": "https://github.com/alric-corp/itau-xj7-reusable-workflows/actions/runs/34431800269",
+      "url": "https://github.com/alric-corp/alric-containers-reusable-workflows/actions/runs/34431800269",
       "conclusion": "success",
       "checks": [
         "test",
@@ -18,7 +18,7 @@
       ]
     },
     "consumer_fast_checks": {
-      "url": "https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34432303109",
+      "url": "https://github.com/alric-corp/alric-containers-image-base/actions/runs/34432303109",
       "conclusion": "success",
       "checks": [
         "test",
@@ -26,7 +26,7 @@
       ]
     },
     "consumer_validation": {
-      "url": "https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34432303814",
+      "url": "https://github.com/alric-corp/alric-containers-image-base/actions/runs/34432303814",
       "conclusion": "failure",
       "frameworks_passed": 14,
       "frameworks_blocked": [
@@ -36,7 +36,7 @@
       "promotion": "skipped"
     },
     "consumer_runtime": {
-      "url": "https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34432393980",
+      "url": "https://github.com/alric-corp/alric-containers-image-base/actions/runs/34432393980",
       "conclusion": "success",
       "framework": "python3-13",
       "artifact_run_id": 34432303814

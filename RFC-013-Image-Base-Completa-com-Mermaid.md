@@ -54,7 +54,7 @@ A ausência de padronização de imagens base leva ao uso de imagens externas n�
 
 ## Objetivo
 
-- Padronizar imagens base para os principais frameworks utilizados no Itaú.
+- Padronizar imagens base para os principais frameworks utilizados no ambiente corporativo.
 - Disponibilizar imagens seguras, otimizadas e multi-plataforma (`amd64` / `arm64`).
 - Reduzir vulnerabilidades e superfície de ataque com abordagem distroless.
 - Centralizar governança de dependências e certificados.
@@ -328,7 +328,7 @@ define o que o consumidor deve conferir; não instala enforcement no deploy.
 | Build multi-plataforma (`amd64` e `arm64`) | Entregue, escaneado e testado por arquitetura |
 | Consumo pela tag `stable` | Entregue por soak/read-back; stable é mutável; pin suportado por OCI index digest |
 | Publicação no ECR | Entregue no sandbox; produção pendente |
-| Pull liberado para todas as orgs do Itaú | Resource policy validada no sandbox com Org IDs de teste; produção pendente |
+| Pull liberado para todas as organizações consumidoras | Resource policy validada no sandbox com Org IDs de teste; produção pendente |
 | Automação no GitHub com scheduler diário | Entregue; cadência real do agendador medida e documentada |
 | Scan das imagens a cada build | Entregue com Trivy; scanner corporativo em decisão |
 | Documentação de uso para consumidores | [Contrato canônico](docs/consumer-verification-contract.md), proposto nesta revisão; README mantém exemplos |
@@ -469,7 +469,7 @@ Cada framework tem seu próprio repositório ECR (`image-base-java21`, `image-ba
 - **Blast radius:** um incidente ou rotação malformada na pipeline de uma linguagem fica contido ao repositório correspondente, sem risco de afetar tags ou permissões de outra.
 - **Catálogo:** o nome do repositório já documenta o que ele contém (`image-base-java21`), sem depender de convenção de tag para diferenciar o conteúdo.
 
-O custo é operacional (mais repositórios para criar/gerenciar lifecycle policy), mitigado por serem criados programaticamente pelo próprio workflow de build. Validado no sandbox: a resource policy least-privilege foi aplicada individualmente aos repositórios `image-base-*`, na mesma estrutura da produção (`Principal: "*"` restrito por `Condition` em `aws:PrincipalOrgID`), usando a Organization do sandbox no lugar dos Org IDs do Itaú.
+O custo é operacional (mais repositórios para criar/gerenciar lifecycle policy), mitigado por serem criados programaticamente pelo próprio workflow de build. Validado no sandbox: a resource policy least-privilege foi aplicada individualmente aos repositórios `image-base-*`, na mesma estrutura da produção (`Principal: "*"` restrito por `Condition` em `aws:PrincipalOrgID`), usando a Organization do sandbox no lugar dos Org IDs corporativos reais.
 
 ### Consumo
 
@@ -515,8 +515,8 @@ com scan e testes. Exemplos para Node.js, .NET e Java no [README](README.md#como
 
 | Repositório | Papel |
 | --- | --- |
-| `https://github.com/itau-corp/itau-xj7-container-image-base` | Destino de produção do monorepo (a criar) |
-| `https://github.com/itau-corp/itau-ev3-container-k8s-tools` | Ferramentas de troubleshooting do ambiente de containers |
+| `https://github.com/corporate-org/corporate-containers-image-base` | Destino de produção do monorepo (a criar; nome ilustrativo) |
+| `https://github.com/corporate-org/corporate-containers-k8s-tools` | Ferramentas de troubleshooting do ambiente de containers (nome ilustrativo) |
 | `https://github.com/alric-corp/alric-containers-image-base` | Sandbox onde a implementação e as evidências desta RFC estão (antes `itau-xj7-containers-image-base`) |
 | `https://github.com/alric-corp/alric-containers-reusable-workflows` | Executores compartilhados (validação, contrato, Trivy) consumidos por SHA |
 | `https://github.com/gersontpc/image-base` | POC de referência |

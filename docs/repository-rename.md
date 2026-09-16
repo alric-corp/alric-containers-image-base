@@ -10,7 +10,12 @@ Em 10/09/2026 os repositórios passaram a se chamar:
 Os clones foram renomeados, seus remotes atualizados e os vínculos dos worktrees
 reparados. Não foi necessário recriar histórico, branches ou PRs.
 Referências executáveis, Dependabot e guias atuais usam os novos nomes.
-Evidências e registros históricos conservam os nomes existentes na execução.
+Documentos e registros de histórico/entregas também foram atualizados para
+os novos nomes (o GitHub redireciona as URLs antigas de qualquer forma).
+Evidências criptográficas — certificados, attestations e a policy de
+identidades de assinatura — são a exceção: contêm o nome antigo e não podem
+ser reescritas sem alterar a evidência (ver "Assinaturas anteriores à
+renomeação" abaixo).
 
 ## Dependência compartilhada
 

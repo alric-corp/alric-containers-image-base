@@ -11,8 +11,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / 'scripts/certificates/certificados.sh'
-FILES = ('ca_bundle.crt', 'caitau.cer', 'cloud-s0653.cer',
-         'itau-r0650.cer', 'itau-s0143.cer', 'mozilla.crt')
+FILES = ('ca_bundle.crt', 'cacorp.cer', 'cloud-s0653.cer',
+         'corp-r0650.cer', 'corp-s0143.cer', 'mozilla.crt')
 
 
 class CertificateTests(unittest.TestCase):
@@ -41,7 +41,7 @@ args = sys.argv
 if Path(args[0]).name == 'aws':
     assert args[1:3] == ['s3', 'cp'], args
     filename = args[3].rsplit('/', 1)[-1]
-    filename = 'itau-s0143.cer' if filename == 'Itau-S0143.cer' else filename
+    filename = 'corp-s0143.cer' if filename == 'Corp-S0143.cer' else filename
     destination = args[4]
 else:
     assert 'https://curl.se/ca/cacert.pem' in args, args
@@ -72,7 +72,7 @@ sys.exit(subprocess.call([os.environ['CERT_TEST_REAL_CP'], *sys.argv[1:]]))
                    'CERT_TEST_FIXTURES': str(cls.source),
                    'CERT_TEST_REAL_CP': shutil.which('cp'),
                    'CERTIFICADOS_BUCKET_CLOUDSEC': 'fixture-cloudsec',
-                   'CERTIFICADOS_BUCKET_CACERTITAU': 'fixture-itau', 'LC_ALL': 'C'}
+                   'CERTIFICADOS_BUCKET_CACERTCORP': 'fixture-corp', 'LC_ALL': 'C'}
         for i, name in enumerate(FILES):
             subprocess.run([
                 'openssl', 'req', '-x509', '-newkey', 'ec',
@@ -121,7 +121,7 @@ sys.exit(subprocess.call([os.environ['CERT_TEST_REAL_CP'], *sys.argv[1:]]))
         self.assertEqual(result.stdout, '')
 
     def rotate(self):
-        shutil.copyfile(self.fixtures / 'cloud-s0653.cer', self.fixtures / 'caitau.cer')
+        shutil.copyfile(self.fixtures / 'cloud-s0653.cer', self.fixtures / 'cacorp.cer')
 
     def rewrite_hashes(self):
         self.lock.write_text(''.join(
@@ -174,7 +174,7 @@ sys.exit(subprocess.call([os.environ['CERT_TEST_REAL_CP'], *sys.argv[1:]]))
         self.assert_bundle_readable(self.run_script())
 
     def test_malformed_hash_including_final_line_without_newline(self):
-        for filename, newline in (('caitau.cer', True), ('mozilla.crt', False)):
+        for filename, newline in (('cacorp.cer', True), ('mozilla.crt', False)):
             with self.subTest(filename=filename, newline=newline):
                 self.rewrite_hashes()
                 lines = ['INVALID  ' + filename if line.endswith('  ' + filename) else line
@@ -183,19 +183,19 @@ sys.exit(subprocess.call([os.environ['CERT_TEST_REAL_CP'], *sys.argv[1:]]))
                 self.assert_blocked(self.run_script(), 3)
 
     def test_truncated_tail(self):
-        p = self.fixtures / 'caitau.cer'
+        p = self.fixtures / 'cacorp.cer'
         p.write_bytes(p.read_bytes() + b'-----BEGIN CERTIFICATE-----\n')
         self.rewrite_hashes()
         self.assert_blocked(self.run_script(), 1)
 
     def test_truncated_tail_without_newline(self):
-        p = self.fixtures / 'caitau.cer'
+        p = self.fixtures / 'cacorp.cer'
         p.write_bytes(p.read_bytes() + b'-----BEGIN CERTIFICATE-----')
         self.rewrite_hashes()
         self.assert_blocked(self.run_script(), 1)
 
     def test_valid_pem_without_final_newline(self):
-        p = self.fixtures / 'caitau.cer'
+        p = self.fixtures / 'cacorp.cer'
         p.write_bytes(p.read_bytes().rstrip(b'\n'))
         self.rewrite_hashes()
         self.assert_bundle_readable(self.run_script())

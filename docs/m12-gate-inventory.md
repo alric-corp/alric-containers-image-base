@@ -78,7 +78,7 @@ se o re-scan acima já bloqueou a promoção").
 Confirmado empiricamente, não só por leitura da documentação: workflow
 descartável com um passo que falha de propósito seguido de dois passos
 condicionais — um replicando o padrão antigo, outro com `!cancelled()` — [PR
-#43](https://github.com/alric-corp/itau-xj7-containers-image-base/pull/43)
+#43](https://github.com/alric-corp/alric-containers-image-base/pull/43)
 (fechado sem merge). No run real, o passo sem o guard ficou `skipped`; o
 passo com `!cancelled()` rodou (`success`). Corrigido nos dois workflows
 acrescentando `!cancelled()` à condição. `validate-base-images.yml` já usava

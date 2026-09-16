@@ -3,7 +3,7 @@
   "owner": {
     "responsible": "@alric-corp/github_xj7_maintainer",
     "escalation": "@vigcf",
-    "$comment": "Dono da POC. Para produção, trocar pelo time verificado do itau-corp, o mesmo movimento já previsto no CODEOWNERS."
+    "$comment": "Dono da POC. Para produção, trocar pelo time verificado da organização corporativa, o mesmo movimento já previsto no CODEOWNERS."
   },
   "channel": {
     "implemented": "github-actions-run",

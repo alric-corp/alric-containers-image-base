@@ -48,7 +48,7 @@
 # Buckets configuráveis via variável de ambiente, pra testar sem editar o
 # script (ex.: contra um bucket pessoal de teste):
 #   CERTIFICADOS_BUCKET_CLOUDSEC   (default: cloud-ca-certs-bundle-prod-sa-east-1)
-#   CERTIFICADOS_BUCKET_CACERTITAU (default: 04955781234-mock-cacertitau)
+#   CERTIFICADOS_BUCKET_CACERTCORP (default: 04955781234-mock-cacertcorp)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,11 +57,11 @@ CAMINHO=""
 PIN=false
 
 BUCKET_CLOUDSEC="${CERTIFICADOS_BUCKET_CLOUDSEC:-cloud-ca-certs-bundle-prod-sa-east-1}"
-BUCKET_CACERTITAU="${CERTIFICADOS_BUCKET_CACERTITAU:-04955781234-mock-cacertitau}"
+BUCKET_CACERTCORP="${CERTIFICADOS_BUCKET_CACERTCORP:-04955781234-mock-cacertcorp}"
 
 # Único ponto de verdade pra quais arquivos são esperados — usado pro
 # download, pro --pin, e pra checagem de completude do lockfile.
-EXPECTED_FILES="ca_bundle.crt caitau.cer cloud-s0653.cer itau-r0650.cer itau-s0143.cer mozilla.crt"
+EXPECTED_FILES="ca_bundle.crt cacorp.cer cloud-s0653.cer corp-r0650.cer corp-s0143.cer mozilla.crt"
 
 check_dependencies() {
   local missing=""
@@ -128,10 +128,10 @@ STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"' EXIT
 
 aws s3 cp "s3://$BUCKET_CLOUDSEC/ca_bundle.crt" "$STAGING/ca_bundle.crt" --quiet
-aws s3 cp "s3://$BUCKET_CACERTITAU/caitau.cer" "$STAGING/caitau.cer" --quiet
-aws s3 cp "s3://$BUCKET_CACERTITAU/cloud-s0653.cer" "$STAGING/cloud-s0653.cer" --quiet
-aws s3 cp "s3://$BUCKET_CACERTITAU/itau-r0650.cer" "$STAGING/itau-r0650.cer" --quiet
-aws s3 cp "s3://$BUCKET_CLOUDSEC/Itau-S0143.cer" "$STAGING/itau-s0143.cer" --quiet
+aws s3 cp "s3://$BUCKET_CACERTCORP/cacorp.cer" "$STAGING/cacorp.cer" --quiet
+aws s3 cp "s3://$BUCKET_CACERTCORP/cloud-s0653.cer" "$STAGING/cloud-s0653.cer" --quiet
+aws s3 cp "s3://$BUCKET_CACERTCORP/corp-r0650.cer" "$STAGING/corp-r0650.cer" --quiet
+aws s3 cp "s3://$BUCKET_CLOUDSEC/Corp-S0143.cer" "$STAGING/corp-s0143.cer" --quiet
 $CURL https://curl.se/ca/cacert.pem -o "$STAGING/mozilla.crt"
 
 for f in $EXPECTED_FILES; do
@@ -282,7 +282,7 @@ fi
 # sha256sum -c trata uma linha malformada como AVISO, não erro — ela
 # simplesmente não é conferida, e o comando ainda sai com 0 se todas as
 # OUTRAS linhas baterem. Isso permite que uma entrada com hash inválido
-# (ex.: "INVALID  caitau.cer") passe sem que aquele certificado específico
+# (ex.: "INVALID  cacorp.cer") passe sem que aquele certificado específico
 # seja verificado contra nada. Exigimos o formato exato de cada linha
 # antes de confiar no sha256sum pra fazer a comparação.
 while IFS= read -r lockline || [ -n "$lockline" ]; do
@@ -324,7 +324,7 @@ fi
 mkdir -p "$CAMINHO"
 # Os arquivos aprovados podem não ter newline final. Separe-os para que
 # END e BEGIN de certificados consecutivos não virem uma única linha.
-for f in ca_bundle.crt caitau.cer cloud-s0653.cer itau-r0650.cer itau-s0143.cer; do
+for f in ca_bundle.crt cacorp.cer cloud-s0653.cer corp-r0650.cer corp-s0143.cer; do
   cat "$STAGING/$f"
   printf '\n'
 done > "$CAMINHO/ca_bundle_interna.crt"

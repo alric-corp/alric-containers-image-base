@@ -120,7 +120,7 @@ Detalhes que mudam a leitura desses controles:
   aprovação anterior, no SHA `12ec2ed`, foi descartada por
   `dismiss_stale_reviews` após mais um push de documentação; a aprovação
   válida foi no SHA `ef04072`), mesclada como `53e7d14`. Com o CODEOWNERS já
-  ativo na `main`, [PR #41](https://github.com/alric-corp/itau-xj7-containers-image-base/pull/41)
+  ativo na `main`, [PR #41](https://github.com/alric-corp/alric-containers-image-base/pull/41)
   (descartável, um comentário em `.github/workflows/test-promotion.yml`)
   comprovou a exigência **específica** de code owner pós-merge: o GitHub
   computou `@vigcf` e o time `@alric-corp/github_xj7_maintainer` como
@@ -145,10 +145,10 @@ Detalhes que mudam a leitura desses controles:
 Dois `workflow_dispatch` reais de `recover-stable.yml` na branch desta PR,
 depois do merge com a `main` atual:
 
-- [Run 34415174826](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34415174826):
+- [Run 34415174826](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34415174826):
   `framework=../frameworks/go1-26` (fora do catálogo, mesmo traversal que a
   checagem antiga em shell aceitava).
-- [Run 34415195003](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34415195003):
+- [Run 34415195003](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34415195003):
   `framework=go1-26` válido, `digest=sha256:not-a-real-digest` malformado.
 
 Os dois falharam no passo `Validate inputs before privileged operations` com
@@ -170,12 +170,12 @@ endosso da OpenAI. Não reescrever histórico anterior.
 
 ## CI real
 
-- Primeira parte, commit `8f64de1`: [checks rápidos](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34396480166)
-  aprovados e [build/scan](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34396480594)
+- Primeira parte, commit `8f64de1`: [checks rápidos](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34396480166)
+  aprovados e [build/scan](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34396480594)
   com bundle e 14/15 frameworks aprovados, incluindo os seis pares
   runtime/dev do M07. Único bloqueado: `dotnet8`, no scan. Publicação e
   promoção não executam em PR, por desenho.
-- Segunda parte: [run 34412945439](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34412945439),
+- Segunda parte: [run 34412945439](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34412945439),
   `test` e `lint-workflows` aprovados, com o step `Workflow hardening rules`
   `success` no runner — o lint novo roda de verdade no check obrigatório, não
   só localmente.

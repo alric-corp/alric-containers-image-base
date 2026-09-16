@@ -153,7 +153,7 @@ um OCI local Node 24 como Node 22 falhou nas duas arquiteturas.
 
 **10/09/2026** ([evidence-2026-09-10.json](evidence-2026-09-10.json)):
 primeira execução dos contratos compilados, sobre os artifacts reais do
-[run 34421525305](https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34421525305)
+[run 34421525305](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34421525305)
 (push na `main`), no daemon Docker arm64 de um Mac com amd64 emulado:
 
 | Framework | Contrato | amd64 (emulado) | arm64 (nativo) | Versão observada | Build multi-stage |

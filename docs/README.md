@@ -32,6 +32,9 @@
 | Auditar resultados históricos | [Evidências](evidence/), [fechamento do checklist](old-checklist-closure.md) |
 | Planejar a migração para o repositório corporativo | [Manifesto de migração corporativa](corporate-migration-manifest.md) |
 
-Documentos históricos e evidências conservam seus nomes para preservar links
-de PRs e rastreabilidade. Os JSON em `evidence/` descrevem as execuções e commits
-registrados; não são configuração ativa nem comprovam o estado atual do produto.
+Documentos históricos e evidências usam os nomes atuais dos repositórios
+(o GitHub redireciona as URLs antigas de qualquer forma); a exceção é a
+evidência criptográfica de assinatura, que preserva o nome vigente no momento
+da assinatura (ver [Migração de nomes](repository-rename.md)). Os JSON em
+`evidence/` descrevem as execuções e commits registrados; não são
+configuração ativa nem comprovam o estado atual do produto.
