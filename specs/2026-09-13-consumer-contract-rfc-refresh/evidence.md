@@ -50,7 +50,7 @@ ou implantação fora do produto. DEFERRED = trabalho técnico posterior.
 | Apko/Melange composition | IMPLEMENTED | [build_image.py](../../scripts/pipeline/artifacts/build_image.py), [receita Melange](../../melange/image-base-ca-certificates.yaml); lock e data do commit |
 | Multiarch amd64 + arm64 | IMPLEMENTED | [base](../../distroless/image-base.yaml), [OCI verify](../../scripts/pipeline/artifacts/oci_artifact.py); índice com ambas plataformas |
 | tzdata | IMPLEMENTED | base e [probes/runtime](../../scripts/pipeline/runtime/runtime_images.py); regras históricas de São Paulo testadas |
-| Integrated CA mechanism | IMPLEMENTED | [prepare_anchors](../../scripts/certificates/prepare_anchors.py), [image trust](../../.github/workflows/test-image-composition.yml); perfil public, CA de teste isolada |
+| Integrated CA mechanism | IMPLEMENTED | [prepare_anchors](../../scripts/certificates/prepare_anchors.py), [image trust](../../.github/workflows/image-trust.yml); perfil public, CA de teste isolada |
 | Corporate CA anchors | EXTERNAL | manifesto real aprovado ausente; MOCK rejeitado para release |
 | Runtime / -dev | PARTIAL | [catálogo](../../frameworks/); dotnet8 conserva SDK e não tem par |
 | Trivy per architecture | IMPLEMENTED | [scan_images.py](../../scripts/pipeline/artifacts/scan_images.py); vuln/secret, ignore-unfixed e severidades preservadas |

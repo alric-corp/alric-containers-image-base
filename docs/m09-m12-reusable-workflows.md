@@ -48,7 +48,8 @@ declaradas no consumidor.
 
 O job assinador permanece em `.github/workflows/build-base-images.yml`;
 `verify_promotion.py` preserva a identidade exata por workflow; a compatibilidade
-com o nome anterior exige IDs assinados, conforme a [migração de nomes](repository-rename.md). Não há nova identidade de assinador a
+com o nome anterior exige IDs assinados, conforme o alias histórico em
+`policies/release/signing-identities.json`. Não há nova identidade de assinador a
 autorizar nem wildcard para aceitar candidatos históricos. Uma futura extração
 do publicador deve satisfazer o aceite de identidade já registrado na RFC antes
 de ser ativada. A migração atual também não altera Environments ou trust policy IAM.

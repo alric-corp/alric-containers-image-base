@@ -77,7 +77,7 @@ eternamente endpoints ou chaves públicas dos serviços.
 O job solicita OIDC para Sigstore com audience `sigstore`; a autenticação
 AWS assume role por outro token/audience. Ambos dependem do GitHub, mas a
 role ECR não é a identidade de assinatura. A emissão GitHub/Fulcio está
-separada da [confiança AWS por IDs](../repository-rename.md).
+separada da confiança AWS por IDs.
 
 ### Sandbox identity
 

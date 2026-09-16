@@ -33,10 +33,6 @@ import sys
 from scripts.pipeline.governance import wolfi_trust
 
 ROOT = Path(__file__).resolve().parents[3]
-# Gerado por `gh aw compile` a partir de cve-triage.md; os pins dele são
-# mantidos pelo próprio compilador em .github/aw/actions-lock.json, não à mão.
-GENERATED = {'cve-triage.lock.yml'}
-
 ACTION = re.compile(r'uses:\s*["\']?(?P<name>[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+)@(?P<ref>[^\s"\'#]+)')
 IMAGE = re.compile(r'(?P<name>[a-z0-9.-]+(?::\d+)?/[a-z0-9._/-]+)'
                    r'(?::(?P<tag>[A-Za-z0-9_.-]+))?@(?P<digest>sha256:[0-9a-f]{64})')
@@ -47,8 +43,7 @@ SHA = re.compile(r'[0-9a-f]{40}')
 
 def scanned_files():
     """Arquivos onde este repositório fixa insumos externos."""
-    files = [path for path in sorted((ROOT / '.github/workflows').glob('*.yml'))
-             if path.name not in GENERATED]
+    files = sorted((ROOT / '.github/workflows').glob('*.yml'))
     files += [ROOT / 'Makefile']
     # Os scripts que o pipeline executa também fixam imagens (o Skopeo do
     # executor de contratos, por exemplo). Arquivos de teste ficam de fora:

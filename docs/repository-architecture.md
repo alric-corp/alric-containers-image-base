@@ -5,6 +5,10 @@ composição das imagens, regras de automação, políticas, orquestração e te
 Os diretórios consumidos pelo contrato Apko (`frameworks/`, `distroless/`,
 `melange/` e `tests/runtime/`) mantêm seus caminhos públicos.
 
+Antes do mapa de diretórios: por que essas imagens são tratadas como um
+produto de segurança e supply chain, não só como filesystems mínimos, está
+na RFC-013, ["O que significa \"hardened\""](../RFC-013-Image-Base-Completa-com-Mermaid.md#o-que-significa-hardened).
+
 ## Mapa de responsabilidades
 
 | Área | Responsabilidade |
@@ -62,6 +66,27 @@ lock/build, compartilhando o mesmo pin do inventory sem duplicar a policy.
 `operations` pode consultar o plano de runtime e os contratos de governança.
 Imports dentro do próprio domínio são permitidos. Nova dependência exige uma
 mudança explícita nesta documentação e no teste de arquitetura.
+
+## Workflow responsibilities
+
+Cada workflow ativo representa uma capacidade permanente da plataforma. Não
+há workflow de laboratório, experimento ou evidência pontual na árvore: o que
+foi investigado e encerrado vive no histórico Git.
+
+| Categoria | Papel | Workflows |
+| --- | --- | --- |
+| CI | Verificação rápida e obrigatória de todo PR e push: testes de domínio e actionlint. Não toca AWS | `ci.yml` |
+| Build | Compor, validar e publicar o artifact: build once com Melange/Apko, scan nas duas arquiteturas e contrato funcional antes de qualquer publicação | `workflow.yml` (entrypoint), `build-base-images.yml`, `validate-base-images.yml`, `test-runtime-images.yml` |
+| Security | Gate de confiança da imagem: integração das CAs e do trust store sobre a imagem candidata, sem credencial AWS | `image-trust.yml` |
+| Release | Promover `stable` só depois de soak, verificação de assinatura/provenance e re-scan, com read-back confirmando o digest | `promote-stable.yml` |
+| Recovery | Restaurar `stable` para um digest já publicado, com as mesmas verificações e sem bypass | `recover-stable.yml` |
+| Operations | Saúde do pipeline: idade de publicação/`stable`, lacunas de cron e disponibilidade dos pins | `pipeline-health.yml` |
+| Automation | Atualização de dependências por revisão, sem alterar pins fora de PR | `.github/dependabot.yml`, `renovate.json` |
+
+`workflow.yml` é o único entrypoint agendado/por evento; os demais do grupo
+Build são `workflow_call` chamados por ele. `build-base-images.yml` também é
+a identidade de assinatura verificada na promoção — seu nome de arquivo é
+contrato, não estética.
 
 ## Fronteira entre produto e workflows compartilhados
 

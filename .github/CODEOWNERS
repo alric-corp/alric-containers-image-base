@@ -11,7 +11,7 @@
 # time tem um membro só, e um autor não aprova o próprio PR (enforce_admins
 # está ligado, admin também não contorna).
 #
-# Para produção, trocar o dono da POC pelo slug verificado do time itau-corp.
+# Para produção, trocar o dono da POC pelo slug verificado do time da organização corporativa.
 
 # Default ownership also covers new domains and contributor documentation.
 *                       @alric-corp/github_xj7_maintainer @vigcf

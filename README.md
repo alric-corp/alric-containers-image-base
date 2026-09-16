@@ -352,8 +352,7 @@ No lado da plataforma estão ativos secret scanning, push protection e
 `sha_pinning_required` para Actions diretas. Os reusable workflows também
 usam SHA completo, conferido no checkout de integração do CI. O token
 padrão do Actions é `read` e não pode aprovar PRs.
-Detalhes, estado anterior e pendências em
-[docs/m09-m16-review.md](docs/m09-m16-review.md).
+Detalhes e estado anterior estão no histórico Git.
 
 ## Gate de promoção para stable (canário de soak)
 
@@ -440,7 +439,7 @@ python3 -B -m scripts.pipeline.release.verify_promotion \
 
 Esse verificador é somente leitura no registry e não executa promoção,
 soak, re-scan ou verificação de SBOM. A evidência histórica de assinatura e
-provenance está no [histórico](docs/rfc-013-historico-de-entregas.md); a
+provenance está no histórico Git; a
 [reconciliação atual](specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md)
 registra as observações hospedadas recentes e os aceites ainda pendentes.
 
@@ -512,7 +511,7 @@ Isso não substitui a imagem final da sua aplicação — é o ponto de partida 
 
 As Actions diretas dos workflows estão fixadas por SHA completo; apko, melange, Skopeo e actionlint usam digests; a versão do Trivy é fixada por tag de release. Os reusable workflows corporativos também usam SHA completo, conferido no CI. **Todo pin tem um gerenciador de atualização configurado** — Dependabot para Actions, Renovate para os digests de imagem (workflows, Makefile e o executor de contratos) e para `TRIVY_VERSION` — e um lint offline no check obrigatório reprova pin sem gerenciador ou o mesmo insumo com valores divergentes entre arquivos ([pin_inventory.py](scripts/pipeline/governance/pin_inventory.py)).
 
-Renovate ainda precisa ser instalado pelo administrador nos dois repositórios; a configuração não comprova automação ativa. Skopeo usa versão `-immutable` mais digest para evitar depender da retenção dos rebuilds diários. O runtime gerado de `gh-aw` é atualizado pelo compilador, não por alteração isolada do Dependabot. Ver [ajustes e aceites restantes](docs/release-readiness-2026-09-10.md).
+Renovate ainda precisa ser instalado pelo administrador nos dois repositórios; a configuração não comprova automação ativa. Skopeo usa versão `-immutable` mais digest para evitar depender da retenção dos rebuilds diários. O runtime gerado de `gh-aw` é atualizado pelo compilador, não por alteração isolada do Dependabot.
 
 As versões **efetivas** do que rodou ficam na evidência de cada etapa ([tool_versions.py](scripts/pipeline/operations/tool_versions.py)): apko/Trivy na validação, cosign/AWS/Docker/Skopeo na publicação, cosign/Trivy/AWS/gh/buildx na promoção, mais `python3`/`git` e a identificação da imagem do runner hospedado — que muda sem passar por nenhum pin deste repositório. Só comandos de versão em allowlist, sem dump de ambiente.
 
@@ -547,5 +546,5 @@ Os checks locais não provam publicação no destino nem acesso privado. Outra
 origem exige release revisado da chamada interna da biblioteca. O caminho
 hospedado na origem sandbox tem [PASS observado no PR #62 e na main](specs/2026-09-14-shared-origin-portability/evidence.md),
 sujeito à revisão da reconciliação; migração real e acesso privado não foram comprovados.
-A [migração dos nomes e da confiança AWS](docs/repository-rename.md)
-descreve a compatibilidade das assinaturas históricas.
+A compatibilidade das assinaturas anteriores à renomeação de 10/09/2026 é
+garantida pelo alias histórico em `policies/release/signing-identities.json`.

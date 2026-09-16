@@ -1,5 +1,5 @@
 # Product entry point. Executors live in the versioned reusable-workflow repository.
-name: Validate base images (reusable, no AWS)
+name: Validate base images
 on:
   workflow_call:
     outputs:
@@ -27,7 +27,7 @@ jobs:
         run: python3 -B -m scripts.pipeline.governance.pin_inventory trust
   image-trust:
     needs: wolfi-trust
-    uses: ./.github/workflows/test-image-composition.yml
+    uses: ./.github/workflows/image-trust.yml
   validate:
     needs: wolfi-trust
     uses: alric-corp/alric-containers-reusable-workflows/.github/workflows/validate-apko-images.yml@7a9b055a462eeb8552d3404c26538b44e8ccd83f # reviewed shared workflows

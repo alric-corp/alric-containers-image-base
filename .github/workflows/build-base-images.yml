@@ -1,4 +1,4 @@
-name: Build & Push Base Images (reusable)
+name: Build base images (reusable)
 
 on:
   workflow_call:

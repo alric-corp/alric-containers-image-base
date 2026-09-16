@@ -21,7 +21,6 @@ REPOSITORY_NAME = re.compile(
     r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/'
     r'[A-Za-z0-9][A-Za-z0-9_.-]{0,99}')
 SHA = re.compile(r'[0-9a-f]{40}')
-GENERATED = {'cve-triage.lock.yml'}
 # Locations, not origin-filtered search results, define the required inventory.
 CALLERS = {
     ('validate-base-images.yml', 'validate'): '.github/workflows/validate-apko-images.yml',
@@ -76,7 +75,7 @@ def document(path):
 
 def local_workflows(root=ROOT):
     return [path for path in sorted((root / '.github/workflows').glob('*'))
-            if path.suffix in {'.yml', '.yaml'} and path.name not in GENERATED]
+            if path.suffix in {'.yml', '.yaml'}]
 
 
 def workflow_documents(paths):
@@ -181,7 +180,7 @@ def tooling_consistency(paths, root=ROOT):
 
 
 def _checkout_wiring(documents):
-    name = 'test-promotion.yml'
+    name = 'ci.yml'
     for job_id in ('test', 'lint-workflows'):
         job = required_job(documents, name, job_id)
         steps = job.get('steps', [])

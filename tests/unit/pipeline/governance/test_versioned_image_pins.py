@@ -33,7 +33,7 @@ class VersionedImagePinsTests(unittest.TestCase):
             inventory.pins(paths), inventory.renovate_matches(
                 json.loads((inventory.ROOT / 'renovate.json').read_text()), paths), set())
         skopeo = [entry for entry in entries if entry['name'] == 'quay.io/skopeo/stable']
-        self.assertEqual(len(skopeo), 3)
+        self.assertEqual(len(skopeo), 2)
         self.assertTrue(all(entry['tag'].endswith('-immutable') for entry in skopeo))
         self.assertTrue(all(entry['managers'] == ['renovate'] for entry in skopeo))
         self.assertEqual(inventory.consistency(skopeo), [])

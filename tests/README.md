@@ -1,6 +1,6 @@
 # Testes de regressão
 
-O workflow `test-promotion.yml` executa as verificações em todo PR e push para
+O workflow `ci.yml` executa as verificações em todo PR e push para
 `main`, sem filtro de paths e com `contents: read`. Ele usa os mesmos alvos
 Make disponíveis localmente. Preparação do ambiente e checkout do executor:
 [CONTRIBUTING.md](../CONTRIBUTING.md).

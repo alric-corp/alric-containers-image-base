@@ -46,7 +46,7 @@ Mozilla e o nome `bundle-pem-test` saem das imagens.
 
 ## Contratos funcionais
 
-O workflow `test-image-composition.yml` constrói imagens temporárias usando
+O workflow `image-trust.yml` constrói imagens temporárias usando
 a mesma receita Melange/Apko e uma CA de teste efêmera. Python, Node, Go,
 Java e .NET fazem HTTPS usando a confiança **instalada na imagem**, sem montar
 PEM, substituir `SSL_CERT_FILE`/`NODE_EXTRA_CA_CERTS` ou configurar um store

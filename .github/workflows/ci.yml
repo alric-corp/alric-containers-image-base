@@ -5,7 +5,7 @@
 # rápido: segundos, não os minutos de melange/apko/Trivy do pipeline
 # principal) e um PR só de documentação recebe resultado definido
 # (sucesso) em vez de check obrigatório travado.
-name: Fast checks (tests + actionlint)
+name: CI
 
 on:
   pull_request: {}
@@ -83,10 +83,6 @@ jobs:
         run: |
           set -euo pipefail
           printf 'sha=%s\n' "$(git -C .reusable-workflows rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      # cve-triage.lock.yml é gerado pelo `gh aw compile` a partir de
-      # cve-triage.md — não faz parte deste lint (não editamos o lock à
-      # mão pra satisfazer o linter). Os workflows abaixo são os únicos
-      # escritos e mantidos diretamente neste repositório.
       - name: actionlint
         run: |
           make lint-workflows ACTIONLINT="docker run --rm -v $PWD:/repo --workdir /repo \

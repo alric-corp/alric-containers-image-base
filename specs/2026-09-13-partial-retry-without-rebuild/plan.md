@@ -249,7 +249,7 @@ alternativa caso o operador prefira não pré-provisionar; não foi
 descartado, apenas não é a preferência.
 
 Templates de proposta (JSON, não aplicados, não lidos por nenhum workflow):
-[policies/aws/proposals/p102-lab-permissions/](../../policies/aws/proposals/p102-lab-permissions/README.md).
+`policies/aws/proposals/p102-lab-permissions/` (removido nesta limpeza; ver histórico Git).
 
 Repositórios de produção `image-base-go1-26`/`image-base-go1-26-dev`
 permanecem fora de qualquer ARN da proposta nova — confirmado por
@@ -331,7 +331,7 @@ P1-02 HOSTED_ACCEPTANCE = PENDING
 ```
 
 Detalhes completos da arquitetura corrigida:
-[policies/aws/proposals/p102-lab-permissions/README.md](../../policies/aws/proposals/p102-lab-permissions/README.md).
+`policies/aws/proposals/p102-lab-permissions/README.md` (removido nesta limpeza; ver histórico Git).
 
 ## Implementação local do job de publicação — 2026-09-15
 

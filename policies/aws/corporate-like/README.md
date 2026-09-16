@@ -4,7 +4,7 @@
 P0_04_IAM_MODEL = CORPORATE_LIKE
 TARGET, NOT APPLIED. Editing these files does not change AWS.
 
-CORPORATE_ROLE_PATTERN = itau-github-repo-<github-repository-id>
+CORPORATE_ROLE_PATTERN = corp-github-repo-<github-repository-id>
 LAB_ROLE_PATTERN        = alric-github-repo-<github-repository-id>
 
 IMAGE_BASE_GITHUB_REPOSITORY_ID = 1360616627
@@ -21,9 +21,8 @@ role (account `712107929769`, region `us-east-1`, scoped to
 `repository/image-base-*`), and represent the **single-role**
 corporate-like equalization decided for P0-04 — bringing this role's ECR
 capability set in line with the observed corporate Containers role
-(`itau-github-repo-1077149569`, see
-`arquitetura-corporativa-ecr-infra-containers.md` in the workspace root,
-§3.2), not the eventual least-privilege publisher split.
+(`corp-github-repo-1077149569`, an illustrative example of the corporate
+naming pattern), not the eventual least-privilege publisher split.
 
 - [`image-base-ecr-target.json`](image-base-ecr-target.json) — target ECR
   permission set (unchanged this round; naming/identity reconciliation
@@ -58,7 +57,7 @@ switch → verify → retire legacy), which has not been executed.
 
 The counterpart for the Infra role
 (target `alric-github-repo-1371995836`, corporate-like ECR policy modeled
-on `itau-github-repo-1280662205`) lives in
+on `corp-github-repo-1280662205`) lives in
 `alric-corp/alric-containers-registry`'s `iam/README.md`.
 
 ## What changes versus the live policy

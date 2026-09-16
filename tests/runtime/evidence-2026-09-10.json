@@ -1,7 +1,7 @@
 {
   "environment": "Local Docker daemon arm64 on macOS 25.6; amd64 emulated",
   "source_run": 34421525305,
-  "source_run_url": "https://github.com/alric-corp/itau-xj7-containers-image-base/actions/runs/34421525305",
+  "source_run_url": "https://github.com/alric-corp/alric-containers-image-base/actions/runs/34421525305",
   "source_event": "push on main",
   "source_run_conclusion": "failure (dotnet8 jobs; artifacts individuais aprovados)",
   "note": "Contratos compilados (Go/Java/.NET) executados pela primeira vez sobre o par runtime + -dev do mesmo run, com Dockerfile multi-stage versionado. Contratos interpretados reexecutados após a mudança de contrato de ambiente (READONLY_PATH/WRITABLE_DIRS/IMAGE_CA_BUNDLE e a segunda área gravável).",

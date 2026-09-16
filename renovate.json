@@ -14,7 +14,7 @@
       "customType": "regex",
       "managerFilePatterns": [
         "/^Makefile$/",
-        "/^\\.github/workflows/(?:build-base-images|test-promotion|test-image-composition)\\.yml$/",
+        "/^\\.github/workflows/(?:build-base-images|ci|image-trust)\\.yml$/",
         "/^scripts/pipeline/runtime/runtime_images\\.py$/"
       ],
       "matchStrings": [
@@ -27,7 +27,7 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^\\.github/workflows/(?:build-base-images|partial-retry-lab)\\.yml$/",
+        "/^\\.github/workflows/build-base-images\\.yml$/",
         "/^scripts/pipeline/runtime/runtime_images\\.py$/"
       ],
       "matchStrings": [

@@ -27,8 +27,7 @@ class DependencyTests(unittest.TestCase):
         self.local = self.root / '.github/workflows'
         self.local.mkdir(parents=True)
         for path in (ROOT / '.github/workflows').glob('*.yml'):
-            if path.name != 'cve-triage.lock.yml':
-                shutil.copyfile(path, self.local / path.name)
+            shutil.copyfile(path, self.local / path.name)
         shutil.copyfile(ROOT / '.github/dependabot.yml', self.root / '.github/dependabot.yml')
         caller = self.read('validate-base-images.yml')['jobs']['validate']['uses']
         self.repository, original_sha = caller.split('/.github/workflows/')[0], caller.rsplit('@', 1)[1]
@@ -327,16 +326,16 @@ class DependencyTests(unittest.TestCase):
         self.rejected('checkout')
 
     def test_fast_check_checkout_cannot_override_resolved_origin_or_pin(self):
-        original = self.read('test-promotion.yml')
+        original = self.read('ci.yml')
         for field, value in (('repository', ALTERNATIVE), ('ref', 'main'), ('persist-credentials', True)):
-            document = self.read('test-promotion.yml')
+            document = self.read('ci.yml')
             step = next(step for step in document['jobs']['test']['steps']
                         if step.get('name') == 'Checkout reusable workflows at the caller SHA')
             step['with'][field] = value
             with self.subTest(field=field):
-                self.write('test-promotion.yml', document)
+                self.write('ci.yml', document)
                 self.rejected('checkout')
-            self.write('test-promotion.yml', original)
+            self.write('ci.yml', original)
 
     def test_additional_uninventoried_shared_dependency_is_rejected(self):
         document = self.read('test-runtime-images.yml')
