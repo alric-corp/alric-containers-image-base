@@ -32,46 +32,45 @@
 
 ## T05 — Reconciliação one-time de mutability (execução real)
 - Critério: A06.
-- [ ] Anexar `drift-remediation/policy.json` à role
+- [x] Anexar `drift-remediation/policy.json` à role
   `alric-github-repo-1371995836` (temporário).
-- [ ] `terraform plan` mostra só `image_tag_mutability` +
+- [x] `terraform plan` mostra só `image_tag_mutability` +
   `image_tag_mutability_exclusion_filter` mudando, nada mais.
-- [ ] `terraform apply` (workflow humano-aprovado).
-- [ ] `terraform plan` final = `No changes`.
-- [ ] `aws ecr describe-repositories` confirma `IMMUTABLE_WITH_EXCLUSION` + `stable`.
-- [ ] Desanexar e apagar a policy temporária.
+- [x] `terraform apply` (workflow humano-aprovado) — run 35065814431, 2 added/2 changed/0 destroyed.
+- [x] `terraform plan` final = `No changes` — run 35065966981.
+- [x] `aws ecr describe-repositories` confirma `IMMUTABLE_WITH_EXCLUSION` + `stable`.
+- [x] Desanexar e apagar a policy temporária.
 
 ## T06 — Build normal (candidato apenas)
 - Critério: A07.
-- [ ] Disparar `workflow.yml` (caminho normal); confirmar `promote-stable` não roda
-  (schedule-only) e `stable` não é tocada.
+- [x] Disparar `workflow.yml` (caminho normal); confirmar `promote-stable` não roda
+  (schedule-only) e `stable` não é tocada — run 35066081529.
 
 ## T07 — Autorizar e executar promoção real
 - Critério: A08, A09.
-- [ ] `STABLE_PROMOTION_AUTHORIZED=true` (repository variable).
-- [ ] Disparar `promote-stable.yml` (`frameworks: ["go1-26","go1-26-dev"]`).
-- [ ] Confirmar `verify-pair` PASS (mesmo run/attempt).
-- [ ] Confirmar read-back: `stable` runtime/dev == candidato runtime/dev.
+- [x] `STABLE_PROMOTION_AUTHORIZED=true` (repository variable).
+- [x] Disparar `promote-stable.yml` (`frameworks: ["go1-26","go1-26-dev"]`) — run 35066851483.
+- [x] Confirmar `verify-pair` PASS (mesmo run/attempt).
+- [x] Confirmar read-back: `stable` runtime/dev == candidato runtime/dev.
 
 ## T08 — Exercitar recovery
 - Critério: A10.
-- [ ] Disparar `recover-stable.yml` contra um digest histórico retido, sem rebuild.
-- [ ] Confirmar `stable` movida de volta e read-back.
-- [ ] Reverter para o estado promovido em T07 (novo recover, ou nova promoção).
+- [x] Disparar `recover-stable.yml` contra um digest histórico retido, sem rebuild — run 35067110376.
+- [x] Confirmar `stable` movida de volta e read-back.
+- [x] Reverter para o estado promovido em T07 (novo recover) — run 35067210461.
 
 ## T09 — Lifecycle preview e apply
 - Critério: A11, A12.
-- [ ] `aws ecr start-lifecycle-policy-preview` / `get-lifecycle-policy-preview` contra o
+- [x] `aws ecr start-lifecycle-policy-preview` / `get-lifecycle-policy-preview` contra o
   conteúdo real dos dois repositórios.
-- [ ] Confirmar `stable` = `NOT_SELECTED_FOR_EXPIRATION`.
-- [ ] Confirmar builds >7 dias = `SELECTED` (se existir algum) e <=7 dias =
-  `NOT_SELECTED`.
-- [ ] STOP se `stable` for selecionada — não aplicar.
-- [ ] Aplicar via Terraform (já declarado em T02) e reconfirmar preview pós-apply.
+- [x] Confirmar `stable` = `NOT_SELECTED_FOR_EXPIRATION`.
+- [~] Confirmar builds >7 dias = `SELECTED` — NOT YET OBSERVABLE, nenhuma imagem tem 7 dias ainda (ver evidence.md A12); <=7 dias = `NOT_SELECTED` confirmado.
+- [x] STOP se `stable` for selecionada — não aplicável, nada foi selecionado.
+- [x] Aplicar via Terraform (já feito em T05) e reconfirmar preview pós-apply.
 
 ## T10 — Terraform final
 - Critério: A13.
-- [ ] `terraform plan` final (pós T05–T09) = `No changes`.
+- [x] `terraform plan` final (pós T05–T09) = `No changes` — run 35067477599.
 
 ## Dependências externas
 
