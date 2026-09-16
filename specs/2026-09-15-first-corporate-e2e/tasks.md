@@ -25,6 +25,11 @@ executadas por este produto.
 
 ## Stage 2 — Read-only preflight
 
+- [x] Remover criação/configuração automática de ECR do publisher.
+- [x] Implementar validação pura e fail-closed do descriptor retornado por
+      `DescribeRepositories`.
+- [x] Cobrir o drift `IMMUTABLE_WITH_EXCLUSION` + wildcard `stable` como
+      regressão negativa.
 - [ ] Leitura read-only da role/trust IAM aprovada (confirmar contra o
       documentado em Stage 1).
 - [ ] Leitura read-only da(s) configuração(ões) ECR (mutability, encryption,

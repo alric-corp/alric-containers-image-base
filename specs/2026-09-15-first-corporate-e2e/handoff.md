@@ -1,17 +1,20 @@
 # HANDOFF — P0-04: First Corporate E2E
 
 - Repositório, branch e commit base: `alric-corp/alric-containers-image-base`,
-  `main`, `1833dfef608fe7ad9bb9703d5a7637f33d2f5aee` (após merge do PR #69,
-  encerramento documental do P1-02).
+  `main`, `3e28dfbe55e8703fa471cd414b8f7aa0d4317edf` (revisão do run sandbox
+  `35022270017`).
 - Objetivo e pasta da spec: `specs/2026-09-15-first-corporate-e2e/` —
   planejamento do primeiro E2E corporativo, sem execução.
-- Estado do diff: 6 arquivos novos nesta pasta (`spec.md`, `plan.md`,
-  `tasks.md`, `acceptance.md`, `evidence.md`, `handoff.md`). Nenhum outro
-  arquivo do repositório foi alterado.
-- Tasks concluídas: Stage 0 — criação dos 6 arquivos (ver `tasks.md`).
-- Verificações e resultados: `make test-unit`/`test-integration`/lints/
-  `check_ai_context`/`git diff --check` executados sobre o repositório com
-  esta pasta nova (ver relatório da sessão).
+- Estado do trabalho: adaptação local, ainda sem staging/commit/PR, para
+  publisher preprovisioned-only. O workflow usa `DescribeRepositories` e
+  preflight puro antes de login/publicação; criação e reconfiguração foram
+  removidas.
+- Tasks concluídas: Stage 0 documental e implementação local do preflight
+  read-only de Stage 2 (ver `tasks.md`).
+- Verificações e resultados: preflight direcionado 13/13, guards do publisher
+  4/4, `make test-unit` 487/487, `make test-integration` 24/24, lints,
+  `check_ai_context` e `git diff --check` aprovados. Nenhuma AWS ou execução
+  hosted foi realizada.
 - Decisões e hipóteses pendentes: candidato único `go1-26`, Profile A para
   IAM, `stable` fora de escopo — todas registradas em `plan.md` como
   hipóteses a validar, não decisões corporativas tomadas.
@@ -19,6 +22,11 @@
   "External owners" abaixo.
 - Próximo passo: revisão independente deste spec, seguida de
   encaminhamento formal das decisões de Stage 1 aos owners nomeados.
+
+Finding preservado: o run `35022270017` alterou os dois ECRs Go 1.26 para
+`IMMUTABLE_WITH_EXCLUSION`. Nenhuma AWS foi executada nesta correção.
+`AWS_REMEDIATION_REQUIRED = YES`; Infra deve restaurar `IMMUTABLE` pelo
+Terraform depois que o código preprovisioned-only estiver integrado.
 
 ```text
 P0-04 = PLANNED

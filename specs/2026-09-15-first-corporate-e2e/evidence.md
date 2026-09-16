@@ -35,6 +35,43 @@ corporativa:
 Nenhuma linha deste precedente deve ser copiada para as seções abaixo como
 se fosse evidência corporativa.
 
+## Integration finding — Infra-owned ECR drift
+
+O run sandbox `35022270017`, revisão
+`3e28dfbe55e8703fa471cd414b8f7aa0d4317edf`, publicou
+`go1-26`/`go1-26-dev` depois que os destinos já haviam sido provisionados
+pelo Terraform de `alric-corp/alric-containers-registry`. O publisher ainda
+executava `PutImageTagMutability` e alterou ambos de `IMMUTABLE`, sem exclusion,
+para `IMMUTABLE_WITH_EXCLUSION` com wildcard `stable`.
+
+```text
+CONTAINERS_ECR_DRIFT_OBSERVED = YES
+CAUSE = publisher mutated Infra-owned repository
+DESIRED = Infra owns configuration; Containers validates and publishes
+AWS_REMEDIATION_REQUIRED = YES
+AWS_EXECUTION_THIS_CHANGE = NOT RUN
+```
+
+Esta é evidência técnica pessoal/sandbox e finding de integração, não execução
+nem aceite corporativo. O Terraform não causou o drift. Nenhuma remediação AWS
+foi feita nesta mudança; após a integração do código, Infra deve reconciliar
+`IMMUTABLE_WITH_EXCLUSION` → `IMMUTABLE` pelo seu source of truth.
+
+## Local verification — preprovisioned-only adaptation
+
+Executado localmente, sem AWS e sem workflow hosted:
+
+- preflight direcionado: 13 testes `PASS`;
+- guards do publisher: 4 testes `PASS`;
+- `make test-unit`: 487 testes `PASS`;
+- `make test-integration`: 24 testes `PASS`;
+- `make lint-local`, `make lint-shared`, `make lint-workflows`: `PASS`;
+- `python3 -B tools/check_ai_context.py`: `PASS`;
+- `git diff --check`: `PASS`.
+
+Isso comprova o comportamento local e o wiring estático. A falha esperada
+contra os ECRs atualmente em drift não foi executada em AWS nesta sessão.
+
 ## External decisions
 
 | Decisão | Owner | Estado | Referência |
@@ -118,8 +155,9 @@ equivale a revisão independente.
 
 ## Limites e resultado
 
-Implementado nesta entrega: estrutura documental completa (spec, plan,
-tasks, acceptance, evidence, handoff). Não implementado: qualquer execução
+Implementado localmente nesta entrega: publisher preprovisioned-only com
+preflight estrito e testes negativos; documentação do finding histórico.
+Não implementado: qualquer execução
 corporativa, qualquer decisão externa, qualquer recurso AWS real. Depende
 inteiramente de terceiros (Cloud/IAM, PKI/Segurança, Network/Segurança,
 AppSec/Segurança, Admin GitHub) para sair do estado `NOT RUN`. Nenhum

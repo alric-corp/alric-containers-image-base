@@ -1,0 +1,68 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EcrAuthorizationToken",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcrPullAndPush",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:712107929769:repository/image-base-*"
+    },
+    {
+      "Sid": "EcrRepositoryAndImages",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:CreateRepository",
+        "ecr:DescribeRepositories",
+        "ecr:ListImages",
+        "ecr:DescribeImages"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:712107929769:repository/image-base-*"
+    },
+    {
+      "Sid": "EcrRepositoryPolicy",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetRepositoryPolicy",
+        "ecr:SetRepositoryPolicy",
+        "ecr:DeleteRepositoryPolicy"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:712107929769:repository/image-base-*"
+    },
+    {
+      "Sid": "EcrScanning",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:StartImageScan",
+        "ecr:DescribeImageScanFindings",
+        "ecr:PutImageScanningConfiguration"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:712107929769:repository/image-base-*"
+    },
+    {
+      "Sid": "EcrTags",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:TagResource",
+        "ecr:UntagResource",
+        "ecr:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:712107929769:repository/image-base-*"
+    }
+  ]
+}

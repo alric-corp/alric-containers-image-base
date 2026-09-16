@@ -196,6 +196,34 @@ O scan de zlib/CVE dos demais frameworks segue em trilha paralela. Falhas
 relacionadas a frameworks fora do perfil não bloqueiam o candidato Go 1.26 e
 não são ignoradas, removidas ou declaradas saudáveis.
 
+## Ownership do ECR e preflight obrigatório
+
+`alric-corp/alric-containers-registry` é a source of truth da configuração dos
+repositórios ECR. Este repositório é a source of truth somente do conteúdo e
+das evidências dos artifacts publicados. O publisher assume destinos
+pré-provisionados e executa `DescribeRepositories` seguido de validação
+fail-closed antes do login/publicação. Ele não cria, configura nem repara ECR.
+
+O contrato validado exige nome, ARN/account, URI/região, `IMMUTABLE`, nenhuma
+exclusion filter, `scanOnPush=true` e encryption `AES256`. Qualquer ausência ou
+divergência encerra a publicação antes de `PutImage`. Não há compatibilidade
+temporária para `IMMUTABLE_WITH_EXCLUSION`.
+
+O run sandbox `35022270017` observou o comportamento anterior alterando
+`image-base-go1-26` e `image-base-go1-26-dev` para
+`IMMUTABLE_WITH_EXCLUSION` com exclusion `stable`. Isso é finding técnico
+histórico, não aceite corporativo e não é erro do Terraform. A remediação do
+estado AWS deve ocorrer posteriormente pelo source of truth de Infra:
+`IMMUTABLE_WITH_EXCLUSION` → `IMMUTABLE`.
+
+```text
+CONTAINERS_ECR_DRIFT_OBSERVED = YES — HISTORICAL RUN 35022270017
+AWS_REMEDIATION_REQUIRED = YES
+IAM_ENFORCED_SEPARATION = NO
+PROCESS_ENFORCED_SEPARATION = YES
+ARCHITECTURE_ENFORCED_SEPARATION = YES
+```
+
 Para PRs, o resolver `scripts/pipeline/governance/pr_execution_scope.py`
 seleciona `P0_04` somente para paths específicos do candidato, documentação
 ou spec. Qualquer alteração compartilhada, não-P0 ou ambígua seleciona

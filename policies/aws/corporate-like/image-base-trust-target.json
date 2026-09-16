@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "GitHubOIDCImageBase",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::712107929769:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:sub": "repo:alric-corp@178685987/alric-containers-image-base@1360616627:ref:refs/heads/main",
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:repository_id": "1360616627",
+          "token.actions.githubusercontent.com:repository_owner_id": "178685987"
+        }
+      }
+    }
+  ]
+}
