@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Validate an Infra-owned, pre-provisioned ECR repository descriptor."""
+"""Validate an Infra-owned, pre-provisioned ECR repository descriptor.
+
+RFC-013/ADR-0005 contract: exactly `IMMUTABLE_WITH_EXCLUSION` with exactly
+one exclusion filter, `{filterType: WILDCARD, filter: stable}` -- `stable`
+is mutable/movable, every other tag (including the immutable build tag)
+stays immutable. Infra (`alric-containers-registry`) owns this
+configuration via Terraform; this module only ever reads it back and fails
+closed on any divergence -- plain `IMMUTABLE`, `MUTABLE`, a different or
+additional exclusion filter, all rejected.
+"""
 
 import argparse
 import json
@@ -50,10 +59,18 @@ def validate_repository(document, expected_name, expected_account, expected_regi
     require(re.fullmatch(uri_pattern, uri) is not None,
             'repositoryUri does not match account, region and repository')
 
-    require(repository.get('imageTagMutability') == 'IMMUTABLE',
-            'imageTagMutability must be IMMUTABLE')
-    exclusions = repository.get('imageTagMutabilityExclusionFilters', [])
-    require(exclusions == [], 'image tag mutability exclusions are forbidden')
+    # RFC-013/ADR-0005: stable é a única exclusão de mutabilidade aceita, e
+    # precisa ser exatamente essa -- não uma entre outras, não com filterType
+    # diferente, não combinada com qualquer segunda exclusão (latest, *,
+    # build* ou qualquer outra). Comparação por igualdade estrutural exata:
+    # uma lista com um único dict, só essas duas chaves, só esses dois
+    # valores. Qualquer divergência falha fechado.
+    require(repository.get('imageTagMutability') == 'IMMUTABLE_WITH_EXCLUSION',
+            'imageTagMutability must be IMMUTABLE_WITH_EXCLUSION')
+    exclusions = repository.get('imageTagMutabilityExclusionFilters')
+    require(exclusions == [{'filterType': 'WILDCARD', 'filter': 'stable'}],
+            'imageTagMutabilityExclusionFilters must be exactly '
+            '[{filterType: WILDCARD, filter: stable}]')
 
     scanning = repository.get('imageScanningConfiguration')
     require(isinstance(scanning, dict) and scanning.get('scanOnPush') is True,
@@ -69,8 +86,8 @@ def validate_repository(document, expected_name, expected_account, expected_regi
         'repositoryUri': uri,
         'account': expected_account,
         'region': expected_region,
-        'imageTagMutability': 'IMMUTABLE',
-        'imageTagMutabilityExclusionFilters': [],
+        'imageTagMutability': 'IMMUTABLE_WITH_EXCLUSION',
+        'imageTagMutabilityExclusionFilters': [{'filterType': 'WILDCARD', 'filter': 'stable'}],
         'scanOnPush': True,
         'encryptionType': 'AES256',
     }
