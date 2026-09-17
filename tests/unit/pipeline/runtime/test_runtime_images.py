@@ -65,11 +65,18 @@ class RuntimeContractTests(unittest.TestCase):
         # Cobertura gradual explícita: dotnet8 não tem variante -dev no
         # catálogo, então não pode ter contrato compilado — e o erro tem de
         # dizer isso, não passar silenciosamente como "sem contrato".
-        for framework in ('dotnet8',):
-            with self.subTest(framework=framework), self.assertRaises(ValueError) as raised:
-                runtime.project(framework)
+        # Todo framework compilado do catálogo tem par -dev desde que dotnet8
+        # passou a ser um par oficial, então o caso sem par usa um catálogo
+        # sintético -- a mensagem precisa continuar dizendo o que falta.
+        with tempfile.TemporaryDirectory() as temporary:
+            catalog = Path(temporary) / 'frameworks'
+            catalog.mkdir()
+            (catalog / 'dotnet9.yaml').write_text('include: distroless/runtime.yaml\n')
+            with patch.object(runtime, 'ROOT', Path(temporary)):
+                with self.assertRaises(ValueError) as raised:
+                    runtime.project('dotnet9')
             self.assertIn('-dev', str(raised.exception))
-        for framework in ('go1-25', 'go1-26', 'java21', 'java25', 'dotnet10'):
+        for framework in ('go1-25', 'go1-26', 'java21', 'java25', 'dotnet10', 'dotnet8'):
             with self.subTest(framework=framework):
                 directory, dev, toolchain = runtime.project(framework)
                 self.assertEqual(dev, f'{framework}-dev')
@@ -87,10 +94,10 @@ class RuntimeContractTests(unittest.TestCase):
         # Um framework fora do catálogo não vira contrato por parecer com um.
         with self.assertRaises(ValueError):
             runtime.expected_version('go1-99')
-        for framework in ('go1-25', 'go1-26', 'java21', 'java25', 'dotnet10', 'nodejs22',
-                          'python3-13'):
+        for framework in ('go1-25', 'go1-26', 'java21', 'java25', 'dotnet10', 'dotnet8',
+                          'nodejs22', 'python3-13'):
             self.assertIn(framework, runtime.contracts())
-        for framework in ('dotnet8', 'go1-25-dev', 'java25-dev'):
+        for framework in ('go1-25-dev', 'java25-dev', 'dotnet8-dev'):
             self.assertNotIn(framework, runtime.contracts())
 
     def test_compiled_contract_without_dev_layout_is_rejected_before_docker(self):

@@ -1,4 +1,15 @@
-include: distroless/runtime.yaml
+# Variante "run": runtime ASP.NET Core, sem SDK e sem shell. Publique em
+# dotnet8-dev.yaml (estagio de build) e copie a saida de `dotnet publish`
+# para esta imagem no estagio final.
+#
+# Unico framework do catalogo que nao usa a fonte default: o Wolfi nao
+# entrega dotnet-8-sdk corrigido (maximo 8.0.127-r0, e o proprio advisory do
+# Wolfi aponta 8.0.131-r0), enquanto o Alpine v3.24 publica
+# aspnetcore8-runtime 8.0.31-r0 e dotnet8-sdk 8.0.131-r0, com as 5 CVEs
+# bloqueantes corrigidas na origem. A autorizacao esta em
+# policies/sources/package-sources.json; nenhum outro framework pode usar
+# esta cadeia sem passar pela mesma policy.
+include: distroless/runtime-alpine-3.24.yaml
 contents:
   packages:
-    - dotnet-8-sdk
+    - aspnetcore8-runtime

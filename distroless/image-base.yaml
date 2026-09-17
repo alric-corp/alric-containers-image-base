@@ -1,8 +1,9 @@
+# Composicao compartilhada, sem fonte de pacotes: `repositories` e `keyring`
+# vivem em distroless/sources/<source>.yaml e sao escolhidos pela cadeia de
+# include do framework. O `include` do apko faz APPEND de listas, nunca
+# override -- declarar uma fonte aqui e outra no framework produziria um
+# artifact com dois keyrings. Os pacotes abaixo existem nas duas distros.
 contents:
-  repositories:
-    - https://packages.wolfi.dev/os
-  keyring:
-    - melange/keys/wolfi-signing.rsa.pub
   # wolfi-base NÃO entra aqui de propósito: ele depende de apk-tools + busybox,
   # o que dá shell e gerenciador de pacotes em toda imagem "distroless" que
   # inclui este arquivo. wolfi-baselayout já vem transitivamente via

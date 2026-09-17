@@ -1,0 +1,15 @@
+# Fonte de EXCECAO, release fixa v3.24, autorizada apenas para os frameworks
+# listados em policies/sources/package-sources.json. Nao e default e nao e
+# selecionada automaticamente. `edge`/`latest` e qualquer outra release sao
+# recusadas pela policy (fail closed).
+#
+# Duas chaves porque o Alpine assina o APKINDEX por arquitetura
+# (6165ee59 = x86_64, 616ae350 = aarch64); o Wolfi usa uma so.
+include: distroless/image-base.yaml
+contents:
+  repositories:
+    - https://dl-cdn.alpinelinux.org/alpine/v3.24/main
+    - https://dl-cdn.alpinelinux.org/alpine/v3.24/community
+  keyring:
+    - melange/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub
+    - melange/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub

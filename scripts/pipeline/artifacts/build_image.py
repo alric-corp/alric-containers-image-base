@@ -12,6 +12,8 @@ from pathlib import Path
 import re
 import subprocess
 
+from scripts.pipeline.artifacts import sbom_completeness
+from scripts.pipeline.governance.source_trust import require_keyring, require_sources
 from scripts.pipeline.governance.wolfi_trust import require_key
 
 
@@ -28,6 +30,9 @@ def build(framework, output, engine='native', repository='melange-repo/packages'
     if not config.is_file():
         raise ValueError('unknown framework')
     require_key(Path.cwd())
+    # Fail closed antes de qualquer resolucao: o framework precisa resolver
+    # para uma fonte que a policy autoriza para ele. Sem fallback entre fontes.
+    require_sources(Path.cwd())
     revision = command(['git', 'rev-parse', 'HEAD'])
     epoch = int(command(['git', 'show', '-s', '--format=%ct', 'HEAD']))
     date = datetime.fromtimestamp(epoch, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -55,6 +60,10 @@ def build(framework, output, engine='native', repository='melange-repo/packages'
         lock.write_bytes(Path(lockfile).read_bytes())
     else:
         subprocess.run(apko + ['lock', str(config), '--output', str(lock)] + common, check=True)
+    # O apko une chaves que ele descobre pela rede a keyring declarada e nao
+    # oferece knob para desligar isso, entao a keyring efetiva e conferida
+    # aqui -- depois da resolucao, antes de construir qualquer coisa com ela.
+    require_keyring(lock, framework, Path.cwd())
     annotations = {'source': f'https://github.com/{source}', 'revision': revision,
                    'version': f'{framework}-{revision[:12]}', 'vendor': source.split('/')[0],
                    # This repository has no declared distribution license. Package
@@ -70,6 +79,13 @@ def build(framework, output, engine='native', repository='melange-repo/packages'
     metadata = {'revision': revision, 'source_date_epoch': epoch, 'build_date': date,
                 'annotations': annotations, 'lock_sha256': hashlib.sha256(lock.read_bytes()).hexdigest(),
                 'config_sha256': hashlib.sha256(config.read_bytes()).hexdigest()}
+    # O apko so descreve pacotes cujo .apk embute SBOM do Melange, entao o
+    # documento que ele produziu e completado a partir do lock deste mesmo
+    # build e depois conferido contra ele. Nao e um segundo pipeline de SBOM.
+    sbom_completeness.complete(output, framework)
+    missing = sbom_completeness.errors(output)
+    if missing:
+        raise ValueError('; '.join(missing))
     (output / 'build-inputs.json').write_text(json.dumps(metadata, indent=2) + '\n')
     return metadata
 

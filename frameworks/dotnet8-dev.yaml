@@ -1,0 +1,12 @@
+# Variante "dev": usada so no estagio de build (multi-stage) da aplicacao,
+# para `dotnet publish`. Nunca deve ser a imagem final publicada em
+# producao -- para isso use dotnet8.yaml (runtime ASP.NET, sem o SDK).
+#
+# busybox entra pelo mesmo motivo das demais `-dev`: um `RUN dotnet publish
+# ...` normal (shell-form) num Dockerfile falha sem /bin/sh.
+# Fonte Alpine v3.24 pelo mesmo motivo de frameworks/dotnet8.yaml.
+include: distroless/runtime-alpine-3.24.yaml
+contents:
+  packages:
+    - dotnet8-sdk
+    - busybox

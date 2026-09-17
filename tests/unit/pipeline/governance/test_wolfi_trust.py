@@ -19,10 +19,15 @@ class WolfiTrustTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        for directory in ('distroless', 'frameworks', 'melange'):
-            (self.root / directory).mkdir()
+        (self.root / 'melange').mkdir()
         shutil.copytree(wolfi_trust.ROOT / 'melange/keys', self.root / 'melange/keys')
-        for relative in ('distroless/image-base.yaml', 'melange/image-base-ca-certificates.yaml'):
+        # A regra de keyring da composição mora no contrato por fonte, então a
+        # fixture espelha a composição real e a policy que ele lê.
+        shutil.copytree(wolfi_trust.ROOT / 'distroless', self.root / 'distroless')
+        shutil.copytree(wolfi_trust.ROOT / 'frameworks', self.root / 'frameworks')
+        (self.root / 'policies/sources').mkdir(parents=True)
+        for relative in ('melange/image-base-ca-certificates.yaml',
+                         'policies/sources/package-sources.json'):
             shutil.copy(wolfi_trust.ROOT / relative, self.root / relative)
         self.key = self.root / wolfi_trust.KEY
         self.policy = self.root / wolfi_trust.POLICY
@@ -102,7 +107,7 @@ class WolfiTrustTests(unittest.TestCase):
             self.assertFalse((self.root / 'example.oci').exists())
 
     def test_remote_keyring_reintroduction_is_rejected_in_both_configs(self):
-        for relative, local in [('distroless/image-base.yaml', str(wolfi_trust.KEY)),
+        for relative, local in [('distroless/sources/wolfi.yaml', str(wolfi_trust.KEY)),
                                 ('melange/image-base-ca-certificates.yaml', 'keys/wolfi-signing.rsa.pub')]:
             with self.subTest(config=relative):
                 path = self.root / relative
@@ -122,10 +127,13 @@ class WolfiTrustTests(unittest.TestCase):
                 self.assertTrue(wolfi_trust.config_errors(self.root))
 
     def test_missing_keyring_or_extra_local_key_is_rejected(self):
-        path = self.root / 'distroless/image-base.yaml'
+        path = self.root / 'distroless/sources/wolfi.yaml'
         for keyring in (None, [], [str(wolfi_trust.KEY), 'other-key.pub']):
             with self.subTest(keyring=keyring):
-                path.write_text(yaml.safe_dump({'contents': {'keyring': keyring}}))
+                path.write_text(yaml.safe_dump(
+                    {'include': 'distroless/image-base.yaml',
+                     'contents': {'repositories': ['https://packages.wolfi.dev/os'],
+                                  'keyring': keyring}}))
                 self.assertTrue(wolfi_trust.config_errors(self.root))
 
     def test_monitor_reports_same_divergent_and_unavailable_without_writes(self):

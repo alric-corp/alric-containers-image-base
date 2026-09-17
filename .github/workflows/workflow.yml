@@ -45,9 +45,18 @@ on:
     - cron: "0 3 * * *"   # build diário: 00:00 America/Sao_Paulo (03:00 UTC)
     - cron: "17 * * * *"  # promoção horária; soak mínimo contado desde o push
   workflow_dispatch:
-    # P0-04: o primeiro E2E corporativo tem seleção fixa e auditável.
-    # A capacidade FULL continua disponível nos workflows reutilizáveis;
-    # este entrypoint não aceita ampliar o escopo sem mudança revisada.
+    # P0-04: o caminho automático (schedule e push na main) continua com
+    # seleção fixa e auditável — o lote Go 1.26. O dispatch manual permite
+    # escolher explicitamente quais frameworks do catálogo rodar, para
+    # habilitar um framework novo sem ampliar o escopo automático. O input
+    # não é confiado: `scripts.pipeline.catalog.validate_inputs` o confere
+    # contra o próprio catálogo (frameworks/*.yaml) antes de qualquer build
+    # ou autenticação AWS, e recusa nome desconhecido, repetido ou traversal.
+    inputs:
+      frameworks:
+        description: 'JSON array de frameworks do catálogo (ex.: ["dotnet8", "dotnet8-dev"])'
+        type: string
+        default: '["go1-26", "go1-26-dev"]'
 
 # PRs recebem apenas leitura. Escrita/OIDC são concedidos nos jobs autorizados.
 permissions:
@@ -103,7 +112,7 @@ jobs:
     needs: [pr_execution_scope]
     uses: ./.github/workflows/validate-base-images.yml
     with:
-      frameworks: '["dotnet10", "dotnet10-dev", "go1-25", "go1-25-dev", "go1-26", "go1-26-dev", "java21", "java21-dev", "java25", "java25-dev", "nodejs22", "nodejs22-dev", "nodejs24", "nodejs24-dev", "python3-13", "python3-14"]'
+      frameworks: '["dotnet10", "dotnet10-dev", "dotnet8", "dotnet8-dev", "go1-25", "go1-25-dev", "go1-26", "go1-26-dev", "java21", "java21-dev", "java25", "java25-dev", "nodejs22", "nodejs22-dev", "nodejs24", "nodejs24-dev", "python3-13", "python3-14"]'
 
   build-base-images:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * *')
@@ -117,7 +126,8 @@ jobs:
     with:
       aws-region: ${{ vars.AWS_REGION }}
       aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
-      frameworks: '["go1-26", "go1-26-dev"]'
+      # Só o dispatch manual escolhe; schedule e push continuam no lote fixo.
+      frameworks: ${{ github.event_name == 'workflow_dispatch' && inputs.frameworks || '["go1-26", "go1-26-dev"]' }}
 
   promote-stable:
     if: github.ref == 'refs/heads/main' && github.event.schedule == '17 * * * *'

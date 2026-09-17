@@ -10,6 +10,13 @@
 | Origem | Roadmap consolidado da RFC-013, item "dotnet8 fora do lote padrão" (P1, Fase 1) |
 
 ## Contexto
+> **Substituído em parte pelo [ADR-0007](0007-multi-source-alpine-dotnet8.md) (17/09/2026).**
+> A causa desta exclusão — o Wolfi não publicar `dotnet-8-sdk` corrigido — deixou de
+> valer quando `dotnet8` passou a ser construído a partir do Alpine v3.24, onde as cinco
+> CVEs estão corrigidas na origem. `dotnet8` voltou ao catálogo como par `dotnet8`/
+> `dotnet8-dev`, sem exceção de saúde. O texto abaixo é preservado como registro da
+> decisão original e não foi reescrito.
+
 
 `frameworks/dotnet8.yaml` compõe a imagem com `dotnet-8-sdk` do Wolfi. O scan
 Trivy bloqueia o framework com CVEs **com correção disponível** segundo o

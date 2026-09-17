@@ -45,27 +45,38 @@ class RealTreeTests(unittest.TestCase):
         names, policy, document = batch.load()
         excluded, problems = batch.exclusions(policy)
         self.assertEqual(problems, [])
-        self.assertEqual(sorted(excluded), ['dotnet8'])
+        self.assertEqual(sorted(excluded), [])
         found = batch.batches(document)
         self.assertEqual(batch.lint(names, excluded, found), [])
         expected = batch.expected_batch(names, excluded)
-        self.assertNotIn('dotnet8', expected)
+        # dotnet8 entrou no lote do catálogo quando deixou de ser exceção:
+        # agora é um framework como qualquer outro, com par -dev próprio.
+        self.assertIn('dotnet8', expected)
+        self.assertIn('dotnet8-dev', expected)
         self.assertIn('dotnet8', names)
         for job_id in batch.BATCH_JOBS:
             names_in_job, problem = batch.parse_batch(job_id, found[job_id])
             self.assertIsNone(problem)
+            # Mesma regra do lint: o perfil P0-04 vale por VALOR, seja escrito
+            # como literal ou como fallback da expressão de dispatch.
             expected_for_job = (batch.P0_04_BATCH
-                                if found[job_id] == json.dumps(batch.P0_04_BATCH)
+                                if names_in_job == batch.P0_04_BATCH
                                 else expected)
             self.assertEqual(sorted(names_in_job), sorted(expected_for_job), job_id)
 
     def test_the_exclusion_is_a_reviewed_decision_with_a_valid_adr(self):
         policy = json.loads((ROOT / 'policies/operations/health.json').read_text())
-        entry = policy['exceptions']['dotnet8']
-        for field in batch.REQUIRED_FIELDS:
-            self.assertTrue(entry.get(field), field)
-        self.assertEqual(entry['adr'], 'docs/adr/0001-dotnet8-fora-do-lote-padrao.md')
-        self.assertIsNone(batch.adr_problem(entry['adr']))
+        # dotnet8 deixou de ser exceção quando passou a ser construído a partir
+        # do Alpine v3.24: o motivo registrado (o Wolfi não publicar a correção)
+        # não existe mais. Nenhuma exceção histórica pode sobreviver apontando
+        # para o modelo antigo; as que existirem seguem valendo a mesma forma.
+        exceptions = policy.get('exceptions') or {}
+        self.assertNotIn('dotnet8', exceptions)
+        for framework, entry in exceptions.items():
+            with self.subTest(framework=framework):
+                for field in batch.REQUIRED_FIELDS:
+                    self.assertTrue(entry.get(field), field)
+                self.assertIsNone(batch.adr_problem(entry['adr']))
 
     def test_the_cli_lint_and_list_agree_with_the_tree(self):
         lint = run_cli('lint')
@@ -73,9 +84,9 @@ class RealTreeTests(unittest.TestCase):
         listing = run_cli('list')
         self.assertEqual(listing.returncode, 0, listing.stderr)
         report = json.loads(listing.stdout)
-        self.assertEqual(report['excluded'], ['dotnet8'])
+        self.assertEqual(report['excluded'], [])
         self.assertEqual(report['problems'], [])
-        self.assertEqual(len(report['default_batch']), len(report['catalog']) - 1)
+        self.assertEqual(len(report['default_batch']), len(report['catalog']))
 
 
 class LintTests(unittest.TestCase):

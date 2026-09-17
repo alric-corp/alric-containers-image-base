@@ -1,0 +1,9 @@
+# Fonte de pacotes DEFAULT do produto. Repositorio e keyring exatamente como
+# estavam em distroless/image-base.yaml antes da separacao: nenhuma versao ou
+# pacote Wolfi muda por causa dela.
+include: distroless/image-base.yaml
+contents:
+  repositories:
+    - https://packages.wolfi.dev/os
+  keyring:
+    - melange/keys/wolfi-signing.rsa.pub

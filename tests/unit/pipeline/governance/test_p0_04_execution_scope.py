@@ -24,9 +24,19 @@ class P0_04ExecutionScopeTests(unittest.TestCase):
     def test_build_and_pr_selection_is_exact(self):
         self.assertEqual(
             json.loads(self.jobs['validate-pr']['with']['frameworks']), P0_04)
+        # O dispatch manual escolhe explicitamente; schedule e push continuam
+        # caindo no literal fixo. A forma é exatamente esta -- qualquer outra
+        # expressão deixaria uma fonte externa decidir o lote automático.
         self.assertEqual(
             self.jobs['build-base-images']['with']['frameworks'],
-                         '["go1-26", "go1-26-dev"]')
+            "${{ github.event_name == 'workflow_dispatch' && inputs.frameworks"
+            " || '[\"go1-26\", \"go1-26-dev\"]' }}")
+
+    def test_manual_dispatch_input_defaults_to_the_fixed_profile(self):
+        triggers = self.document.get('on') or self.document.get(True)
+        dispatch = triggers['workflow_dispatch']['inputs']['frameworks']
+        self.assertEqual(json.loads(dispatch['default']), P0_04)
+        self.assertEqual(dispatch['type'], 'string')
 
     def test_promotion_caller_uses_the_same_exact_profile(self):
         self.assertEqual(

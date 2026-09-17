@@ -48,15 +48,7 @@
     "sbom-": 30,
     "image-trust-": 30
   },
-  "exceptions": {
-    "dotnet8": {
-      "reason": "scan bloqueia com CVEs cuja correção o repositório Wolfi consultado não entrega: o advisory aponta 8.0.129-r1, mas o APKINDEX de packages.wolfi.dev/os só publica até dotnet-8-sdk 8.0.127-r0 (conferido em 09/09/2026 e novamente em 12/09/2026). Rebuild não resolve; depende de a Wolfi publicar o pacote corrigido ou de retirar dotnet8 do catálogo.",
-      "owner": "@alric-corp/github_xj7_maintainer",
-      "review_by": "2026-10-09",
-      "adr": "docs/adr/0001-dotnet8-fora-do-lote-padrao.md",
-      "$comment": "Exceção reportada como conhecida em vez de alerta novo a cada run, para não treinar quem lê a ignorar o alerta. A data de revisão é obrigatória: exceção vencida gera alerta própria. Desde o ADR-0001 o framework também fica fora do lote padrão (validate-pr, build diário e promoção); o catálogo, o repositório ECR e o gate de CVE não mudam, e a reinclusão é testada por workflow_dispatch quando o Wolfi publicar dotnet-8-sdk >= 8.0.129-r1."
-    }
-  },
+  "exceptions": {},
   "execution_scope": {
     "current": [
       "go1-26",

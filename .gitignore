@@ -22,6 +22,10 @@ melange/melange-cache/
 *.rsa
 *.rsa.pub
 !melange/keys/wolfi-signing.rsa.pub
+# Ancoras de confianca pinadas da fonte de excecao Alpine v3.24: precisam ser
+# versionadas, senao o contrato de keyring nao tem contra o que comparar.
+!melange/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub
+!melange/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub
 
 # apko/docker build artifacts
 *.tar

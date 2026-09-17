@@ -68,12 +68,18 @@ def require_key(root=None):
 
 
 def config_errors(root=None):
-    """Check the product's keyring fields with its existing YAML dependency."""
+    """Keyring rules of the product.
+
+    The Melange build environment is Wolfi and stays pinned to exactly the local
+    Wolfi key. Image composition (distroless/, frameworks/) is no longer required
+    to be Wolfi: each framework must satisfy the trust contract of the source its
+    include chain resolves to, which source_trust validates and fails closed on.
+    """
     import yaml
+    from scripts.pipeline.governance import source_trust
     root = Path(root) if root is not None else ROOT
     errors = []
-    required = {root / 'distroless/image-base.yaml',
-                root / 'melange/image-base-ca-certificates.yaml'}
+    required = {root / 'melange/image-base-ca-certificates.yaml'}
     paths = set(required)
 
     def keyrings(value):
@@ -86,23 +92,21 @@ def config_errors(root=None):
             for child in value:
                 yield from keyrings(child)
 
-    for directory in ('distroless', 'frameworks', 'melange'):
-        for extension in ('*.yaml', '*.yml'):
-            paths.update((root / directory).rglob(extension))
+    for extension in ('*.yaml', '*.yml'):
+        paths.update((root / 'melange').rglob(extension))
+    expected = str(KEY.relative_to('melange'))
     for path in sorted(paths):
         relative = path.relative_to(root)
-        expected = str(KEY.relative_to('melange')) if relative.parts[0] == 'melange' else str(KEY)
         try:
             document = yaml.safe_load(path.read_text())
-            contents = (document.get('environment') or {}).get('contents') \
-                if relative.parts[0] == 'melange' else document.get('contents')
+            contents = (document.get('environment') or {}).get('contents')
             keyring = (contents or {}).get('keyring')
             if (path in required and keyring != [expected]) \
                     or any(value != [expected] for value in keyrings(document)):
                 errors.append(f'{relative}: keyring must be exactly the local key [{expected}]')
         except (OSError, ValueError, AttributeError, yaml.YAMLError) as error:
             errors.append(f'{relative}: cannot verify local keyring ({error})')
-    return errors
+    return errors + source_trust.framework_errors(root)
 
 
 def upstream_status(entry, fetch=None):

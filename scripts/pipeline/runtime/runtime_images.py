@@ -320,6 +320,7 @@ def run_compiled(framework, arch, runtime_image, dev_image, urls, ca, build_time
         command('docker', 'build', '--platform', f'linux/{arch}', '--network', 'none',
                 '--build-arg', f'BUILD_IMAGE={dev_image}',
                 '--build-arg', f'RUNTIME_IMAGE={runtime_image}',
+                '--build-arg', f'RUNTIME_MAJOR={expected_version(framework)}',
                 '--tag', tag, '--file', str(directory / 'Dockerfile'), str(directory),
                 timeout=build_timeout)
         build_seconds = round(time.monotonic() - started, 1)

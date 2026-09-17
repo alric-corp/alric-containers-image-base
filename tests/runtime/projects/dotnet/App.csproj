@@ -1,7 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- RuntimeMajor vem do catalogo (dotnet10 -> 10, dotnet8 -> 8): o mesmo
+         projeto compila no SDK que acompanha a imagem candidata. Sem a
+         propriedade, o alvo continua sendo net10.0, como antes. -->
+    <RuntimeMajor Condition="'$(RuntimeMajor)' == ''">10</RuntimeMajor>
+    <TargetFramework>net$(RuntimeMajor).0</TargetFramework>
     <AssemblyName>runtime-contract</AssemblyName>
     <RootNamespace>RuntimeContract</RootNamespace>
     <Nullable>disable</Nullable>

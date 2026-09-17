@@ -1,0 +1,14 @@
+# Equivalente a distroless/runtime.yaml na fonte de excecao Alpine v3.24.
+# So o bloco `accounts` se repete: o `include` do apko e uma string unica,
+# entao a cadeia precisa ser linear e nao da para compor "fonte + runtime" em
+# dois includes. Toda a composicao real continua vindo de image-base.yaml.
+include: distroless/sources/alpine-3.24.yaml
+accounts:
+  groups:
+    - groupname: appuser
+      gid: 10000
+  users:
+    - username: appuser
+      uid: 10000
+      gid: 10000
+  run-as: "10000"

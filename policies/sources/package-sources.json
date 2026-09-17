@@ -1,0 +1,52 @@
+{
+  "$comment": "Contrato de confianca por fonte de pacotes. Cada fonte declara exatamente os repositories, a keyring, a release, os hashes pinados e as origens de discovery aceitas. Um framework so pode usar uma fonte diferente da default se estiver listado em framework_sources, com motivo, dono, ADR e review_by. Fonte desconhecida, release nao autorizada, repository arbitrario, keyring arbitraria ou chave nao pinada falham fechado. Nao existe fallback entre fontes.",
+  "default": "wolfi",
+  "sources": {
+    "wolfi": {
+      "distribution": "wolfi",
+      "release": "rolling",
+      "repositories": ["https://packages.wolfi.dev/os"],
+      "keyring": ["melange/keys/wolfi-signing.rsa.pub"],
+      "keys": {
+        "melange/keys/wolfi-signing.rsa.pub": "f0031424cf46f7db780ce63a45f0fd6aa6f85f601e6bb3b7a91fe3d4d5b7d2cc"
+      },
+      "discovery_origins": ["https://packages.wolfi.dev/"],
+      "composition": "distroless/sources/wolfi.yaml"
+    },
+    "alpine-3.24": {
+      "distribution": "alpine",
+      "release": "v3.24",
+      "repositories": [
+        "https://dl-cdn.alpinelinux.org/alpine/v3.24/main",
+        "https://dl-cdn.alpinelinux.org/alpine/v3.24/community"
+      ],
+      "keyring": [
+        "melange/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub",
+        "melange/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub"
+      ],
+      "keys": {
+        "melange/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub": "207e4696d3c05f7cb05966aee557307151f1f00217af4143c1bcaf33b8df733f",
+        "melange/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub": "d11f6b21c61b4274e182eb888883a8ba8acdbf820dcc7a6d82a7d9fc2fd2836d"
+      },
+      "key_scope": "O Alpine assina o APKINDEX por arquitetura: 6165ee59 = x86_64, 616ae350 = aarch64. As duas chaves sao oficiais, de https://alpinelinux.org/keys/.",
+      "discovery_origins": ["https://alpinelinux.org/keys/"],
+      "composition": "distroless/sources/alpine-3.24.yaml"
+    }
+  },
+  "framework_sources": {
+    "dotnet8": {
+      "source": "alpine-3.24",
+      "reason": "O Wolfi nao publica dotnet-8-sdk corrigido: o APKINDEX para em 8.0.127-r0 e o proprio security.json do Wolfi declara as 5 CVEs bloqueantes corrigidas em 8.0.131-r0. O Alpine v3.24 publica aspnetcore8-runtime 8.0.31-r0 e dotnet8-sdk 8.0.131-r0, com as 5 rastreadas e corrigidas na origem.",
+      "owner": "@alric-corp/github_xj7_maintainer",
+      "adr": "docs/adr/0001-dotnet8-fora-do-lote-padrao.md",
+      "review_by": "2026-11-30"
+    },
+    "dotnet8-dev": {
+      "source": "alpine-3.24",
+      "reason": "Estagio de build do contrato compilado de dotnet8: o par precisa vir da mesma fonte por definicao do contrato.",
+      "owner": "@alric-corp/github_xj7_maintainer",
+      "adr": "docs/adr/0001-dotnet8-fora-do-lote-padrao.md",
+      "review_by": "2026-11-30"
+    }
+  }
+}
