@@ -14,7 +14,7 @@ aplica (em `policies/`) tenha uma origem revisável.
 | [0003](0003-controles-seguranca-workflows-federados.md) | Controles de segurança da fábrica em workflows federados | Premissa de autoria definida; PROPOSED para requisitos/aceites externos | Documenta controles e responsabilidades; nenhuma mudança de gates |
 | [0004](0004-v1-referencia-go126.md) | V1 de referência: Go 1.26 como primeiro fluxo completo, catálogo preservado | Proposto | `policies/operations/health.json` → `execution_scope` (visibilidade); `default_batch.py`/`P0_04_BATCH` (execução, já em produção) |
 | [0005](0005-stable-lifecycle-realinhamento-rfc013.md) | `stable` e lifecycle de 7 dias: realinhamento à RFC-013 (reverte a parte `STABLE = OUT_OF_SCOPE` do ADR-0004) | Proposto | `alric-containers-registry/main.tf` (mutability exclusion + lifecycle); `validate_ecr_repository.py` (preflight); `promote-stable.yml` (kill switch + pair binding) |
-| [0006](0006-java21-zlib-blocker-remediation-options.md) | Java 21: opções de remediação para o bloqueio zlib (`CVE-2026-85091`) | PROPOSED — decisão do Tech Lead PENDING | Nenhuma ainda — investigação e opções apenas, sem implementação |
+| [0006](0006-java21-zlib-blocker-remediation-options.md) | Java 21: opções de remediação para o bloqueio zlib (`CVE-2026-85091`) | RESOLVED — superseded pelo fix upstream do Wolfi (Addendum 17/09/2026) | Nenhuma — o pacote próprio via Melange nunca foi construído; o Wolfi publicou a correção antes da decisão do Tech Lead |
 
 Estado: **Proposto** enquanto o PR que introduz o ADR aguarda revisão de code
 owner; **Aceito** com a aprovação e o merge; **Substituído** quando outro ADR

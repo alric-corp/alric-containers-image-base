@@ -2,6 +2,15 @@
 
 Estado: **PASS** (A01–A05, com os limites registrados em `acceptance.md`).
 
+> **Nota (17/09/2026):** a matriz completa do catálogo abaixo (`§ Matriz
+> completa do catálogo`) é um retrato de 16/09/2026 e **não reflete o
+> estado atual** — o bloqueio `CVE-2026-85091`/zlib registrado para 13 das
+> 17 definições foi resolvido pelo Wolfi no dia seguinte. Estado atual e
+> revalidado via CI real:
+> [`specs/2026-09-17-full-catalog-revalidation/evidence.md`](../2026-09-17-full-catalog-revalidation/evidence.md).
+> Este arquivo não foi editado além desta nota — preserva o registro
+> histórico do que se sabia em 16/09/2026.
+
 ## Identidade
 
 - Data e ambiente: 2026-09-16, sandbox `alric-corp` (GitHub) + conta AWS
