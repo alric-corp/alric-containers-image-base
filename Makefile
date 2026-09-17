@@ -4,6 +4,8 @@ ACTIONLINT ?= actionlint
 REUSABLE_WORKFLOWS_PATH ?= .reusable-workflows
 # Generated agent workflows are validated by their compiler, not edited by hand.
 WORKFLOWS := $(wildcard .github/workflows/*.yml)
+# ops: comment-only change to trigger a FULL-profile shared-impact PR for a
+# read-only catalog revalidation (no gate/scope/behavior change), 2026-09-17.
 
 UNAME_ARCH := $(shell uname -m)
 ifeq ($(UNAME_ARCH),arm64)
