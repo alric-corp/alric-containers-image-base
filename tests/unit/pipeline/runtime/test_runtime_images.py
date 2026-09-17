@@ -11,7 +11,7 @@ from scripts.pipeline.runtime import runtime_images as runtime
 
 class RuntimeContractTests(unittest.TestCase):
     def test_unsupported_framework_fails_explicitly(self):
-        for framework in ('dotnet8', 'nodejs999', '../nodejs24', 'nodejs24;id'):
+        for framework in ('unsupported-runtime', 'nodejs999', '../nodejs24', 'nodejs24;id'):
             with self.subTest(framework=framework), self.assertRaises(ValueError):
                 runtime.runtime(framework)
 
@@ -83,7 +83,7 @@ class RuntimeContractTests(unittest.TestCase):
         for framework in ('go1-25', 'go1-26', 'java21', 'java25', 'dotnet10', 'nodejs22',
                           'python3-13'):
             self.assertIn(framework, runtime.contracts())
-        for framework in ('dotnet8', 'go1-25-dev', 'java25-dev'):
+        for framework in ('unsupported-runtime', 'go1-25-dev', 'java25-dev'):
             self.assertNotIn(framework, runtime.contracts())
 
     def test_compiled_contract_without_dev_layout_is_rejected_before_docker(self):

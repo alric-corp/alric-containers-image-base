@@ -12,9 +12,14 @@ import yaml
 from scripts.pipeline.catalog import default_batch as batch
 
 ROOT = pathlib.Path(__file__).resolve().parents[4]
-CATALOG = {'go1-26', 'go1-26-dev', 'nodejs22', 'dotnet8'}
-EXCLUSION = {'reason': 'sem pacote corrigido no Wolfi', 'owner': '@owner',
-             'review_by': '2026-10-09', 'adr': 'docs/adr/0001-dotnet8-fora-do-lote-padrao.md'}
+# 'sample-runtime' é um nome de framework sintético, sem correspondência com
+# nenhum framework real (histórico ou atual): estes testes exercitam o
+# mecanismo de exclusão em si, não um caso real. O `adr` aponta para um ADR
+# real e válido só para testar a checagem de caminho/arquivo; ADR-0002 é
+# usado por não ter relação nenhuma com a razão de exclusão sintética abaixo.
+CATALOG = {'go1-26', 'go1-26-dev', 'nodejs22', 'sample-runtime'}
+EXCLUSION = {'reason': 'motivo de teste', 'owner': '@owner',
+             'review_by': '2026-10-09', 'adr': 'docs/adr/0002-sigstore-trust-model.md'}
 
 
 def dispatch_form(names):
@@ -76,7 +81,7 @@ class RealTreeTests(unittest.TestCase):
 
 
 class LintTests(unittest.TestCase):
-    EXCLUDED = {'dotnet8': EXCLUSION}
+    EXCLUDED = {'sample-runtime': EXCLUSION}
     BATCH = ['go1-26', 'go1-26-dev', 'nodejs22']
 
     def lint(self, *batches, excluded=None):
@@ -92,8 +97,8 @@ class LintTests(unittest.TestCase):
         self.assertEqual(self.lint(self.BATCH, self.BATCH, batch.P0_04_BATCH), [])
 
     def test_excluded_framework_present_in_the_batches_is_one_problem_per_job(self):
-        # N02: o estado anterior a esta entrega — dotnet8 nos três lotes.
-        old = self.BATCH + ['dotnet8']
+        # N02: framework excluído aparecendo nos três lotes mesmo assim.
+        old = self.BATCH + ['sample-runtime']
         problems = self.lint(old, old, old)
         self.assertEqual(len(problems), 3)
         for job_id, problem in zip(batch.BATCH_JOBS, problems):
@@ -110,7 +115,7 @@ class LintTests(unittest.TestCase):
 
     def test_exclusion_outside_the_catalog_is_a_problem(self):
         problems = self.lint(self.BATCH, self.BATCH, self.BATCH,
-                             excluded={'dotnet8': EXCLUSION, 'ruby3': EXCLUSION})
+                             excluded={'sample-runtime': EXCLUSION, 'ruby3': EXCLUSION})
         self.assertEqual(problems, ['exceção `ruby3` não existe no catálogo'])
 
     def test_unreadable_batch_is_reported_not_ignored(self):
@@ -190,7 +195,7 @@ class BatchFormTests(unittest.TestCase):
     def test_lint_reports_the_form_problem_once_and_checks_the_other_jobs(self):
         document = workflow(self.BATCH, self.BATCH, self.BATCH)
         document['jobs']['build-base-images']['with']['frameworks'] = self.DYNAMIC[0]
-        problems = batch.lint(sorted(CATALOG), {'dotnet8': EXCLUSION}, batch.batches(document))
+        problems = batch.lint(sorted(CATALOG), {'sample-runtime': EXCLUSION}, batch.batches(document))
         self.assertEqual(len(problems), 1)
         self.assertIn('`build-base-images`', problems[0])
         self.assertIn('vars.DEFAULT_FRAMEWORKS', problems[0])
@@ -200,14 +205,14 @@ class AdrTests(unittest.TestCase):
     """N08: `adr` é um ADR do repositório em docs/adr/, e nada mais."""
     REJECTED_PATHS = ('README.md', '/etc/hosts', '../algum-arquivo.md',
                       'docs/adr/../../README.md', 'docs/adr/README.md', 'docs/adr/',
-                      'docs/adr/sub/0001-x.md', 'docs/adr/0001-Dotnet8.md',
-                      'docs/adr/0001-dotnet8-fora-do-lote-padrao.md/', 'docs/adr/1-x.md',
-                      './docs/adr/0001-dotnet8-fora-do-lote-padrao.md',
-                      '/docs/adr/0001-dotnet8-fora-do-lote-padrao.md',
-                      'docs\\adr\\0001-dotnet8-fora-do-lote-padrao.md')
+                      'docs/adr/sub/0001-x.md', 'docs/adr/0001-Example.md',
+                      'docs/adr/0001-example-decision.md/', 'docs/adr/1-x.md',
+                      './docs/adr/0001-example-decision.md',
+                      '/docs/adr/0001-example-decision.md',
+                      'docs\\adr\\0001-example-decision.md')
 
     def test_the_versioned_adr_is_accepted(self):
-        self.assertIsNone(batch.adr_problem('docs/adr/0001-dotnet8-fora-do-lote-padrao.md'))
+        self.assertIsNone(batch.adr_problem('docs/adr/0002-sigstore-trust-model.md'))
 
     def test_paths_outside_the_convention_are_rejected_before_touching_the_disk(self):
         for adr in self.REJECTED_PATHS:
@@ -255,7 +260,7 @@ class AdrTests(unittest.TestCase):
                     self.assertTrue(path.is_file() and not path.is_symlink())  # o bypass reportado
                     problem = batch.adr_problem('docs/adr/0001-test.md', root)
                     self.assertIn(f'`{component}` é link simbólico', problem)
-                    policy = {'exceptions': {'dotnet8': dict(EXCLUSION, adr='docs/adr/0001-test.md')}}
+                    policy = {'exceptions': {'sample-runtime': dict(EXCLUSION, adr='docs/adr/0001-test.md')}}
                     self.assertEqual(len(batch.exclusions(policy, root=root)[1]), 1)
             # Link intermediário dentro de docs/adr: cai na regra textual
             # (subdiretório), antes de qualquer acesso ao disco.
@@ -279,16 +284,16 @@ class AdrTests(unittest.TestCase):
             self.assertIn('não resolve', batch.adr_problem('docs/adr/0005-valido.md', base / 'nao-existe'))
 
     def test_exclusions_report_the_adr_problem_per_entry(self):
-        policy = {'exceptions': {'dotnet8': dict(EXCLUSION, adr='README.md')}}
+        policy = {'exceptions': {'sample-runtime': dict(EXCLUSION, adr='README.md')}}
         excluded, problems = batch.exclusions(policy)
-        self.assertEqual(sorted(excluded), ['dotnet8'])
+        self.assertEqual(sorted(excluded), ['sample-runtime'])
         self.assertEqual(len(problems), 1)
-        self.assertTrue(problems[0].startswith('exceção `dotnet8`: ADR `README.md` precisa ser'))
+        self.assertTrue(problems[0].startswith('exceção `sample-runtime`: ADR `README.md` precisa ser'))
 
 
 class ExclusionFieldTests(unittest.TestCase):
     def problems(self, entry):
-        return batch.exclusions({'exceptions': {'dotnet8': entry}})[1]
+        return batch.exclusions({'exceptions': {'sample-runtime': entry}})[1]
 
     def test_each_missing_field_is_reported(self):
         # N04
@@ -297,11 +302,11 @@ class ExclusionFieldTests(unittest.TestCase):
                 entry = dict(EXCLUSION)
                 del entry[field]
                 problems = self.problems(entry)
-                self.assertEqual(problems, [f'exceção `dotnet8` sem `{field}`'])
+                self.assertEqual(problems, [f'exceção `sample-runtime` sem `{field}`'])
         for blank in ('', '   ', None, 3):
             with self.subTest(blank=blank):
                 self.assertEqual(self.problems(dict(EXCLUSION, owner=blank)),
-                                 ['exceção `dotnet8` sem `owner`'])
+                                 ['exceção `sample-runtime` sem `owner`'])
 
     def test_review_by_must_be_an_iso_date(self):
         for review in ('2026-13-40', '09/10/2026', '2026-10', 'soon'):
@@ -312,15 +317,15 @@ class ExclusionFieldTests(unittest.TestCase):
 
     def test_adr_must_exist_in_the_repository(self):
         problems = self.problems(dict(EXCLUSION, adr='docs/adr/9999-inexistente.md'))
-        self.assertEqual(problems, ['exceção `dotnet8`: ADR `docs/adr/9999-inexistente.md` '
+        self.assertEqual(problems, ['exceção `sample-runtime`: ADR `docs/adr/9999-inexistente.md` '
                                     'não existe no repositório como arquivo regular'])
 
     def test_non_object_entries_are_rejected_because_health_iterates_them(self):
-        excluded, problems = batch.exclusions({'exceptions': {'$comment': 'x', 'dotnet8': EXCLUSION}})
-        self.assertEqual(sorted(excluded), ['dotnet8'])
+        excluded, problems = batch.exclusions({'exceptions': {'$comment': 'x', 'sample-runtime': EXCLUSION}})
+        self.assertEqual(sorted(excluded), ['sample-runtime'])
         self.assertEqual(len(problems), 1)
         self.assertIn('`$comment` precisa ser um objeto', problems[0])
-        excluded, problems = batch.exclusions({'exceptions': ['dotnet8']})
+        excluded, problems = batch.exclusions({'exceptions': ['sample-runtime']})
         self.assertEqual(excluded, {})
         self.assertEqual(len(problems), 1)
 
@@ -332,18 +337,18 @@ class CliTests(unittest.TestCase):
         (root / 'frameworks').mkdir()
         for name in CATALOG:
             (root / 'frameworks' / f'{name}.yaml').write_text('contents: {}\n')
-        (root / 'health.json').write_text(json.dumps(policy or {'exceptions': {'dotnet8': EXCLUSION}}))
+        (root / 'health.json').write_text(json.dumps(policy or {'exceptions': {'sample-runtime': EXCLUSION}}))
         (root / 'workflow.yml').write_text(yaml.safe_dump(document))
         return ('--policy', str(root / 'health.json'), '--workflow', str(root / 'workflow.yml'),
                 '--catalog', str(root / 'frameworks'))
 
     def test_lint_fails_on_a_tree_where_the_batch_diverges(self):
         with tempfile.TemporaryDirectory() as temporary:
-            old = self.BATCH + ['dotnet8']
+            old = self.BATCH + ['sample-runtime']
             result = run_cli('lint', *self.tree(pathlib.Path(temporary), workflow(old, old, old)))
             self.assertEqual(result.returncode, 1)
             self.assertEqual(result.stderr.count('::error::'), 3)
-            self.assertIn('`dotnet8` está fora do lote padrão', result.stderr)
+            self.assertIn('`sample-runtime` está fora do lote padrão', result.stderr)
 
     def test_lint_fails_when_a_variable_can_replace_the_batch(self):
         # N07, exemplo do reviewer: o literal está certo, mas `vars.*` mandaria.
@@ -366,7 +371,7 @@ class CliTests(unittest.TestCase):
             base = pathlib.Path(temporary)
             external = base / 'external'
             external.mkdir()
-            (external / '0001-dotnet8-fora-do-lote-padrao.md').write_text('# ADR-0001 — externo\n')
+            (external / '0001-example-decision.md').write_text('# ADR-0001 — externo\n')
             copy = base / 'repo'
             for relative in ('scripts/__init__.py', 'scripts/pipeline/__init__.py',
                              'scripts/pipeline/catalog/__init__.py',
@@ -385,7 +390,7 @@ class CliTests(unittest.TestCase):
         # N08: caminhos do reviewer.
         for adr in ('README.md', '/etc/hosts', '../algum-arquivo.md', 'docs/adr/../../README.md'):
             with self.subTest(adr=adr), tempfile.TemporaryDirectory() as temporary:
-                policy = {'exceptions': {'dotnet8': dict(EXCLUSION, adr=adr)}}
+                policy = {'exceptions': {'sample-runtime': dict(EXCLUSION, adr=adr)}}
                 result = run_cli('lint', *self.tree(pathlib.Path(temporary),
                                                     workflow(self.BATCH, self.BATCH, self.BATCH), policy))
                 self.assertNotEqual(result.returncode, 0)
