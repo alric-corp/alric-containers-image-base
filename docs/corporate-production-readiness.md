@@ -1,6 +1,7 @@
 # Corporate Production Readiness — Hardened Image Factory
 
-Baseline: main `a65f37da9d2001b4e60d46a79a26b9cb32dc33a9`, 17/09/2026. Este
+Baseline: main `30fb7132f879e58c06f56e5bf5d2c34fbb061ebd`, 17/09/2026 (estado do
+Registry/AWS conferido após a remoção do `image-base-dotnet8`). Este
 documento é um **resumo de readiness e handoff**: diz o que a fábrica já provou
 no LAB e o que ainda precisa ser adaptado e validado ao levá-la para o ambiente
 corporativo. Não substitui o [pacote de adoção](corporate-adoption.md) (parâmetros,
@@ -61,7 +62,7 @@ Descoberto na árvore da baseline acima, não copiado de números históricos.
 | Publicação / promoção no LAB | Par Go publicado por digest, assinado, atestado e verificado externamente; `stable` promovida com read-back e recuperada sem rebuild; Terraform sem drift depois de tudo ([fechamento V1](v1-reference-closure-2026-09-16.md), [evidence ADR-0005](../specs/2026-09-16-stable-lifecycle-rfc013/evidence.md)). Promoção automática protegida por kill switch (`STABLE_PROMOTION_AUTHORIZED`) |
 | Catálogo completo | 16/16 definições **buildam e passam no Trivy nas duas arquiteturas** em run real de CI (17/09/2026, [revalidação completa](../specs/2026-09-17-full-catalog-revalidation/evidence.md)). O contrato funcional não roda no caminho de PR por desenho; para os 14 fora do `execution_scope` ele existe em código e foi exercitado em runs anteriores, mas não faz parte da execução automática atual |
 | Bloqueios upstream | Nenhum aberto. O bloqueio zlib (`CVE-2026-85091`) que travava Java 21 e mais 12 definições foi resolvido pelo próprio Wolfi em 17/09/2026 ([ADR-0006](adr/0006-java21-zlib-blocker-remediation-options.md), addendum); gate não relaxado |
-| Registry (`alric-containers-registry`) | Terraform ainda declara 17 repositórios ECR: os 16 do catálogo mais `image-base-dotnet8`, vazio, cuja remoção é a etapa seguinte no LAB. Não bloqueia o port: o corporativo provisiona primeiro só o que o golden path precisa |
+| Registry (`alric-containers-registry`) | Terraform declara os mesmos 16 repositórios ECR do catálogo; AWS tem 16 `image-base-*`. O `image-base-dotnet8` vazio foi destruído pelo Terraform em 17/09/2026 (episódio 4 de `drift-remediation/`, permissão de delete temporária, removida em seguida). O corporativo provisiona primeiro só o que o golden path precisa |
 | Decisões externas em aberto | Sigstore (ADR-0002), scanner/requisitos da fábrica federada (ADR-0003), CA corporativa, IAM/OIDC, destino de alerta e SLA — todas `EXTERNAL_PENDING`, listadas em [RFC-013 → Prontidão](../RFC-013-Image-Base-Completa-com-Mermaid.md#prontidão-para-produção) |
 
 ## Capacidades já comprovadas no LAB
@@ -440,6 +441,8 @@ SUPPLY_CHAIN_MODEL                = READY
 RELEASE_MODEL                     = READY
 
 ACTIVE_CATALOG                    = 16
+REGISTRY_CATALOG                  = 16
+AWS_ECR_COUNT                     = 16
 ACTIVE_PACKAGE_SOURCE             = WOLFI
 MULTI_SOURCE_ACTIVE               = NO
 LAB_GOLDEN_PATH_GO_1_26           = CLOSED
