@@ -760,7 +760,7 @@ define o que o consumidor deve conferir; não instala enforcement no deploy.
 
 | Item do escopo | Estado |
 | --- | --- |
-| Padrões de imagem base por framework prioritário (Java, Node.js, Python, Go e .NET) | Entregue (17 definições; 16 no lote automático) |
+| Padrões de imagem base por framework prioritário (Java, Node.js, Python, Go e .NET) | Entregue (16 definições, todas no lote automático; `dotnet8` removido em 17/09/2026) |
 | Pipeline de build com Melange e Apko | Entregue |
 | Primeiras imagens base em formato distroless | Entregue no sandbox |
 | Build multi-plataforma (`amd64` e `arm64`) | Entregue, escaneado e testado por arquitetura |
