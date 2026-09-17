@@ -184,7 +184,8 @@ entrar na main; na baseline desta revisão, filtro e teto 300 já estão present
 
 - `alert` — limite rompido; o job falha.
 - `known` — exceção documentada em `exceptions`, com **motivo, dono, data de
-  revisão e ADR obrigatórios**. Hoje só `dotnet8` (ver abaixo). Não falha o job.
+  revisão e ADR obrigatórios**. Hoje nenhuma (ver exemplo histórico abaixo).
+  Não falha o job.
   **Uma exceção com `review_by` vencida gera alerta própria**: a exceção
   também não pode apodrecer em silêncio. Desde o
   [ADR-0001](adr/0001-dotnet8-fora-do-lote-padrao.md), toda exceção está
@@ -201,19 +202,24 @@ revisão. O alerta de vencimento é separado; não transforma os registros
 `known` da exceção em saúde comprovada. O lint verifica campos/ADR/data,
 mas não falha por vencimento; essa detecção pertence ao health.
 
-#### A exceção conhecida do `dotnet8`, conferida na origem
+#### Exemplo histórico: a exceção do `dotnet8` (12/09/2026 – 17/09/2026)
 
-O scan bloqueia com 28 achados por arquitetura em `dotnet-8-*`, todos
+O scan bloqueava com 28 achados por arquitetura em `dotnet-8-*`, todos
 apontando correção em `8.0.129-r1`. O APKINDEX real de
-`packages.wolfi.dev/os` (conferido em 09/09/2026) publica no máximo
-`dotnet-8-sdk 8.0.127-r0` — **a versão corrigida não existe no repositório
-que o apko consulta** (reconferido em 12/09/2026). Rebuild não resolve: depende
-de a Wolfi publicar o pacote, ou de retirar `dotnet8` do catálogo. Registrado
-como exceção com dono e revisão em 09/10/2026, não como "falha crônica que a
-gente ignora". Em 12/09/2026 o framework saiu do lote padrão
-([ADR-0001](adr/0001-dotnet8-fora-do-lote-padrao.md)): continua no catálogo e
-nesta tabela como `known`, deixa de pintar o build diário de vermelho, e o
-critério de reinclusão está no ADR.
+`packages.wolfi.dev/os` (conferido em 09/09/2026) publicava no máximo
+`dotnet-8-sdk 8.0.127-r0` — **a versão corrigida nunca existiu no repositório
+que o apko consulta** (reconferido em 12/09/2026). Rebuild não resolvia:
+dependia de a Wolfi publicar o pacote, ou de retirar `dotnet8` do catálogo.
+Registrado como exceção com dono e revisão em 09/10/2026, não como "falha
+crônica que a gente ignora". Em 12/09/2026 o framework saiu do lote padrão
+([ADR-0001](adr/0001-dotnet8-fora-do-lote-padrao.md)), continuando no catálogo
+e nesta tabela como `known`. Em 17/09/2026, com o suporte LTS do .NET 8 a
+terminar em novembro e sem correção do Wolfi à vista, `dotnet8` foi removido
+do catálogo (mesmo ADR, adendo, e ADR-0007 em
+`docs/adr/0007-multi-source-alpine-recusado.md`, PR #84); não há mais
+nenhuma exceção `known` registrada. `dotnet10`/`dotnet10-dev`
+seguem no caminho suportado. Este exemplo permanece para ilustrar como o
+mecanismo `known` funciona quando alguma exceção futura for registrada.
 
 ## 3. Canal, dono e notificação
 
@@ -368,8 +374,9 @@ promoção em uma hora, atendimento em minutos ou disponibilidade de 99,9%.
 Falha de scan corretamente bloqueada comprova um controle e pode coexistir
 com catálogo desatualizado. Falhas upstream/infra, falta de dados e no-op não
 saem de métricas para melhorar números; devem aparecer como classes distintas.
-Uma exclusão como dotnet8 tem ADR, owner e review_by e fica identificada fora
-do denominador ativo, sem ser contada como release saudável.
+Uma exclusão documentada (ADR, owner e review_by, como a do `dotnet8` até sua
+remoção do catálogo em 17/09/2026) fica identificada fora do denominador
+ativo, sem ser contada como release saudável.
 
 ## 7. Responsabilidade e diagnóstico
 

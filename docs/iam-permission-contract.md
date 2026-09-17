@@ -272,11 +272,10 @@ esses parâmetros administrativos não são criados pelo utilitário.
 
 A [fixture](../policies/aws/proposals/factory-permissions/parameters.fixture.json)
 usa conta de exemplo `111122223333`, identidade GitHub sintética e apenas
-Go runtime/-dev. Não cobre os 17 itens do catálogo. Para proposta de lote
-completo, Cloud fornece os 17 ARNs/names autorizados (16 automáticos e dotnet8
-somente se execução manual for autorizada); conferir contra frameworks/ e
-inputs reais. Excluir um repo da proposta deve limitar o lote explicitamente,
-nunca converter sua falta de permissão em PASS.
+Go runtime/-dev. Não cobre os 16 itens do catálogo. Para proposta de lote
+completo, Cloud fornece os 16 ARNs/names autorizados; conferir contra
+frameworks/ e inputs reais. Excluir um repo da proposta deve limitar o lote
+explicitamente, nunca converter sua falta de permissão em PASS.
 
 Exemplo **somente local**, com destino novo fora do checkout:
 
