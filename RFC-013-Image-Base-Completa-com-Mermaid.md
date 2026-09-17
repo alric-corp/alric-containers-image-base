@@ -591,9 +591,12 @@ consultada no registry. As contagens históricas de 17 definições, 15 ECRs ou
 termina em novembro de 2026 e a correção da CVE que o bloqueava nunca chegou
 ao Wolfi. Um POC provou tecnicamente que Alpine v3.24 resolveria a CVE na
 origem, mas a adoção do multi-source foi recusada por custo/benefício. Ver
-[ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md) (adendo) e ADR-0007
-(`docs/adr/0007-multi-source-alpine-recusado.md`, PR #84, pendente de merge no
-momento desta escrita). `dotnet10`/`dotnet10-dev` são o caminho suportado.
+[ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md) (adendo) e
+[ADR-0007](docs/adr/0007-multi-source-alpine-recusado.md). `dotnet10`/`dotnet10-dev`
+são o caminho suportado. O repositório ECR `image-base-dotnet8`, vazio, foi
+removido pelo Terraform do Registry em 17/09/2026 (episódio 4 de
+`drift-remediation/` em `alric-containers-registry`); catálogo, Registry e AWS
+concordam em 16.
 
 ## Melhorias M01–M16: estado
 
@@ -733,8 +736,8 @@ SLIs e SLOs apenas propostos. Relatório/falha de job não comprova entrega ou
 reconhecimento de alerta; `external_destination` continua null. Nenhum
 framework está excluído do lote padrão hoje; `dotnet8`, o único caso já
 registrado, foi removido do catálogo em 17/09/2026
-([ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md); ADR-0007 em
-`docs/adr/0007-multi-source-alpine-recusado.md`, PR #84) — reintroduzi-lo
+([ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md),
+[ADR-0007](docs/adr/0007-multi-source-alpine-recusado.md)) — reintroduzi-lo
 exigiria uma nova decisão de catálogo, não só a correção do Wolfi.
 
 CAs corporativas, enforcement de consumo/admission e ARM nativo não são
