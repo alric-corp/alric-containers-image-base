@@ -15,6 +15,7 @@ aplica (em `policies/`) tenha uma origem revisável.
 | [0004](0004-v1-referencia-go126.md) | V1 de referência: Go 1.26 como primeiro fluxo completo, catálogo preservado | Proposto | `policies/operations/health.json` → `execution_scope` (visibilidade); `default_batch.py`/`P0_04_BATCH` (execução, já em produção) |
 | [0005](0005-stable-lifecycle-realinhamento-rfc013.md) | `stable` e lifecycle de 7 dias: realinhamento à RFC-013 (reverte a parte `STABLE = OUT_OF_SCOPE` do ADR-0004) | Proposto | `alric-containers-registry/main.tf` (mutability exclusion + lifecycle); `validate_ecr_repository.py` (preflight); `promote-stable.yml` (kill switch + pair binding) |
 | [0006](0006-java21-zlib-blocker-remediation-options.md) | Java 21: opções de remediação para o bloqueio zlib (`CVE-2026-85091`) | PROPOSED — decisão do Tech Lead PENDING | Nenhuma ainda — investigação e opções apenas, sem implementação |
+| [0007](0007-multi-source-alpine-recusado.md) | Multi-source com Alpine v3.24 para `dotnet8`: tecnicamente aprovado, adoção recusada (fim de suporte do .NET 8 em 11/2026; .NET 10 já verde no Wolfi) | Proposto | Nenhuma — decisão negativa, nada muda no produto |
 
 Estado: **Proposto** enquanto o PR que introduz o ADR aguarda revisão de code
 owner; **Aceito** com a aprovação e o merge; **Substituído** quando outro ADR
