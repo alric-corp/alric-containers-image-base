@@ -187,10 +187,10 @@ outras camadas podem operar.
 patamar distroless e cobre parte dos controles de hardened — estado atual
 por pilar:
 
-| Pilar | Estado em 13/09/2026 |
+| Pilar | Estado em 17/09/2026 |
 | --- | --- |
-| Minimalismo | Base sem shell nem gerenciador de pacotes, comprovado por execução nas variantes finais de Node, Python, Go, Java e .NET. Go 1.25/1.26, Java 21/25 e .NET 10 têm runtime separado do toolchain; só `dotnet8` ainda carrega o SDK completo. |
-| Imutabilidade | Tags de build imutáveis no ECR (exceção só para `stable`), rejeição de sobrescrita comprovada no conjunto histórico de 15 ECRs (09/09); o catálogo atual tem 17 definições. Raiz somente leitura testada em contrato; continua dependendo da configuração do consumidor em runtime. |
+| Minimalismo | Base sem shell nem gerenciador de pacotes, comprovado por execução nas variantes finais de Node, Python, Go, Java e .NET. Go 1.25/1.26, Java 21/25 e .NET 10 têm runtime separado do toolchain. `dotnet8`, o único que ainda carregava o SDK completo, foi removido do catálogo em 17/09/2026 (fim de suporte LTS em 11/2026; ver [ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md)). |
+| Imutabilidade | Tags de build imutáveis no ECR (exceção só para `stable`), rejeição de sobrescrita comprovada no conjunto histórico de 15 ECRs (09/09); o catálogo atual tem 16 definições. Raiz somente leitura testada em contrato; continua dependendo da configuração do consumidor em runtime. |
 | Manutenção | Rebuild diário e promoção por soak em execução; ferramentas por SHA/digest com lint de cobertura. Cron é de melhor esforço; suas lacunas e falhas de pins são monitoradas. A amostra histórica de 10% não é SLA atual. Renovate configurado não comprova instalação ativa; destino externo de alertas e SLA corporativo continuam pendentes. |
 | Verificabilidade | SPDX gerado e atestado por digest; assinatura Cosign e provenance GitHub sobre o índice, verificadas na promoção com IDs numéricos de origem. SBOM verification no consumo é uma etapa distinta; evidence disponível não é enforcement no cluster, nem atribui SLSA level formal. |
 
@@ -577,17 +577,21 @@ plataforma.
 | `go1-25` / `go1-25-dev` | runtime / build | só a base / `go-1.25` + shell | compilado (par) | separado em 10/09/2026 |
 | `nodejs22`, `nodejs24` e `-dev` | runtime / build | `nodejs-2x` / + `npm` + shell | interpretado (as quatro) | — |
 | `dotnet10` / `dotnet10-dev` | runtime / build | `aspnet-10-runtime` / `dotnet-10-sdk` + shell | compilado (par) | — |
-| `dotnet8` | único | `dotnet-8-sdk` | nenhum | **bloqueado pelo scan**: correção `8.0.129-r1` ainda não existe no repositório Wolfi consultado (verificado em 09/09/2026 e 12/09/2026); nunca teve `stable`. **Fora do lote padrão** desde [ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md) |
 
-O catálogo contém **17 definições**, com **16 no lote automático**. O publicador
-cria um ECR por definição quando necessário; isso não prova 17 releases ou
-17 tags `stable` disponíveis. A disponibilidade depende de publicação/promoção
-bem-sucedidas e deve ser consultada no registry. As contagens históricas de
-15 ECRs ou 14 imagens promovidas não são o inventário atual.
+O catálogo contém **16 definições**, todas no lote automático (nenhuma
+exceção registrada). O publicador cria um ECR por definição quando
+necessário; isso não prova 16 releases ou 16 tags `stable` disponíveis. A
+disponibilidade depende de publicação/promoção bem-sucedidas e deve ser
+consultada no registry. As contagens históricas de 17 definições, 15 ECRs ou
+14 imagens promovidas não são o inventário atual.
 
-`dotnet8` permanece no catálogo e pode ser pedido manualmente; sua exclusão
-não relaxa o scan. Motivo, owner e revisão em
-[policies/operations/health.json](policies/operations/health.json).
+`dotnet8` foi removido do catálogo inicial em 17/09/2026: o suporte LTS
+termina em novembro de 2026 e a correção da CVE que o bloqueava nunca chegou
+ao Wolfi. Um POC provou tecnicamente que Alpine v3.24 resolveria a CVE na
+origem, mas a adoção do multi-source foi recusada por custo/benefício. Ver
+[ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md) (adendo) e ADR-0007
+(`docs/adr/0007-multi-source-alpine-recusado.md`, PR #84, pendente de merge no
+momento desta escrita). `dotnet10`/`dotnet10-dev` são o caminho suportado.
 
 ## Melhorias M01–M16: estado
 
@@ -607,8 +611,8 @@ histórica permanece limitada ao commit/run em que foi obtida.
 | M04 | Soak, concorrência, cron | PARTIAL | Soak padrão 6h e serialização presentes; scheduler sem SLA garantido |
 | M05 | PR sem AWS / trust OIDC | IMPLEMENTED no sandbox | Policy por IDs; EXTERNAL para novo repository/owner corporativo |
 | M06 | ECR immutable build tags | IMPLEMENTED | Exceção exata stable no publicador; prova histórica não substitui aceite corporativo |
-| M07 | Runtime / toolchain | PARTIAL | Go/Java/.NET 10 em pares; dotnet8 com SDK, excluído do lote |
-| M08 | Contratos funcionais | PARTIAL | 11 contratos diretos: seis interpretados e cinco compilados; dotnet8 sem contrato, plano depende do lote |
+| M07 | Runtime / toolchain | PARTIAL | Go/Java/.NET 10 em pares |
+| M08 | Contratos funcionais | PARTIAL | 11 contratos diretos: seis interpretados e cinco compilados |
 | M09 | Pins / atualização | PARTIAL | Inventário e disponibilidade, Skopeo immutable adotado; Renovate depende de ativação externa |
 | M10 | CAs integradas | PARTIAL | PEM/JKS/Node e testes de CA instalada; perfil public ativo, Corporate CA anchors EXTERNAL |
 | M11 | Saúde / visibilidade | PARTIAL | Resumos, health diário e drift Wolfi; external alert destination e corporate SLA EXTERNAL |
@@ -724,9 +728,12 @@ Monitor de saúde e drift são implementados; não constituem entrega de alerta
 externo nem SLA corporativo. O [contrato operacional P1-08](docs/m11-m04-operational-health.md)
 explicita proxies baseados em jobs, limites da coleta, scheduler compartilhado,
 SLIs e SLOs apenas propostos. Relatório/falha de job não comprova entrega ou
-reconhecimento de alerta; `external_destination` continua null. `dotnet8` permanece excluído por
-[ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md); sua reentrada exige
-os critérios do ADR, sem flexibilizar Trivy.
+reconhecimento de alerta; `external_destination` continua null. Nenhum
+framework está excluído do lote padrão hoje; `dotnet8`, o único caso já
+registrado, foi removido do catálogo em 17/09/2026
+([ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md); ADR-0007 em
+`docs/adr/0007-multi-source-alpine-recusado.md`, PR #84) — reintroduzi-lo
+exigiria uma nova decisão de catálogo, não só a correção do Wolfi.
 
 CAs corporativas, enforcement de consumo/admission e ARM nativo não são
 propriedades obtidas por esta documentação. Enforcement e ARM nativo são
@@ -893,7 +900,7 @@ Comandos, identidades e limites no [Consumer Verification Contract](docs/consume
 
 ### Um repositório ECR por linguagem/framework
 
-Cada framework tem seu próprio repositório ECR (`image-base-java21`, `image-base-nodejs22`, `image-base-dotnet8`, etc.), em vez de um único repositório compartilhado com todas as linguagens diferenciadas por tag. Avaliada e descartada a alternativa de repositório único: a granularidade por repositório é o que viabiliza, sem trabalho extra, os controles já definidos neste RFC:
+Cada framework tem seu próprio repositório ECR (`image-base-java21`, `image-base-nodejs22`, `image-base-dotnet10`, etc.), em vez de um único repositório compartilhado com todas as linguagens diferenciadas por tag. Avaliada e descartada a alternativa de repositório único: a granularidade por repositório é o que viabiliza, sem trabalho extra, os controles já definidos neste RFC:
 
 - **Least-privilege por consumidor:** a resource policy do ECR (`ecr:BatchGetImage`/`ecr:GetDownloadUrlForLayer`, ver `policies/policy-ecr.json`, fora deste repositório por conter identificadores reais de organização) é aplicada por repositório. Um time que só usa Java não precisa de permissão de pull nos repositórios de .NET ou Node.js. ECR não restringe ações por prefixo de tag, então um repositório único obrigaria conceder pull de tudo para todos, ou recriar a separação por convenção de tag — o que move a complexidade sem reduzi-la.
 - **Imutabilidade com exceção (M06):** a exceção `IMMUTABLE_WITH_EXCLUSION` para a tag `stable` é configurada por repositório; um namespace de tags compartilhado entre linguagens multiplicaria o risco de colisão.

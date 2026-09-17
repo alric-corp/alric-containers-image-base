@@ -10,6 +10,32 @@
 | Origem | Roadmap consolidado da RFC-013, item "dotnet8 fora do lote padrão" (P1, Fase 1) |
 
 ## Contexto
+> **Adendo (17/09/2026):** um POC validou tecnicamente construir `dotnet8` a partir do
+> Alpine v3.24, onde as cinco CVEs bloqueantes estão corrigidas na origem (5/5), com
+> contrato funcional, SBOM e keyring aprovados. A **adoção foi recusada** por
+> custo/benefício: o .NET 8 chega ao fim do suporte em novembro de 2026 e o .NET 10 já
+> está disponível e verde no caminho Wolfi padrão. Ver [ADR-0007](0007-multi-source-alpine-recusado.md).
+> Separadamente, em 17/09/2026 `dotnet8` foi **removido do catálogo inicial**
+> (não apenas mantido fora do lote) — ver o segundo adendo abaixo e
+> alric-containers-image-base#85.
+
+
+> **Adendo (17/09/2026):** `dotnet8` foi **removido do catálogo inicial**
+> (`frameworks/dotnet8.yaml` excluído; a exceção correspondente saiu de
+> `policies/operations/health.json` → `exceptions`, agora vazio). Não é mais
+> possível buildar `dotnet8` por `workflow_dispatch`; o repositório ECR
+> `image-base-dotnet8` (vazio, sem `stable`) é removido separadamente em
+> `alric-containers-registry`. Isto aplica o critério de revogação já previsto
+> abaixo: o suporte LTS do .NET 8 termina em novembro de 2026, antes de
+> qualquer correção do Wolfi. Um POC posterior provou tecnicamente que Alpine
+> v3.24 corrigiria as CVEs na origem — ver
+> [ADR-0007](0007-multi-source-alpine-recusado.md) — mas a adoção do
+> multi-source foi recusada por custo/benefício sobre uma janela de suporte
+> tão curta; a decisão de retirada do catálogo é sobre o produto, não sobre a
+> viabilidade técnica do POC. `dotnet10`/`dotnet10-dev` permanecem o caminho
+> suportado. O catálogo cai de 17 para **16 definições**. O restante deste
+> documento (contexto, decisão e consequências originais) permanece como
+> registro histórico da decisão de 12/09/2026 e não foi reescrito.
 
 `frameworks/dotnet8.yaml` compõe a imagem com `dotnet-8-sdk` do Wolfi. O scan
 Trivy bloqueia o framework com CVEs **com correção disponível** segundo o

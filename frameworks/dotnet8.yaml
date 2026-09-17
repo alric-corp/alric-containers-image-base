@@ -1,4 +1,0 @@
-include: distroless/runtime.yaml
-contents:
-  packages:
-    - dotnet-8-sdk

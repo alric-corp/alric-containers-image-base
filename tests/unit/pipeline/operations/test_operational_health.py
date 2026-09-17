@@ -138,14 +138,14 @@ class EvaluateTests(unittest.TestCase):
                              'queue_delay_p90_seconds': 900, 'window_days': 7},
               'schedules': {'0 3 * * *': {'job': 'build-base-images', 'gap_alert_hours': 30},
                             '17 * * * *': {'job': 'promote-stable', 'gap_alert_hours': 12}},
-              'exceptions': {'dotnet8': {'reason': 'sem pacote corrigido no Wolfi',
+              'exceptions': {'sample-runtime': {'reason': 'motivo de teste',
                                          'owner': '@owner', 'review_by': '2026-10-09'}}}
 
     def metrics(self, **overrides):
         base = {
             'frameworks': {'frameworks': {
                 'nodejs22': {'publication_age_hours': 2.0, 'stable_age_hours': 5.0},
-                'dotnet8': {'publication_age_hours': None, 'stable_age_hours': None},
+                'sample-runtime': {'publication_age_hours': None, 'stable_age_hours': None},
             }, 'truncated': False, 'job_queries': 5},
             'schedules': [{'cron': '0 3 * * *', 'expected': 7, 'observed': 7, 'missing': [],
                            'hours_since_last_run': 4.0, 'max_gap_hours': 25.0}],
@@ -158,7 +158,7 @@ class EvaluateTests(unittest.TestCase):
     def test_documented_exception_is_known_not_a_new_alert(self):
         alerts = health.evaluate(self.metrics(), self.POLICY, NOW)
         levels = {alert['subject']: alert['level'] for alert in alerts}
-        self.assertEqual(levels['dotnet8'], 'known')
+        self.assertEqual(levels['sample-runtime'], 'known')
         self.assertNotIn('nodejs22', levels)
         self.assertTrue(all(alert['level'] == 'known' for alert in alerts))
 
@@ -214,7 +214,7 @@ class EvaluateTests(unittest.TestCase):
 
     def test_expired_exception_becomes_an_alert_of_its_own(self):
         policy = dict(self.POLICY,
-                      exceptions={'dotnet8': dict(self.POLICY['exceptions']['dotnet8'],
+                      exceptions={'sample-runtime': dict(self.POLICY['exceptions']['sample-runtime'],
                                                   review_by='2026-08-01')})
         alerts = health.evaluate(self.metrics(), policy, NOW)
         expired = [alert for alert in alerts if alert['metric'] == 'exception_review']
@@ -246,7 +246,7 @@ class EvaluateTests(unittest.TestCase):
         metrics['frameworks']['truncated'] = True
         alerts = health.evaluate(metrics, self.POLICY, NOW)
         levels = {(alert['metric'], alert['subject']): alert['level'] for alert in alerts}
-        self.assertEqual(levels[('publication_age_hours', 'dotnet8')], 'unknown')
+        self.assertEqual(levels[('publication_age_hours', 'sample-runtime')], 'unknown')
         self.assertEqual(levels[('job_queries_truncated', '.github/workflows/workflow.yml')],
                          'alert')
 

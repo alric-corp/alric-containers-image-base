@@ -126,9 +126,10 @@ A cobertura é decidida em código versionado
 ausência de um artifact:
 
 - framework com contrato: evidência ausente é **falha**, não aprovação;
-- framework sem contrato (`dotnet8`, sem variante `-dev`;
-  `*-dev` compiladas, cobertas como estágio de build do par): publica com o
-  motivo registrado no log e na tabela do run;
+- framework sem contrato (`*-dev` compiladas, cobertas como estágio de build
+  do par; histórico: `dotnet8`, sem variante `-dev`, antes de ser removido do
+  catálogo em 17/09/2026 — ver `docs/adr/0001-dotnet8-fora-do-lote-padrao.md`):
+  publica com o motivo registrado no log e na tabela do run;
 - contrato compilado cujo par `-dev` não está no mesmo lote (um
   `workflow_dispatch` só com `go1-26`, por exemplo): não roda, e o motivo
   aparece — o estágio de build precisa ser o artifact candidato.
@@ -191,8 +192,9 @@ lados da checagem reagem.
 - Os tempos de build acima vêm de Rosetta no Mac; **QEMU no runner hospedado
   é mais lento** — o `timeout-minutes: 30` do job foi dimensionado com essa
   margem, mas o número real ainda precisa ser observado.
-- `dotnet8` continua **sem contrato compilado**, porque não tem variante
-  `-dev` — e não terá enquanto o scan o bloquear (decisão de catálogo).
+- Histórico: `dotnet8` não tinha contrato compilado (sem variante `-dev`)
+  enquanto esteve no catálogo; removido em 17/09/2026, deixa de ser uma
+  lacuna de cobertura.
 - O TLS usa uma CA sintética: testa os mecanismos de confiança dos runtimes,
   **não** comprova distribuição, pin, legitimidade ou confiança end-to-end do
   bundle corporativo. O parsing do bundle da imagem é um check separado.
