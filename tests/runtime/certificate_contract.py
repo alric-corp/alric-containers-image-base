@@ -29,6 +29,9 @@ def check(framework, reports):
         workspace = Path(temporary)
         for directory in ('frameworks', 'distroless'):
             shutil.copytree(ROOT / directory, workspace / directory)
+        # A composição resolve a fonte de pacotes pela policy versionada, e o
+        # build a exige antes de resolver — a fixture precisa carregá-la junto.
+        shutil.copytree(ROOT / 'policies/sources', workspace / 'policies/sources')
         melange = workspace / 'melange'
         melange.mkdir()
         # Melange needs root inside its build sandbox. Own the output directories
