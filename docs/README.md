@@ -50,8 +50,9 @@ não nesta árvore.
 | --- | --- |
 | Consultar decisões pontuais e seu estado | [Índice de ADRs](adr/README.md) |
 | Entender autoria, controles e requisitos da fábrica federada | [ADR-0003](adr/0003-controles-seguranca-workflows-federados.md) |
-| Consultar o bloqueio de scan do Java 21 (zlib) | [ADR-0006 — decisão do Tech Lead pendente](adr/0006-java21-zlib-blocker-remediation-options.md) |
+| Consultar a investigação do bloqueio de scan do Java 21 (zlib) e sua resolução | [ADR-0006 — resolvido pelo fix upstream do Wolfi](adr/0006-java21-zlib-blocker-remediation-options.md) |
 | Consultar `stable`/lifecycle conforme a RFC-013 | [ADR-0005](adr/0005-stable-lifecycle-realinhamento-rfc013.md) |
+| Readiness da implementação de referência e roteiro para port/validação no ambiente corporativo | [Corporate Production Readiness](corporate-production-readiness.md) |
 | Preparar configuração e aceite do destino corporativo | [Pacote de adoção](corporate-adoption.md) |
 | Planejar a migração para o repositório corporativo | [Manifesto de migração](corporate-migration-manifest.md) |
 

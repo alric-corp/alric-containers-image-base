@@ -300,11 +300,12 @@ Trivy mostrado escaneia `image-ref: "${IMAGE_NAME}:latest-amd64"` e só
 depois publica o índice multiarch.
 
 Nesta solução o contrato é `amd64 → scan`, `arm64 → scan`, e ambas
-precisam passar — uma diferença material. O gate também permanece
-bloqueante mesmo quando isso passou a impedir frameworks inteiros pela
-CVE de zlib (ver [ADR-0004](docs/adr/0004-v1-referencia-go126.md) e
-[ADR-0006](docs/adr/0006-java21-zlib-blocker-remediation-options.md)), o que
-mostra que o controle deixou de ser decorativo.
+precisam passar — uma diferença material. O gate também permaneceu
+bloqueante enquanto isso impediu frameworks inteiros pela CVE de zlib
+(ver [ADR-0004](docs/adr/0004-v1-referencia-go126.md) e
+[ADR-0006](docs/adr/0006-java21-zlib-blocker-remediation-options.md);
+resolvido pelo upstream em 17/09/2026, sem alterar o gate), o que mostra
+que o controle deixou de ser decorativo.
 
 ### 6. Contrato funcional
 
@@ -507,7 +508,8 @@ Ideia original → POC funcional → hardening → supply chain → governança 
 ### Questões em aberto para a conversa com Gerson
 
 Para não gastar tempo da conversa pedindo aprovação para coisas que já têm
-direção técnica definida, valem só quatro perguntas reais.
+direção técnica definida, valem só quatro perguntas reais — das quais a
+segunda foi resolvida pelo próprio upstream antes da conversa (ver abaixo).
 
 #### 1. Um repositório ou dois
 
@@ -518,19 +520,19 @@ direção técnica definida, valem só quatro perguntas reais.
   [Fronteira entre produto e workflows compartilhados](docs/repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados)
   para a separação equivalente entre produto e executor.
 
-#### 2. Como tratar o bloqueio do zlib
+#### 2. Como tratar o bloqueio do zlib — RESOLVIDA (17/09/2026)
 
-- Aguardar o Wolfi publicar a correção; ou
-- Manter temporariamente um package `zlib` próprio via Melange, a partir do
-  commit oficial já corrigido no upstream (`madler/zlib`), ainda não
-  lançado como release do Wolfi.
-- Nos dois casos, o Trivy continua bloqueante, sem exceção.
+A pergunta era: aguardar o Wolfi publicar a correção, ou manter
+temporariamente um package `zlib` próprio via Melange a partir do commit
+oficial já corrigido no upstream (`madler/zlib`) — nos dois casos com o
+Trivy bloqueante, sem exceção.
 
-Esta é literalmente a mesma pergunta já formalizada em
+Não precisa mais de decisão: o Wolfi publicou `zlib` a partir exatamente
+desse commit em 17/09/2026, e a revalidação completa do catálogo confirmou
+16/16 definições limpas nas duas arquiteturas sem qualquer mudança no gate.
+Registro e evidência no
 [ADR-0006](docs/adr/0006-java21-zlib-blocker-remediation-options.md)
-("Pergunta objetiva para o Tech Lead"), com o spike de viabilidade e o
-commit exato já investigados — a conversa com Gerson é o mecanismo para
-resolvê-la.
+(estado `RESOLVED`, addendum). O pacote próprio nunca foi construído.
 
 #### 3. Estratégia de rollout das linguagens
 
@@ -557,7 +559,7 @@ entra no catálogo ativo.
 - **Lifecycle** — 7 dias preservando `stable`; direção já formalizada em
   [ADR-0005](docs/adr/0005-stable-lifecycle-realinhamento-rfc013.md), pendente
   de aceite de code owner — não uma decisão do Tech Lead, ao contrário dos
-  quatro pontos acima.
+  pontos 1, 3 e 4 acima.
 
 ### Em uma frase
 
@@ -760,7 +762,7 @@ define o que o consumidor deve conferir; não instala enforcement no deploy.
 
 | Item do escopo | Estado |
 | --- | --- |
-| Padrões de imagem base por framework prioritário (Java, Node.js, Python, Go e .NET) | Entregue (17 definições; 16 no lote automático) |
+| Padrões de imagem base por framework prioritário (Java, Node.js, Python, Go e .NET) | Entregue (16 definições, todas no lote automático; `dotnet8` removido em 17/09/2026) |
 | Pipeline de build com Melange e Apko | Entregue |
 | Primeiras imagens base em formato distroless | Entregue no sandbox |
 | Build multi-plataforma (`amd64` e `arm64`) | Entregue, escaneado e testado por arquitetura |
