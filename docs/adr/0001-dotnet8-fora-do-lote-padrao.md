@@ -15,7 +15,9 @@
 > contrato funcional, SBOM e keyring aprovados. A **adoção foi recusada** por
 > custo/benefício: o .NET 8 chega ao fim do suporte em novembro de 2026 e o .NET 10 já
 > está disponível e verde no caminho Wolfi padrão. Ver [ADR-0007](0007-multi-source-alpine-recusado.md).
-> Esta decisão permanece em vigor, sem alteração: `dotnet8` segue fora do lote padrão.
+> Separadamente, em 17/09/2026 `dotnet8` foi **removido do catálogo inicial**
+> (não apenas mantido fora do lote) — ver o segundo adendo abaixo e
+> alric-containers-image-base#85.
 
 
 `frameworks/dotnet8.yaml` compõe a imagem com `dotnet-8-sdk` do Wolfi. O scan

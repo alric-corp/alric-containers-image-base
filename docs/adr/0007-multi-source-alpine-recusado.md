@@ -53,17 +53,27 @@ documentou. Recusada a adoção, essa exposição não entra no produto.
 
 ## Consequências
 
-- O catálogo permanece com 17 definições, todas Wolfi. `WOLFI_DEFAULT = YES`.
-- `dotnet8` continua exatamente como o ADR-0001 o deixou: no catálogo, fora dos
-  três lotes, bloqueado pelo gate de CVE, com a exceção registrada em
-  `policies/operations/health.json`. Nada é declarado READY.
-- `dotnet8-dev` não existe como produto.
-- Lote padrão, escopo do schedule, publisher e gates de segurança: inalterados.
+- `dotnet8` e `dotnet8-dev` não são oficializados: Alpine não vira fonte
+  suportada e o modelo multi-source não entra no produto.
 - **.NET 10 é o caminho suportado** para consumidores que precisam sair do .NET 8.
 - Os POCs continuam válidos como evidência técnica. Se algum dia existir um
   segundo caso de uso real para multi-source — um que não dependa de um runtime
   em fim de vida — esta investigação é o ponto de partida, e a conclusão a
   revisitar é a de custo, não a de viabilidade.
+
+> **Atualização (17/09/2026):** a decisão acima — não adotar Alpine/multi-source
+> — permanece válida e é o que este ADR registra. Separadamente, `dotnet8` foi
+> **removido do catálogo inicial** (não apenas mantido fora do lote como este
+> ADR previa ao ser escrito): o suporte LTS termina em novembro de 2026 e não
+> havia correção do Wolfi à vista, então não restava razão de produto para
+> manter a definição. `frameworks/dotnet8.yaml` foi excluído e a exceção
+> correspondente saiu de `policies/operations/health.json` (catálogo 17 → 16).
+> Ver o adendo em [ADR-0001](0001-dotnet8-fora-do-lote-padrao.md) e a
+> implementação em alric-containers-image-base#85 (registry: remoção do
+> repositório ECR vazio `image-base-dotnet8` em PR próprio, após esta e a #85
+> mergearem). Resumo final: **POC tecnicamente aprovado; adoção do
+> multi-source recusada; `dotnet8` removido do catálogo por fim de vida;
+> `dotnet10` é o caminho suportado.**
 
 ## Critério de reversão
 
