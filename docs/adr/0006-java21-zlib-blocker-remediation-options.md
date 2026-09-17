@@ -2,11 +2,11 @@
 
 | Informação | Valor |
 | --- | --- |
-| Estado | **PROPOSED — decisão do Tech Lead PENDING** (mesmo padrão do ADR-0002) |
-| Data | 16/09/2026 |
+| Estado | **RESOLVED — superseded pelo fix upstream do Wolfi (ver Addendum, 17/09/2026)** |
+| Data | 16/09/2026 (investigação original); Addendum 17/09/2026 |
 | Owner | Containers Products (`@alric-corp/github_xj7_maintainer`) |
-| Decisão pendente | Tech Lead — ver "Pergunta objetiva" |
-| Aplicação | Nenhuma ainda — este ADR não implementa nada, apenas registra a investigação e as opções |
+| Decisão pendente | Nenhuma — a pergunta objetiva original foi respondida pelo próprio Wolfi antes da decisão do Tech Lead ser necessária. Ver Addendum |
+| Aplicação | Nenhuma implementada por este ADR — o pacote próprio via Melange descrito na seção 8 nunca foi construído nem é mais necessário |
 | Origem | Ataque ao segundo framework da V1 (Java 21), golden path Go 1.26 já `CLOSED` |
 
 ## TL;DR
@@ -242,4 +242,73 @@ ADR-0001/dotnet8).
 
 ```
 TECH_LEAD_DECISION_REQUIRED = YES
+```
+
+**Esta pergunta foi respondida pelo próprio Wolfi antes de chegar ao Tech
+Lead — ver Addendum abaixo.** Nada acima foi apagado ou reescrito: registra
+com precisão o que se sabia em 16/09/2026, incluindo por que a Opção D
+("aguardar upstream") era classificada como sem custo, sem risco — foi
+exatamente essa opção que se confirmou no dia seguinte.
+
+## Addendum — 17/09/2026: resolvido, opção D confirmada
+
+Revalidação completa do catálogo
+([`specs/2026-09-17-full-catalog-revalidation/`](../../specs/2026-09-17-full-catalog-revalidation/))
+via mecanismo real da fábrica (apko/melange, run de CI real, não rootfs
+sintético) confirma que o Wolfi publicou o pacote `zlib` a partir do
+**mesmo commit** identificado na seção 5 deste ADR como a correção upstream
+ainda não lançada:
+
+```
+zlib.yaml (wolfi-dev/os@main):
+  version: "1.3.2.1_rc20260601"
+  pipeline:
+    - uses: git-checkout
+      with:
+        expected-commit: e3dc0a85b7032e98380dec011bc8f2c2ee0d8fca
+```
+
+`e3dc0a85b7032e98380dec011bc8f2c2ee0d8fca` é exatamente o commit que a
+seção 5 apontou. O Wolfi não esperou uma release oficial "1.3.3" (que,
+como este ADR já havia verificado, nunca existiu) — buildou a partir do
+mesmo commit-pin que a Opção C deste ADR propunha, só que como o próprio
+mantenedor do pacote, não como um pacote paralelo da fábrica.
+
+Run real (`35179012804`, PR descartável
+[`#81`](https://github.com/alric-corp/alric-containers-image-base/pull/81),
+não mergeado): 16/16 definições do catálogo (todas exceto `dotnet8`, fora
+de todos os lotes desde o ADR-0001) buildam e escaneiam limpo em ambas as
+arquiteturas. Nas 13 que dependem de `libz.so.1` (incluindo `java21`, o
+alvo original desta investigação), a versão resolvida em todas é
+`1.3.2.1_rc20260601-r0` — correlacionada com a ausência de
+`CVE-2026-85091`, não apenas inferida da ausência do CVE. Detalhe completo:
+[`evidence.md`](../../specs/2026-09-17-full-catalog-revalidation/evidence.md).
+
+**Consequência para as opções da seção 7:**
+
+- Opção C (package próprio via Melange) não é mais necessária —
+  `CUSTOM_ZLIB_PACKAGE = NOT_REQUIRED`. O trabalho de avaliação da seção 8
+  permanece válido como registro de que a opção era viável, caso um
+  cenário futuro similar se repita com outro pacote.
+- Opção D (aguardar upstream) é o que efetivamente resolveu o bloqueio,
+  em menos de 24h da investigação original — sem custo, sem risco, exatamente
+  como avaliado na seção 7 da investigação original.
+- `SECURITY_GATE_RELAXED = NO` continua verdadeiro: nada no Trivy, na
+  severidade ou na política de exceção mudou. O que mudou foi o pacote que
+  o Wolfi publica.
+- Wolfi permanece a base padrão da fábrica. Alpine foi avaliado como
+  alternativa de base em investigação paralela nesta mesma sessão e
+  **rejeitado como workaround de CVE**: o `zlib 1.3.2-r0` que o Alpine
+  publica (v3.22 a edge, ambas arquiteturas) não contém o commit da
+  correção (`APKBUILD` só baixa o tarball oficial `zlib-1.3.2.tar.gz`, sem
+  patch); a ausência de entrada para `CVE-2026-85091` no `secdb` do Alpine
+  é ausência de advisory, não prova de correção — confirmado por um
+  experimento de controle (o mesmo scanner sinaliza `zlib 1.3.1-r0` do
+  Alpine para outras CVEs que o Alpine reconhece). `APKO_SUPPORTS_MULTIPLE_APK_SOURCES = YES`
+  permanece uma opção arquitetural válida para outros motivos (tamanho,
+  musl), nunca como saída de CVE.
+
+```
+TECH_LEAD_DECISION_REQUIRED = NO (para a pergunta original deste ADR)
+ZLIB_85091_STATUS = FIXED_BY_WOLFI
 ```
