@@ -9,7 +9,7 @@ aplica (em `policies/`) tenha uma origem revisável.
 
 | ADR | Decisão | Estado | Aplicada por |
 | --- | --- | --- | --- |
-| [0001](0001-dotnet8-fora-do-lote-padrao.md) | `dotnet8` fora do lote padrão, sem sair do catálogo | Proposto | `policies/operations/health.json` → `exceptions`; lint `scripts/pipeline/catalog/default_batch.py` |
+| [0001](0001-dotnet8-fora-do-lote-padrao.md) | `dotnet8` fora do lote padrão, sem sair do catálogo (12/09/2026); adendo de 17/09/2026 registra a remoção do catálogo — ver ADR-0007 | Proposto | `policies/operations/health.json` → `exceptions` (vazio); lint `scripts/pipeline/catalog/default_batch.py` |
 | [0002](0002-sigstore-trust-model.md) | Modelo de confiança Sigstore e decisão de uso corporativo | PROPOSED — decisão corporativa EXTERNAL / PENDING | Documenta signing/verification existentes; não altera controles |
 | [0003](0003-controles-seguranca-workflows-federados.md) | Controles de segurança da fábrica em workflows federados | Premissa de autoria definida; PROPOSED para requisitos/aceites externos | Documenta controles e responsabilidades; nenhuma mudança de gates |
 | [0004](0004-v1-referencia-go126.md) | V1 de referência: Go 1.26 como primeiro fluxo completo, catálogo preservado | Proposto | `policies/operations/health.json` → `execution_scope` (visibilidade); `default_batch.py`/`P0_04_BATCH` (execução, já em produção) |

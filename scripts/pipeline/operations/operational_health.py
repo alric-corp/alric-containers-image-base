@@ -17,10 +17,12 @@ E `retention`, offline: confirma que a retenção declarada na política
 (`policies/operations/health.json`) é a que os workflows realmente usam. Uma
 política que diverge do `retention-days` efetivo não protege prazo nenhum.
 
-Exceções conhecidas (ex.: `dotnet8`) são reportadas como conhecidas, com
-dono e data de revisão: sem isso, um bloqueio permanente vira ruído e treina
-quem lê a ignorar o alerta. Uma exceção com revisão vencida gera alerta
-própria — a exceção também não pode apodrecer em silêncio.
+Exceções conhecidas (framework fora do lote padrão por decisão registrada,
+ex.: `dotnet8` até sua remoção do catálogo em 17/09/2026 — ver
+docs/adr/0001-dotnet8-fora-do-lote-padrao.md) são reportadas como conhecidas,
+com dono e data de revisão: sem isso, um bloqueio permanente vira ruído e
+treina quem lê a ignorar o alerta. Uma exceção com revisão vencida gera
+alerta própria — a exceção também não pode apodrecer em silêncio.
 
 Este script mede e classifica; ele não entrega notificação. Enquanto o
 destino externo não estiver definido (ver `docs/m11-m04-operational-health.md`),

@@ -87,8 +87,8 @@ class RowTests(unittest.TestCase):
 class CollectTests(unittest.TestCase):
     def test_framework_without_any_evidence_still_has_a_row(self):
         with tempfile.TemporaryDirectory() as directory:
-            collected = summary.collect(directory, ['nodejs22', 'dotnet8'])
-        self.assertEqual(set(collected['frameworks']), {'nodejs22', 'dotnet8'})
+            collected = summary.collect(directory, ['nodejs22', 'nodejs24'])
+        self.assertEqual(set(collected['frameworks']), {'nodejs22', 'nodejs24'})
         self.assertEqual(collected['totals']['without_evidence'], 2)
 
     def test_promotion_table_does_not_borrow_the_build_batch_reason(self):
@@ -102,11 +102,9 @@ class CollectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             # go1-26 sem o par -dev no lote: o contrato compilado não roda, e o
             # motivo tem de aparecer em vez de a coluna ficar vazia.
-            collected = summary.collect(directory, ['go1-26', 'dotnet8'],
-                                        annotate_plan=True)
+            collected = summary.collect(directory, ['go1-26'], annotate_plan=True)
         self.assertEqual(collected['frameworks']['go1-26']['runtime']['status'], 'não executado')
         self.assertIn('go1-26-dev', collected['frameworks']['go1-26']['runtime']['reason'])
-        self.assertIn('dotnet8-dev', collected['frameworks']['dotnet8']['runtime']['reason'])
 
     def test_rendered_table_has_one_row_per_framework_and_direct_links(self):
         with tempfile.TemporaryDirectory() as directory:

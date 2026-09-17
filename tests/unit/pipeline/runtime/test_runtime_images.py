@@ -62,13 +62,6 @@ class RuntimeContractTests(unittest.TestCase):
             self.assertEqual(json.loads((directory / 'runtime-nodejs24-arm64.json').read_text())['status'], 'passed')
 
     def test_compiled_contract_requires_the_dev_pair(self):
-        # Cobertura gradual explícita: dotnet8 não tem variante -dev no
-        # catálogo, então não pode ter contrato compilado — e o erro tem de
-        # dizer isso, não passar silenciosamente como "sem contrato".
-        for framework in ('dotnet8',):
-            with self.subTest(framework=framework), self.assertRaises(ValueError) as raised:
-                runtime.project(framework)
-            self.assertIn('-dev', str(raised.exception))
         for framework in ('go1-25', 'go1-26', 'java21', 'java25', 'dotnet10'):
             with self.subTest(framework=framework):
                 directory, dev, toolchain = runtime.project(framework)

@@ -39,18 +39,23 @@ def run_cli(*args, cwd=ROOT):
 
 
 class RealTreeTests(unittest.TestCase):
-    """O estado versionado é o primeiro caso de aceite (A01/A02)."""
+    """O estado versionado é o primeiro caso de aceite (A01/A02).
 
-    def test_the_three_batches_are_the_catalog_minus_the_exclusions(self):
+    dotnet8 foi removido do catálogo em 17/09/2026 (fim de suporte LTS em
+    11/2026; ver docs/adr/0001-dotnet8-fora-do-lote-padrao.md, adendo, e
+    docs/adr/0007-multi-source-alpine-recusado.md): a árvore real não tem
+    mais nenhuma exceção registrada, e os três lotes são o catálogo inteiro.
+    """
+
+    def test_the_three_batches_are_the_catalog_with_no_exclusions(self):
         names, policy, document = batch.load()
         excluded, problems = batch.exclusions(policy)
         self.assertEqual(problems, [])
-        self.assertEqual(sorted(excluded), ['dotnet8'])
+        self.assertEqual(excluded, {})
         found = batch.batches(document)
         self.assertEqual(batch.lint(names, excluded, found), [])
         expected = batch.expected_batch(names, excluded)
-        self.assertNotIn('dotnet8', expected)
-        self.assertIn('dotnet8', names)
+        self.assertEqual(expected, names)
         for job_id in batch.BATCH_JOBS:
             names_in_job, problem = batch.parse_batch(job_id, found[job_id])
             self.assertIsNone(problem)
@@ -59,23 +64,15 @@ class RealTreeTests(unittest.TestCase):
                                 else expected)
             self.assertEqual(sorted(names_in_job), sorted(expected_for_job), job_id)
 
-    def test_the_exclusion_is_a_reviewed_decision_with_a_valid_adr(self):
-        policy = json.loads((ROOT / 'policies/operations/health.json').read_text())
-        entry = policy['exceptions']['dotnet8']
-        for field in batch.REQUIRED_FIELDS:
-            self.assertTrue(entry.get(field), field)
-        self.assertEqual(entry['adr'], 'docs/adr/0001-dotnet8-fora-do-lote-padrao.md')
-        self.assertIsNone(batch.adr_problem(entry['adr']))
-
     def test_the_cli_lint_and_list_agree_with_the_tree(self):
         lint = run_cli('lint')
         self.assertEqual(lint.returncode, 0, lint.stderr)
         listing = run_cli('list')
         self.assertEqual(listing.returncode, 0, listing.stderr)
         report = json.loads(listing.stdout)
-        self.assertEqual(report['excluded'], ['dotnet8'])
+        self.assertEqual(report['excluded'], [])
         self.assertEqual(report['problems'], [])
-        self.assertEqual(len(report['default_batch']), len(report['catalog']) - 1)
+        self.assertEqual(len(report['default_batch']), len(report['catalog']))
 
 
 class LintTests(unittest.TestCase):
