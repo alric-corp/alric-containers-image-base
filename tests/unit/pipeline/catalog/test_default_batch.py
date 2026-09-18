@@ -28,12 +28,15 @@ def dispatch_form(names):
 
 
 def workflow(*batches):
-    """workflow.yml mínimo com um lote por job, na mesma forma do real."""
-    validate, build, promote = batches
+    """workflow.yml mínimo com um lote por job, na mesma forma do real.
+
+    Desde a separação build/promoção, workflow.yml só tem dois jobs com lote
+    explícito (a promoção agendada vive em promote-stable.yml, com seu
+    próprio perfil P0-04 fixo, testado à parte)."""
+    validate, build = batches
     return {'jobs': {
         'validate-pr': {'with': {'frameworks': json.dumps(validate)}},
         'build-base-images': {'with': {'frameworks': dispatch_form(build)}},
-        'promote-stable': {'with': {'frameworks': json.dumps(promote), 'soak-hours': 6}},
     }}
 
 
@@ -48,11 +51,11 @@ class RealTreeTests(unittest.TestCase):
 
     dotnet8 foi removido do catálogo em 17/09/2026 (fim de suporte LTS em
     11/2026; decisão consolidada no histórico Git e na RFC-013): a árvore
-    real não tem mais nenhuma exceção registrada, e os três lotes são o
-    catálogo inteiro.
+    real não tem mais nenhuma exceção registrada, e os dois lotes de
+    workflow.yml são o catálogo inteiro.
     """
 
-    def test_the_three_batches_are_the_catalog_with_no_exclusions(self):
+    def test_the_two_batches_are_the_catalog_with_no_exclusions(self):
         names, policy, document = batch.load()
         excluded, problems = batch.exclusions(policy)
         self.assertEqual(problems, [])
@@ -89,18 +92,13 @@ class LintTests(unittest.TestCase):
         return batch.lint(sorted(CATALOG), self.EXCLUDED if excluded is None else excluded, found)
 
     def test_catalog_minus_exclusions_passes_in_any_order(self):
-        self.assertEqual(self.lint(self.BATCH, list(reversed(self.BATCH)), self.BATCH), [])
-
-    def test_p0_profile_is_valid_for_promotion_during_rollout(self):
-        # O caller de promoção pode usar o perfil P0-04 sem registrar
-        # frameworks ausentes como exceptions do catálogo.
-        self.assertEqual(self.lint(self.BATCH, self.BATCH, batch.P0_04_BATCH), [])
+        self.assertEqual(self.lint(self.BATCH, list(reversed(self.BATCH))), [])
 
     def test_excluded_framework_present_in_the_batches_is_one_problem_per_job(self):
-        # N02: framework excluído aparecendo nos três lotes mesmo assim.
+        # N02: framework excluído aparecendo nos dois lotes mesmo assim.
         old = self.BATCH + ['sample-runtime']
-        problems = self.lint(old, old, old)
-        self.assertEqual(len(problems), 3)
+        problems = self.lint(old, old)
+        self.assertEqual(len(problems), 2)
         for job_id, problem in zip(batch.BATCH_JOBS, problems):
             self.assertIn(f'`{job_id}`', problem)
             self.assertIn('fora do lote padrão', problem)
@@ -108,27 +106,28 @@ class LintTests(unittest.TestCase):
 
     def test_unknown_and_duplicated_names_are_rejected(self):
         # N03
-        problems = self.lint(self.BATCH + ['python3-99'], self.BATCH, self.BATCH + ['nodejs22'])
+        problems = self.lint(self.BATCH + ['python3-99'], self.BATCH + ['nodejs22'])
         self.assertTrue(any('`python3-99` não existe no catálogo' in p for p in problems))
         self.assertTrue(any('`nodejs22` repetido' in p for p in problems))
         self.assertEqual(len(problems), 2)
 
     def test_exclusion_outside_the_catalog_is_a_problem(self):
-        problems = self.lint(self.BATCH, self.BATCH, self.BATCH,
+        problems = self.lint(self.BATCH, self.BATCH,
                              excluded={'sample-runtime': EXCLUSION, 'ruby3': EXCLUSION})
         self.assertEqual(problems, ['exceção `ruby3` não existe no catálogo'])
 
     def test_unreadable_batch_is_reported_not_ignored(self):
-        document = workflow(self.BATCH, self.BATCH, self.BATCH)
-        document['jobs']['promote-stable']['with']['frameworks'] = 'not json'
+        document = workflow(self.BATCH, self.BATCH)
+        document['jobs']['build-base-images']['with']['frameworks'] = 'not json'
         del document['jobs']['validate-pr']['with']
         found = batch.batches(document)
-        self.assertEqual(found['promote-stable'], 'not json')
         self.assertIsNone(found['validate-pr'])
+        self.assertEqual(found['build-base-images'], 'not json')
         problems = batch.lint(sorted(CATALOG), self.EXCLUDED, found)
         self.assertEqual(len(problems), 2)
         self.assertIn('`validate-pr`: `with.frameworks` ausente', problems[0])
-        self.assertIn('`promote-stable`: `frameworks` fora da forma canônica (`not json`)', problems[1])
+        self.assertIn('`build-base-images`: `frameworks` fora da forma canônica (`not json`)',
+                      problems[1])
 
     def test_without_exclusions_the_batch_is_the_whole_catalog(self):
         # N05: `exceptions` ausente ou null tem comportamento definido.
@@ -137,7 +136,7 @@ class LintTests(unittest.TestCase):
                 excluded, problems = batch.exclusions(policy)
                 self.assertEqual((excluded, problems), ({}, []))
                 full = sorted(CATALOG)
-                self.assertEqual(self.lint(full, full, full, excluded=excluded), [])
+                self.assertEqual(self.lint(full, full, excluded=excluded), [])
 
 
 class BatchFormTests(unittest.TestCase):
@@ -160,8 +159,7 @@ class BatchFormTests(unittest.TestCase):
 
     def test_the_canonical_forms_parse_and_tolerate_spacing_inside_the_literal(self):
         spaced = '[ "go1-26" ,"go1-26-dev",  "nodejs22" ]'
-        for job_id in ('validate-pr', 'promote-stable'):
-            self.assertEqual(batch.parse_batch(job_id, spaced), (self.BATCH, None), job_id)
+        self.assertEqual(batch.parse_batch('validate-pr', spaced), (self.BATCH, None))
         self.assertEqual(batch.parse_batch('build-base-images', dispatch_form(self.BATCH)),
                          (self.BATCH, None))
         self.assertEqual(batch.parse_batch('validate-pr', '[]'), ([], None))
@@ -179,10 +177,9 @@ class BatchFormTests(unittest.TestCase):
 
     def test_each_job_accepts_only_its_own_form(self):
         # O literal puro perde o input do dispatch; a expressão do dispatch não
-        # pertence aos jobs de PR e promoção. Nenhum dos dois é aceito no outro.
+        # pertence ao job de PR.
         self.assertIsNone(batch.parse_batch('build-base-images', self.LITERAL)[0])
-        for job_id in ('validate-pr', 'promote-stable'):
-            self.assertIsNone(batch.parse_batch(job_id, dispatch_form(self.BATCH))[0])
+        self.assertIsNone(batch.parse_batch('validate-pr', dispatch_form(self.BATCH))[0])
 
     def test_values_that_are_not_a_json_list_of_catalog_shaped_names_are_rejected(self):
         for raw in (None, ['go1-26'], 42, '"go1-26"', '["Go1-26"]', '["go1-26", 1]',
@@ -193,7 +190,7 @@ class BatchFormTests(unittest.TestCase):
                 self.assertIn('`validate-pr`', problem)
 
     def test_lint_reports_the_form_problem_once_and_checks_the_other_jobs(self):
-        document = workflow(self.BATCH, self.BATCH, self.BATCH)
+        document = workflow(self.BATCH, self.BATCH)
         document['jobs']['build-base-images']['with']['frameworks'] = self.DYNAMIC[0]
         problems = batch.lint(sorted(CATALOG), {'sample-runtime': EXCLUSION}, batch.batches(document))
         self.assertEqual(len(problems), 1)
@@ -345,15 +342,15 @@ class CliTests(unittest.TestCase):
     def test_lint_fails_on_a_tree_where_the_batch_diverges(self):
         with tempfile.TemporaryDirectory() as temporary:
             old = self.BATCH + ['sample-runtime']
-            result = run_cli('lint', *self.tree(pathlib.Path(temporary), workflow(old, old, old)))
+            result = run_cli('lint', *self.tree(pathlib.Path(temporary), workflow(old, old)))
             self.assertEqual(result.returncode, 1)
-            self.assertEqual(result.stderr.count('::error::'), 3)
+            self.assertEqual(result.stderr.count('::error::'), 2)
             self.assertIn('`sample-runtime` está fora do lote padrão', result.stderr)
 
     def test_lint_fails_when_a_variable_can_replace_the_batch(self):
         # N07, exemplo do reviewer: o literal está certo, mas `vars.*` mandaria.
         with tempfile.TemporaryDirectory() as temporary:
-            document = workflow(self.BATCH, self.BATCH, self.BATCH)
+            document = workflow(self.BATCH, self.BATCH)
             document['jobs']['build-base-images']['with']['frameworks'] = (
                 "${{ vars.DEFAULT_FRAMEWORKS || '" + json.dumps(self.BATCH) + "' }}")
             result = run_cli('lint', *self.tree(pathlib.Path(temporary), document))
@@ -380,7 +377,7 @@ class CliTests(unittest.TestCase):
                 shutil.copy(ROOT / relative, copy / relative)
             (copy / 'docs').mkdir()
             (copy / 'docs/adr').symlink_to(external)
-            result = run_cli('lint', *self.tree(copy, workflow(self.BATCH, self.BATCH, self.BATCH)),
+            result = run_cli('lint', *self.tree(copy, workflow(self.BATCH, self.BATCH)),
                              cwd=copy)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(result.stderr.count('::error::'), 1)
@@ -392,7 +389,7 @@ class CliTests(unittest.TestCase):
             with self.subTest(adr=adr), tempfile.TemporaryDirectory() as temporary:
                 policy = {'exceptions': {'sample-runtime': dict(EXCLUSION, adr=adr)}}
                 result = run_cli('lint', *self.tree(pathlib.Path(temporary),
-                                                    workflow(self.BATCH, self.BATCH, self.BATCH), policy))
+                                                    workflow(self.BATCH, self.BATCH), policy))
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(result.stderr.count('::error::'), 1)
                 self.assertIn(f'ADR `{adr}` precisa ser um caminho relativo `docs/adr/NNNN-titulo.md`',

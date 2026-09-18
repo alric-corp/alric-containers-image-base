@@ -187,17 +187,19 @@ A audience Sigstore é outra solicitação OIDC, não a sessão AWS.
 | Caminho | Caller / executor AWS | Ref/guard e claim relevante |
 | --- | --- | --- |
 | Push main; cron diário 03:00; dispatch de workflow.yml | workflow.yml → build-base-images.yml/build-push | Guards main/event nos dois; job_workflow_ref do publicador esperado pelo mecanismo reusable |
-| Cron horário :17 | workflow.yml → promote-stable.yml/promote | Main/schedule; job_workflow_ref do reusable de promoção esperado |
-| Dispatch direto de promoção | promote-stable.yml/promote | Guard main; não assumir job_workflow_ref presente |
+| Cron horário :17; dispatch direto de promoção | promote-stable.yml/promote | Guard main; schedule nativo desde a separação build/promoção — não assumir job_workflow_ref presente em nenhuma das duas rotas |
 | Dispatch recovery | recover-stable.yml/recover | **Não tem guard main no job**; a trust exata rejeita outra ref na assunção, além da validação local de inputs |
 | PR interno/fork | workflow.yml → validate-base-images.yml → executor shared | Somente validação/leitura, sem AWS/OIDC; não adicionar credenciais para teste |
 | Reusables de validação/runtime | Biblioteca consumida por SHA | Sem configure-aws ou grants AWS; scripts/checkout pertencem ao caller |
 
 Em reusable, `repository`, IDs, `ref` e `workflow` descrevem o caller;
-`job_workflow_ref` identifica o reusable chamado. Esperados nesta main:
-`alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@refs/heads/main`
-e o caminho equivalente de `promote-stable.yml`. São valores derivados do
-código/documentação, **não claims novas observadas em execução**.
+`job_workflow_ref` identifica o reusable chamado. Esperado nesta main apenas
+para o publicador:
+`alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@refs/heads/main`.
+`promote-stable.yml` roda como trigger direto (schedule ou dispatch) desde a
+separação build/promoção, sem relação reusable dentro deste repositório —
+não presumir `job_workflow_ref` nessa rota. Valor derivado do
+código/documentação, **não claim nova observada em execução**.
 
 ### Claims suportadas versus claims presentes
 

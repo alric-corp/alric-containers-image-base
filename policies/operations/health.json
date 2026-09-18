@@ -20,16 +20,24 @@
     "$comment": "publication_age_hours = 24h do build diário + 6h de margem: alerta quer dizer 'dois ciclos diários seguidos sem publicar este framework'. stable_age_hours = 24h + soak de 6h + 18h de margem para a promoção horária. Nenhum destes números é SLA prometido a consumidor: são limites internos de alerta, derivados da cadência real do pipeline. Os limites de lacuna por cron ficam em `schedules`, porque cada cron tem cadência própria."
   },
   "schedules": {
-    "$comment": "`job` é o job condicionado ao cron em workflow.yml — a API do GitHub não expõe `github.event.schedule`, então a atribuição de cada run agendado sai de qual job rodou de fato (o outro aparece `skipped`). `gap_alert_hours` é a lacuna sem nenhum run deste cron que caracteriza 'paramos de atualizar'. Medido em 09/09/2026 na conta real: o agendador do GitHub entregou 7 runs agendados em ~40h, com atrasos de 29s a 4h36m — a cadência nominal do cron NÃO é a cadência real, e os limites abaixo refletem a entrega observada, não a nominal. O lint offline exige que este bloco e o workflow declarem os mesmos crons.",
+    "$comment": "`workflow` é o arquivo que agenda esse cron nativamente; `job` é o job desse arquivo usado para atribuir um run agendado a ele quando mais de um cron compartilha o mesmo arquivo (a API do GitHub não expõe `github.event.schedule`, então a atribuição sai de qual job rodou de fato, não `skipped`). `gap_alert_hours` é a lacuna sem nenhum run deste cron que caracteriza 'paramos de atualizar'. Medido em 09/09/2026 na conta real: o agendador do GitHub entregou 7 runs agendados em ~40h, com atrasos de 29s a 4h36m — a cadência nominal do cron NÃO é a cadência real, e os limites abaixo refletem a entrega observada, não a nominal. O lint offline exige que cada workflow em `.github/workflows/*.yml` com `schedule:` declare exatamente os crons também declarados aqui, um-para-um.",
     "0 3 * * *": {
       "job": "build-base-images",
+      "workflow": ".github/workflows/workflow.yml",
       "purpose": "build diário",
       "gap_alert_hours": 30
     },
     "17 * * * *": {
-      "job": "promote-stable",
+      "job": "Resolve scheduled-run defaults",
+      "workflow": ".github/workflows/promote-stable.yml",
       "purpose": "promoção horária",
       "gap_alert_hours": 12
+    },
+    "40 5 * * *": {
+      "job": "Operational health and tool pins",
+      "workflow": ".github/workflows/pipeline-health.yml",
+      "purpose": "saúde operacional diária",
+      "gap_alert_hours": 30
     }
   },
   "retention_days": {

@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Lote padrão do pipeline: catálogo menos os frameworks excluídos (ADR-0001).
 
-O lote que `workflow.yml` pede em `validate-pr`, `build-base-images` e
-`promote-stable` está escrito três vezes, como string JSON, porque o `with:`
-de um workflow reutilizável não é calculado. Este lint garante que as três
-listas sejam exatamente `catálogo (frameworks/*.yaml) − exclusões`, e que
-cada exclusão seja uma decisão revisada: motivo, dono, `review_by` e ADR.
+O lote que `workflow.yml` pede em `validate-pr` e `build-base-images` está
+escrito duas vezes, como string JSON, porque o `with:` de um workflow
+reutilizável não é calculado. Este lint garante que as duas listas sejam
+exatamente `catálogo (frameworks/*.yaml) − exclusões`, e que cada exclusão
+seja uma decisão revisada: motivo, dono, `review_by` e ADR. A promoção
+agendada vive em `promote-stable.yml` (schedule próprio desde a separação
+build/promoção) e usa o mesmo perfil P0-04 fixo, conferido separadamente em
+`tests/unit/pipeline/governance/test_p0_04_execution_scope.py`, não aqui.
 
 A lista de exclusões é `exceptions` em `policies/operations/health.json` —
 a mesma que a saúde operacional usa para classificar a ausência de
@@ -35,7 +38,7 @@ WORKFLOW = ROOT / '.github/workflows/workflow.yml'
 # perfil. Callers explícitos, inclusive validações de impacto compartilhado,
 # continuam podendo usar DEFAULT/FULL; o workflow reutilizável permanece apto
 # a chamadas FULL independentes deste entrypoint.
-BATCH_JOBS = ('validate-pr', 'build-base-images', 'promote-stable')
+BATCH_JOBS = ('validate-pr', 'build-base-images')
 # Temporary rollout profile for the first corporate E2E. It is an execution
 # selection only; the catalog and FULL policy remain unchanged.
 P0_04_BATCH = ['go1-26', 'go1-26-dev']
@@ -58,7 +61,6 @@ FORMS = {
     'validate-pr': (re.compile(f'({JSON_LIST})'), STATIC_FORM),
     'build-base-images': (re.compile(re.escape(DISPATCH_PREFIX) + f'({JSON_LIST})'
                                      + re.escape(DISPATCH_SUFFIX)), DISPATCH_FORM),
-    'promote-stable': (re.compile(f'({JSON_LIST})'), STATIC_FORM),
 }
 
 # Convenção de docs/adr/README.md: `docs/adr/NNNN-titulo.md`, primeira linha
