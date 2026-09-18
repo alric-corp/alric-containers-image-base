@@ -95,8 +95,8 @@ jobs:
     name: Build & push ${{ matrix.framework }}
     # M13: `needs: validate` sozinho pularia TODA a matriz de publicação se
     # QUALQUER framework falhasse a validação (um scan bloqueado por CVE sem
-    # correção na origem, por exemplo — ver docs/adr/0001-dotnet8-fora-do-lote-padrao.md
-    # para o caso histórico do dotnet8) — needs trata o job `validate` (com
+    # correção na origem, por exemplo — caso histórico do dotnet8, removido
+    # do catálogo) — needs trata o job `validate` (com
     # sua própria matriz interna) como um resultado agregado, não por framework.
     # `if: always()` evita esse skip em massa; o isolamento por framework de
     # verdade acontece no passo "Download validated OCI artifact" abaixo —

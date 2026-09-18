@@ -1,9 +1,0 @@
-{
-  "AWS_ACCOUNT_ID": "111122223333",
-  "AWS_REGION": "us-east-1",
-  "ECR_REPOSITORIES": ["image-base-go1-26", "image-base-go1-26-dev"],
-  "GITHUB_REPOSITORY": "example-org/factory-iam-fixture",
-  "GITHUB_REPOSITORY_ID": "123456789",
-  "GITHUB_OWNER_ID": "987654321",
-  "GITHUB_SUB": "repo:example-org@987654321/factory-iam-fixture@123456789:ref:refs/heads/main"
-}

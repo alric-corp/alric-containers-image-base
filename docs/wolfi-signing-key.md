@@ -22,7 +22,7 @@ O manager deste pin é `human-review`; ele não é gerido por Renovate.
 chave local.** O Apko fixado também descobre chaves em
 `/apk-configuration`/JWKS da origem dos packages, inclusive com keyring local.
 Melange utiliza Apko internamente. A análise e o teste adversarial desta
-dependência estão em [evidence.md](../specs/2026-09-13-wolfi-signing-key/evidence.md).
+dependência foram verificados localmente e em execução hospedada real.
 `contents.keyring` **≠ exclusive trust set**: o conjunto efetivo inclui
 `explicit keyring + discovered keys`. Um adversário que comprometa
 repository/CDN/TLS e sirva `apk-configuration`, JWKS e index/packages

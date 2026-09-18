@@ -31,8 +31,7 @@ na RFC-013, ["O que significa \"hardened\""](../RFC-013-Image-Base-Completa-com-
 | `tests/unit/pipeline/` | Testes por domínio, sem Docker, AWS, sockets ou acesso à rede |
 | `tests/integration/` | Certificados, servidor TLS real, adaptadores e contrato com o checkout compartilhado |
 | `tests/runtime/` | Probes e projetos mínimos executados nas imagens candidatas reais |
-| `docs/` | Arquitetura, decisões (`docs/adr/`), runbooks e evidências revisadas |
-| `troubleshooting/` | Toolkit de diagnóstico com ciclo de vida separado das imagens base |
+| `docs/` | Arquitetura, decisões (`docs/adr/`) e runbooks vigentes |
 
 O mecanismo de `scripts/certificates/` prepara âncoras aprovadas para o pacote
 Melange e os providers Apko; o perfil versionado é público, sem CAs corporativas
@@ -91,12 +90,18 @@ contrato, não estética.
 ## Fronteira entre produto e workflows compartilhados
 
 O repositório `alric-corp/alric-containers-reusable-workflows` fornece os executores genéricos
-Melange/Apko/scan e runtime. O checkout desses executores é o commit do
-**consumidor**, de onde vêm os manifests, scripts e testes.
+Melange/Apko/scan e runtime (`validate-apko-images.yml`, `test-runtime-images.yml`,
+a composite `actions/setup-trivy`). O checkout desses executores é o commit do
+**consumidor**, de onde vêm os manifests, scripts, certificados e projetos de
+teste — intencional: outro produto precisa implementar as mesmas interfaces
+(contrato Apko/OCI) antes de adotar o pacote, não apenas apontar para ele.
 
 O `image-base` conserva catálogo, ECR, tags, soak, quarentena, identidade do
-assinador e recuperação. O executor compartilhado não recebe comandos livres,
-regras de negócio ou credenciais AWS como parte de seu contrato.
+assinador e recuperação — `workflow.yml`, `build-base-images.yml`,
+`promote-stable.yml`/`recover-stable.yml` e a saúde operacional nunca migram
+para o executor compartilhado. O executor compartilhado não recebe comandos
+livres, regras de negócio ou credenciais AWS como parte de seu contrato; ele
+só aceita `workflow_call`, sem cron, dispatch ou secrets próprios.
 
 Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@7a9b055a462eeb8552d3404c26538b44e8ccd83f`.
 
@@ -113,11 +118,25 @@ Renovate acompanha os digests locais.
 `REUSABLE_WORKFLOWS_PATH` só escolhe a localização. A conferência local não
 prova publicação do commit, acesso privado ou o conteúdo integral da biblioteca
 e da composite no seu SHA separado. Uma origem nova exige referências estáticas
-coerentes e futuro release da chamada interna, conforme o
-[contrato de reuso](m09-m12-reusable-workflows.md). A biblioteca e os pins sandbox
-permanecem inalterados. O caminho hospedado na origem sandbox tem
-[PASS observado no PR e na main](../specs/2026-09-14-shared-origin-portability/evidence.md),
-sujeito à revisão da reconciliação; migração real e acesso privado permanecem pendentes.
+coerentes e futuro release da chamada interna. A biblioteca e os pins sandbox
+permanecem inalterados; migração para outra origem e acesso privado a uma
+biblioteca corporativa continuam pendentes (ver
+[readiness corporativo](corporate-production-readiness.md)).
+
+O nome e a retenção dos artifacts trocados com o executor são parte da API:
+`melange-repo` (30 dias), `validated-oci-*` (3 dias), `build-scans-*`,
+`sbom-*` e `runtime-*` (30 dias). Um run deve chamar a validação uma única vez
+com o lote completo, porque os nomes dos artifacts são compartilhados dentro
+do run. `verify_promotion.py` preserva a identidade exata do workflow
+assinante; a compatibilidade com um nome de repositório anterior exige IDs
+cadastrados em `policies/release/signing-identities.json` — não há wildcard
+para aceitar candidatos históricos.
+
+**Critério para extrair mais lógica para o executor compartilhado:** pelo
+menos dois consumidores reais com o mesmo contrato. Hoje há exatamente um
+produto (`image-base`); publicação, atestação e as decisões de release
+continuam no produto por design, não por lacuna a fechar. Forçar uma nova
+extração sem um segundo consumidor real é abstração por estética.
 
 ## Compatibilidade da migração
 
@@ -148,9 +167,8 @@ O CI usa os mesmos alvos e preserva os nomes dos checks `test` e
 
 `CODEOWNERS` cobre os domínios e também arquivos novos pelo dono padrão.
 Os testes verificam que mudanças nos insumos movidos continuam cobertas pelos
-filtros de build. Evidências geradas ficam em `reports/` (ignorado); somente
-evidências selecionadas e revisadas são versionadas em `docs/evidence/` ou
-`tests/runtime/`. Evidências históricas conservam seus conteúdos e commits.
+filtros de build. Evidências geradas ficam em `reports/` (ignorado) e não são
+versionadas; o histórico Git é a fonte de runs/evidências passadas.
 
 ## Alcance para produção
 

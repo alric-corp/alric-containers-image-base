@@ -4,9 +4,8 @@ Baseline: main `30fb7132f879e58c06f56e5bf5d2c34fbb061ebd`, 17/09/2026 (estado do
 Registry/AWS conferido após a remoção do `image-base-dotnet8`). Este
 documento é um **resumo de readiness e handoff**: diz o que a fábrica já provou
 no LAB e o que ainda precisa ser adaptado e validado ao levá-la para o ambiente
-corporativo. Não substitui o [pacote de adoção](corporate-adoption.md) (parâmetros,
-responsáveis, checklist CA-xx) nem o [manifesto de migração](corporate-migration-manifest.md)
-(classificação arquivo a arquivo); é a porta de entrada para os dois.
+corporativo, e aponta para o [manifesto de cópia](corporate-file-manifest.md)
+com a lista exata do que copiar manualmente.
 
 > **Não estamos levando um POC para o corporativo. Estamos levando uma
 > implementação de referência já comprovada, que precisa ser portada e
@@ -16,15 +15,13 @@ responsáveis, checklist CA-xx) nem o [manifesto de migração](corporate-migrat
 
 | Necessidade | Documento |
 | --- | --- |
-| Parâmetros a fornecer, responsáveis e checklist de aceite do destino (CA-01–18) | [Pacote de adoção corporativa](corporate-adoption.md) |
-| Classificação KEEP / DO_NOT_MIGRATE / GENERATED por arquivo e repositório | [Manifesto de migração](corporate-migration-manifest.md) |
+| Lista exata do que copiar manualmente para o monorepo corporativo | [Manifesto de cópia](corporate-file-manifest.md) |
 | Fronteiras de domínio, workflows e contrato com o executor compartilhado | [Arquitetura do repositório](repository-architecture.md) |
 | Proposta, estado M01–M16 e "Prontidão para produção" | [RFC-013](../RFC-013-Image-Base-Completa-com-Mermaid.md) |
 | Decisões pontuais e seu estado | [Índice de ADRs](adr/README.md) — em especial [ADR-0002](adr/0002-sigstore-trust-model.md) (Sigstore), [ADR-0003](adr/0003-controles-seguranca-workflows-federados.md) (fábrica federada), [ADR-0004](adr/0004-v1-referencia-go126.md) (V1 Go 1.26), [ADR-0005](adr/0005-stable-lifecycle-realinhamento-rfc013.md) (`stable`/lifecycle) |
 | O que o consumidor verifica e como | [Consumer Verification Contract](consumer-verification-contract.md) |
 | Permissões AWS, trust OIDC e proposta para Cloud/IAM | [Contrato IAM](iam-permission-contract.md) |
 | Saúde, alertas, SLI/SLO propostos e limites da coleta | [Contrato operacional](m11-m04-operational-health.md) |
-| Fechamento hospedado do golden path Go 1.26 | [V1 de referência — fechamento](v1-reference-closure-2026-09-16.md) |
 
 ## A pergunta
 
@@ -55,13 +52,13 @@ Descoberto na árvore da baseline acima, não copiado de números históricos.
 | --- | --- |
 | Definições no catálogo (`frameworks/*.yaml`) | **16**: `dotnet10`, `dotnet10-dev`, `go1-25`, `go1-25-dev`, `go1-26`, `go1-26-dev`, `java21`, `java21-dev`, `java25`, `java25-dev`, `nodejs22`, `nodejs22-dev`, `nodejs24`, `nodejs24-dev`, `python3-13`, `python3-14` |
 | Package source ativa | **Wolfi** (`packages.wolfi.dev/os`), única — `distroless/image-base.yaml` |
-| Alpine / multi-source | Não adotados como source ativa. Investigados e recusados por decisão de produto ([ADR-0007](adr/0007-multi-source-alpine-recusado.md)); permanecem como evidência histórica |
-| .NET | `dotnet10` / `dotnet10-dev`. `dotnet8` removido do catálogo em 17/09/2026 — fim de suporte LTS em 11/2026 ([ADR-0001](adr/0001-dotnet8-fora-do-lote-padrao.md), adendo) |
+| Alpine / multi-source | Não adotados como source ativa. Investigados e recusados por decisão de produto (ADR-0007, histórico); ver "Não reabrir POCs encerrados" abaixo |
+| .NET | `dotnet10` / `dotnet10-dev`. `dotnet8` removido do catálogo em 17/09/2026 — fim de suporte LTS em 11/2026 (ADR-0001, histórico) |
 | Exceções ao lote padrão (`policies/operations/health.json` → `exceptions`) | Nenhuma. Lote FULL = catálogo inteiro |
 | Golden path (`execution_scope.current`) | `go1-26` + `go1-26-dev` — build automático, publicação e promoção restritos a esse par ([ADR-0004](adr/0004-v1-referencia-go126.md)); os outros 14 permanecem no catálogo e no lote FULL, sem publicação automática |
-| Publicação / promoção no LAB | Par Go publicado por digest, assinado, atestado e verificado externamente; `stable` promovida com read-back e recuperada sem rebuild; Terraform sem drift depois de tudo ([fechamento V1](v1-reference-closure-2026-09-16.md), [evidence ADR-0005](../specs/2026-09-16-stable-lifecycle-rfc013/evidence.md)). Promoção automática protegida por kill switch (`STABLE_PROMOTION_AUTHORIZED`) |
-| Catálogo completo | 16/16 definições **buildam e passam no Trivy nas duas arquiteturas** em run real de CI (17/09/2026, [revalidação completa](../specs/2026-09-17-full-catalog-revalidation/evidence.md)). O contrato funcional não roda no caminho de PR por desenho; para os 14 fora do `execution_scope` ele existe em código e foi exercitado em runs anteriores, mas não faz parte da execução automática atual |
-| Bloqueios upstream | Nenhum aberto. O bloqueio zlib (`CVE-2026-85091`) que travava Java 21 e mais 12 definições foi resolvido pelo próprio Wolfi em 17/09/2026 ([ADR-0006](adr/0006-java21-zlib-blocker-remediation-options.md), addendum); gate não relaxado |
+| Publicação / promoção no LAB | Par Go publicado por digest, assinado, atestado e verificado externamente; `stable` promovida com read-back e recuperada sem rebuild; Terraform sem drift depois de tudo (fechamento hospedado real, ver histórico Git e [ADR-0005](adr/0005-stable-lifecycle-realinhamento-rfc013.md)). Promoção automática protegida por kill switch (`STABLE_PROMOTION_AUTHORIZED`) |
+| Catálogo completo | 16/16 definições **buildam e passam no Trivy nas duas arquiteturas** em run real de CI (17/09/2026). O contrato funcional não roda no caminho de PR por desenho; para os 14 fora do `execution_scope` ele existe em código e foi exercitado em runs anteriores, mas não faz parte da execução automática atual |
+| Bloqueios upstream | Nenhum aberto. O bloqueio zlib (`CVE-2026-85091`) que travava Java 21 e mais 12 definições foi resolvido pelo próprio Wolfi em 17/09/2026 (ADR-0006, histórico); gate não relaxado |
 | Registry (`alric-containers-registry`) | Terraform declara os mesmos 16 repositórios ECR do catálogo; AWS tem 16 `image-base-*`. O `image-base-dotnet8` vazio foi destruído pelo Terraform em 17/09/2026 (episódio 4 de `drift-remediation/`, permissão de delete temporária, removida em seguida). O corporativo provisiona primeiro só o que o golden path precisa |
 | Decisões externas em aberto | Sigstore (ADR-0002), scanner/requisitos da fábrica federada (ADR-0003), CA corporativa, IAM/OIDC, destino de alerta e SLA — todas `EXTERNAL_PENDING`, listadas em [RFC-013 → Prontidão](../RFC-013-Image-Base-Completa-com-Mermaid.md#prontidão-para-produção) |
 
@@ -173,7 +170,8 @@ completo; **TO_VALIDATE** = depende do ambiente corporativo para ser provado.
 O corporativo reutiliza **mecanismos, contratos, testes, arquitetura e
 governança**. Não copia valores concretos. Cada item abaixo existe no LAB
 com um valor real que deve ser substituído pelo equivalente corporativo,
-fornecido pelo owner competente (ver [pacote de adoção → §2 e §3](corporate-adoption.md#2-mapa-de-parâmetros-e-ajustes)):
+fornecido pelo owner competente por cada domínio (Cloud/IAM, Admin GitHub,
+Network/PKI, AppSec, conforme o item):
 
 - AWS account IDs e regiões;
 - Organization IDs usados nas resource policies de ECR;
@@ -306,8 +304,7 @@ contratos funcionais e Trivy. Nada de AWS ainda.
 Golden target: `go1-26` + `go1-26-dev`.
 
 Esperado: build multiarch PASS, Trivy PASS nas duas arquiteturas, contrato
-funcional PASS. Corresponde aos estágios C–D do
-[pacote de adoção](corporate-adoption.md#4-ordem-de-execução-posterior).
+funcional PASS.
 
 ### Stage 2 — Infrastructure
 
@@ -320,8 +317,7 @@ antes de qualquer publicação.
 ### Stage 3 — Candidate publication
 
 Preflight `PREPROVISIONED_ONLY` PASS → publicação por digest → read-back
-remoto → Cosign → SPDX SBOM → provenance → evidence. Corresponde ao Estágio E
-/ [P0-04](../specs/2026-09-15-first-corporate-e2e/spec.md).
+remoto → Cosign → SPDX SBOM → provenance → evidence.
 
 ### Stage 4 — Release
 
@@ -360,10 +356,9 @@ ter evidence própria no ambiente corporativo, não herdada do LAB:
 [ ] Terraform no drift (antes e depois)
 ```
 
-Este é o mesmo checklist que o LAB fechou para o par Go em
-[v1-reference-closure](v1-reference-closure-2026-09-16.md) e na
-[evidence ADR-0005](../specs/2026-09-16-stable-lifecycle-rfc013/evidence.md);
-a diferença é o ambiente, não o critério.
+Este é o mesmo checklist que o LAB fechou para o par Go, em execução
+hospedada real (ver [ADR-0005](adr/0005-stable-lifecycle-realinhamento-rfc013.md)
+e o histórico Git); a diferença é o ambiente, não o critério.
 
 ## Itens que só podem ser validados no ambiente corporativo
 
@@ -384,6 +379,7 @@ tem como prová-los, e nenhuma evidence de LAB os substitui.
 | ECR resource policies | Org IDs corporativos, principals consumidores, negativo fora do escopo |
 | Registry connectivity | Login, push, pull, `describe-images`, lifecycle preview |
 | Repositórios de artifacts internos | Se as ferramentas/pins precisarem vir de origem interna |
+| Checkout privado da biblioteca compartilhada | Se `alric-containers-reusable-workflows` for privado no destino, o segundo `actions/checkout` de `ci.yml` hoje usa o token padrão do próprio repo — sem solução implementada de leitura cross-repo segura para PR/fork. Bloqueado até existir desenho de acesso revisado; não injetar secret em PR/fork para contornar |
 | Terraform backend | Bucket, versioning, locking, permissões da role Infra |
 | Branch / Environment protection | Revisão de code owner exigida, `enforce_admins`, apply human-approved |
 | Permissões das contas consumidoras | Pull no escopo permitido, acesso a attestations no GitHub |
@@ -393,15 +389,22 @@ tem como prová-los, e nenhuma evidence de LAB os substitui.
 O port corporativo **não** começa reabrindo:
 
 - Alpine / multi-source como package source — tecnicamente provado, adoção
-  recusada ([ADR-0007](adr/0007-multi-source-alpine-recusado.md));
-- `dotnet8` — removido do catálogo por fim de suporte ([ADR-0001](adr/0001-dotnet8-fora-do-lote-padrao.md), adendo);
-- pacote `zlib` próprio — desnecessário, resolvido upstream ([ADR-0006](adr/0006-java21-zlib-blocker-remediation-options.md), addendum);
+  recusada (ADR-0007: build multiarch PASS, Trivy PASS, SBOM e contrato
+  funcional aprovados, e mesmo assim recusado por custo/benefício sobre uma
+  janela de suporte curta — ver histórico Git);
+- `dotnet8` — removido do catálogo por fim de suporte, LTS termina em
+  novembro de 2026 (ADR-0001, histórico);
+- pacote `zlib` próprio — desnecessário, resolvido upstream antes de ser
+  construído (ADR-0006, histórico);
 - mudanças de scanner, severidade ou `--ignore-unfixed`;
 - redesign da fábrica (build once, preprovisioned-only, `stable` por soak).
 
-Essas investigações já tiveram conclusão registrada. O modelo ativo é o
-estado atual de `main`. Se surgir uma necessidade corporativa real, abre-se
-uma decisão separada (ADR), com owner e critério — não se reabre a anterior.
+Essas investigações já tiveram conclusão registrada; os ADRs originais
+(0001, 0006, 0007) foram removidos do repositório na minimização final do
+LAB, com a conclusão de cada um preservada acima e no histórico Git — nunca
+reescrita. O modelo ativo é o estado atual de `main`. Se surgir uma
+necessidade corporativa real, abre-se uma decisão separada (ADR), com owner
+e critério — não se reabre a anterior.
 
 ## Migração não é cópia 1:1
 

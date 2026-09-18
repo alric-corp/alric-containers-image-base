@@ -128,7 +128,7 @@ ausência de um artifact:
 - framework com contrato: evidência ausente é **falha**, não aprovação;
 - framework sem contrato (`*-dev` compiladas, cobertas como estágio de build
   do par; histórico: `dotnet8`, sem variante `-dev`, antes de ser removido do
-  catálogo em 17/09/2026 — ver `docs/adr/0001-dotnet8-fora-do-lote-padrao.md`):
+  catálogo em 17/09/2026):
   publica com o motivo registrado no log e na tabela do run;
 - contrato compilado cujo par `-dev` não está no mesmo lote (um
   `workflow_dispatch` só com `go1-26`, por exemplo): não roda, e o motivo
@@ -144,43 +144,6 @@ original, cuja retenção é 3 dias; guardar o relatório não estende esse praz
 (ver [política de evidências](../../docs/m11-m04-operational-health.md)). O
 pin do Skopeo neste executor está sob o mesmo manager do Renovate que o do
 publicador, e o lint de M09 reprova se os dois divergirem.
-
-## Evidência
-
-**09/09/2026** ([evidence-2026-09-09.json](evidence-2026-09-09.json)): as
-seis variantes interpretadas (Node 22/24 e `-dev`, Python 3.13/3.14) passaram
-em amd64 emulado e arm64 nativo — 12 execuções reais. Rotular deliberadamente
-um OCI local Node 24 como Node 22 falhou nas duas arquiteturas.
-
-**10/09/2026** ([evidence-2026-09-10.json](evidence-2026-09-10.json)):
-primeira execução dos contratos compilados, sobre os artifacts reais do
-[run 34421525305](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34421525305)
-(push na `main`), no daemon Docker arm64 de um Mac com amd64 emulado:
-
-| Framework | Contrato | amd64 (emulado) | arm64 (nativo) | Versão observada | Build multi-stage |
-| --- | --- | --- | --- | --- | --- |
-| `go1-26` | compilado | passou | passou | 1.26.8 | 19,3s / 3,0s |
-| `java21` | compilado | passou | passou | 21.0.12.1+-wolfi-r1 | 2,0s / 0,8s |
-| `dotnet10` | compilado | passou | passou | 10.0.12 | 5,3s / 2,0s |
-| `python3-13` | interpretado | passou | passou | 3.13.15 | — |
-| `nodejs22-dev` | interpretado | passou | passou | 22.23.2 | — |
-
-**10/09/2026, pares restantes do M07** ([evidence-2026-09-10-m07.json](evidence-2026-09-10-m07.json)):
-`go1-25`/`go1-25-dev` e `java25`/`java25-dev` construídos localmente com o
-apko fixado (x86_64+aarch64), preparados como no CI e executados pelo contrato
-compilado — Go 1.25.12 e Java 25.0.4.1 aprovados em amd64 emulado e arm64
-nativo, com shell e toolchain nas `-dev`. Camadas comprimidas por
-arquitetura: `go1-25` 231K vs `go1-25-dev` 239–255M; `java25` 85–87M vs
-`java25-dev` 115–118M. Depois, no runner hospedado, sobre os artifacts do
-`validate-pr` do PR #49 (run 34497811172): `go1-25` (run 34498586167) e
-`java25` (run 34498589927) aprovados em amd64 nativo e arm64 emulado por QEMU.
-
-**Teste negativo, não decorativo:** apontando as duas URLs de TLS para o
-**mesmo** servidor confiável, o contrato do `go1-26` falhou nas duas
-plataformas com `HTTPS com CA não confiável foi aceito` (saída 1). Antes
-disso, uma variante do mesmo teste em que a CA montada deixou de corresponder
-ao servidor confiável falhou com erro de verificação de certificado — os dois
-lados da checagem reagem.
 
 ## Limites desta entrega
 

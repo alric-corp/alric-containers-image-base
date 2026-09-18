@@ -36,14 +36,14 @@ veja [`CONTRIBUTING.md`](CONTRIBUTING.md); o índice de documentação está em
 
 Imagens "Distroless" contêm apenas o aplicativo e suas dependências de tempo de execução — sem gerenciador de pacotes, shell ou qualquer outra ferramenta que normalmente vem junto de uma distribuição Linux padrão. Restringir o container de produção precisamente ao que a aplicação precisa reduz a superfície de ataque e é uma prática recomendada, principalmente em ambientes produtivos.
 
-> Como não há shell nem ferramentas de troubleshooting na imagem, depurar um pod rodando distroless exige um mecanismo de debug fora da imagem da aplicação (ex.: um [Container Efêmero](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/#ephemeral-container) anexado ao pod). O toolkit de referência está isolado em [`troubleshooting/`](troubleshooting/README.md), com ciclo de vida próprio; ele não integra as imagens base nem o pipeline de publicação delas.
+> Como não há shell nem ferramentas de troubleshooting na imagem, depurar um pod rodando distroless exige um mecanismo de debug fora da imagem da aplicação (ex.: um [Container Efêmero](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/#ephemeral-container) anexado ao pod). Um toolkit de diagnóstico operacional é mantido como produto independente (`alric-containers-troubleshooting`), com propósito, lifecycle e postura de segurança próprios; ele não integra as imagens base nem o pipeline de publicação delas.
 
 A composição e os controles atuais são:
 
 - **Composição declarativa em camadas por origem:** Apko resolve packages usando um lock e compõe OCI sem Dockerfile de base. `layering.strategy: origin`, com orçamento 10, permite até 11 camadas finais no Apko fixado; medidas e limites em [composição](docs/image-composition.md).
 - **Superfície de ataque mínima:** `distroless/image-base.yaml` (herdado por todo `frameworks/<nome>.yaml`) só traz `ca-certificates-bundle`, `tzdata` e `image-base-ca-certificates` — **sem `wolfi-base`**, que traria `apk-tools` e `busybox` (shell) de brinde via dependência transitiva. Cada `frameworks/<nome>.yaml` declara os pacotes de sua variante (ex.: `openjdk-21-jre` para Java runtime). Todas as imagens rodam como usuário non-root por padrão (`spring` ou `appuser`, uid/gid 10000). As variantes `-dev` trazem o toolchain e shell para o estágio de build; as variantes de runtime usam somente os pacotes necessários à execução. O consumidor deve escolher a variante runtime final.
 - **Cadeia de suprimentos (supply chain) rastreável:** os pacotes vêm do repositório rolling-release do [Wolfi](https://github.com/wolfi-dev) (assinado e mantido pela Chainguard); o único pacote que não vem de lá (`image-base-ca-certificates`) é compilado neste próprio repositório via melange, com índice assinado por uma chave efêmera gerada a cada build. Não existe imagem base de terceiros nem `FROM` de uma tag de procedência desconhecida.
-- **Signing key Wolfi — defense-in-depth:** o keyring explícito usa [chave pública e pin locais](melange/keys/), preflight offline, monitor de drift e [rotação por revisão humana](docs/wolfi-signing-key.md). O Apko ainda pode adicionar chaves via discovery da origem: o keyring não é um conjunto de confiança exclusivo. Veja a [limitação de tooling P1-03](specs/2026-09-13-wolfi-signing-key/evidence.md).
+- **Signing key Wolfi — defense-in-depth:** o keyring explícito usa [chave pública e pin locais](melange/keys/), preflight offline, monitor de drift e [rotação por revisão humana](docs/wolfi-signing-key.md). O Apko ainda pode adicionar chaves via discovery da origem: o keyring não é um conjunto de confiança exclusivo. Trata-se de defesa em profundidade, não de um mecanismo de bloqueio exclusivo (limitação de tooling P1-03).
 - **SBOM e scan em todo build:** o `apko` gera um SBOM (SPDX) a cada build, e o [Trivy](#pipeline-de-cicd-github-actions) escaneia a imagem localmente antes de qualquer push — uma CVE `CRITICAL`/`HIGH`/`MEDIUM`/`LOW` **com correção disponível** bloqueia o artifact aprovado e a publicação daquele framework (veja [`ignore-unfixed`](#pipeline-de-cicd-github-actions)).
 
 ## Imagens disponíveis
@@ -69,7 +69,7 @@ A composição e os controles atuais são:
 
 **⚠️ Migração (09/09/2026):** `image-base-go1-26`, `image-base-dotnet10` e `image-base-java21` deixaram de conter o toolchain de build (Go, SDK do .NET, JDK) e passaram a ser runtime-only, seguindo o mesmo padrão que `image-base-nodejs22`/`nodejs24` já usavam. Quem consumia essas três tags para **compilar** (não só rodar) precisa migrar para as novas tags `-dev` (`image-base-go1-26-dev`, `image-base-dotnet10-dev`, `image-base-java21-dev`), que mantêm o toolchain completo — veja os exemplos de Dockerfile multi-stage abaixo. Naquela data, `go1-25`, `dotnet8` e `java25` ainda não tinham a separação; o estado atual está na tabela e na atualização de 10/09 abaixo.
 
-**⚠️ Migração (10/09/2026):** o mesmo movimento para `image-base-go1-25` e `image-base-java25` — passaram a ser runtime-only (`go1-25` só a base; `java25` com `openjdk-25-jre`). Quem compilava com essas tags deve usar `image-base-go1-25-dev`/`image-base-java25-dev` no estágio de build. `dotnet8` foi o único framework do catálogo sem essa separação, até ser removido do catálogo em 17/09/2026 (fim de suporte LTS em 11/2026; ver [ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md)); nenhum framework restante carece dela.
+**⚠️ Migração (10/09/2026):** o mesmo movimento para `image-base-go1-25` e `image-base-java25` — passaram a ser runtime-only (`go1-25` só a base; `java25` com `openjdk-25-jre`). Quem compilava com essas tags deve usar `image-base-go1-25-dev`/`image-base-java25-dev` no estágio de build. `dotnet8` foi o único framework do catálogo sem essa separação, até ser removido do catálogo em 17/09/2026 (fim de suporte LTS em 11/2026); nenhum framework restante carece dela.
 
 Referência completa de uma imagem: `<registro-ecr>/image-base-<framework>:<tag>`, onde `<registro-ecr>` é `<conta-aws>.dkr.ecr.<região>.amazonaws.com`.
 
@@ -191,8 +191,7 @@ detalha responsabilidades, dependências e compatibilidade.
 │   ├── unit/pipeline/             # testes por domínio, sem infraestrutura
 │   ├── integration/               # certificados, TLS, adaptadores e executor
 │   └── runtime/                   # probes e projetos Go, Java e .NET nas imagens
-├── docs/                          # arquitetura, runbooks e evidências
-├── troubleshooting/               # toolkit de diagnóstico separado do produto
+├── docs/                          # arquitetura, decisões (adr/) e runbooks
 ├── CONTRIBUTING.md                # ambiente e fluxo de contribuição
 ├── requirements-dev.txt           # dependência Python da automação
 ├── Makefile                       # build local e comandos de verificação
@@ -233,7 +232,7 @@ Critério de escolha das versões (no momento em que este README foi escrito):
 |---|---|---|---|
 | Java | `openjdk-21` | `openjdk-25` | as duas últimas LTS (Java só recebe LTS a cada ~2 anos: 17, 21, 25) |
 | Node.js | `nodejs-22` | `nodejs-24` | as duas últimas LTS (22 em Maintenance, 24 em Active LTS; 26 ainda é "Current", não é LTS) |
-| .NET | ~~`dotnet-8-sdk`~~ (removido em 17/09/2026, EOL 11/2026) | `dotnet-10-sdk` | eram as duas últimas LTS (.NET tem LTS a cada 2 anos: 6, 8, 10; a 9 é STS, não LTS); hoje só `dotnet10` está no catálogo — ver [ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md) |
+| .NET | ~~`dotnet-8-sdk`~~ (removido em 17/09/2026, EOL 11/2026) | `dotnet-10-sdk` | eram as duas últimas LTS (.NET tem LTS a cada 2 anos: 6, 8, 10; a 9 é STS, não LTS); hoje só `dotnet10` está no catálogo |
 | Python | `python-3.13` | `python-3.14` | as duas últimas minors estáveis (Python não tem trilha LTS separada) |
 | Go | `go-1.25` | `go-1.26` | as duas últimas minors estáveis (Go também não tem trilha LTS separada) |
 
@@ -285,7 +284,7 @@ O build do CI usa `apko build` uma única vez por framework para produzir um lay
 
 Relatórios JSON e digests dos manifests ficam nos artifacts `build-scans-<framework>-<tentativa>` por 30 dias. O layout aprovado, sua evidência e os SBOMs são transferidos em `validated-oci-<framework>` por três dias. Uma falha em qualquer arquitetura impede a disponibilização desse artifact para publicação.
 
-O **lote padrão** que `workflow.yml` passa aos três chamadores (`validate-pr`, build diário/push e promoção horária) é o catálogo `frameworks/*.yaml` menos os frameworks excluídos em `policies/operations/health.json` → `exceptions` — hoje nenhum (`dotnet8`, a única exceção já registrada, foi removido do catálogo em 17/09/2026; ver [ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md)). Um lint offline no check obrigatório ([default_batch.py](scripts/pipeline/catalog/default_batch.py)) reprova qualquer divergência entre as três listas e `catálogo − exclusões`; um framework excluído continua no catálogo e pode ser buildado por `workflow_dispatch`, com o mesmo gate.
+O **lote padrão** que `workflow.yml` passa aos três chamadores (`validate-pr`, build diário/push e promoção horária) é o catálogo `frameworks/*.yaml` menos os frameworks excluídos em `policies/operations/health.json` → `exceptions` — hoje nenhum (`dotnet8`, a única exceção já registrada, foi removido do catálogo em 17/09/2026). Um lint offline no check obrigatório ([default_batch.py](scripts/pipeline/catalog/default_batch.py)) reprova qualquer divergência entre as três listas e `catálogo − exclusões`; um framework excluído continua no catálogo e pode ser buildado por `workflow_dispatch`, com o mesmo gate.
 
 A validação usa matrix com `fail-fast: false`. **A publicação é independente por framework (M13):** cada leg do publicador exige o seu próprio artifact `validated-oci-<framework>` e falha, visível e sem publicar, se a validação daquele framework tiver reprovado — sem derrubar os demais do lote. Uma falha numa dependência comum, como o bundle melange, continua bloqueando todos. O job de publicação tem matrix própria e autenticação AWS restrita à `main`. Para publicar um subconjunto, uma execução manual pode selecionar os frameworks desejados.
 
@@ -329,10 +328,10 @@ A configuração de revisão da `main` no sandbox, conferida em 13/09/2026, exig
 
 `enforce_admins` está **desligado por decisão explícita do sandbox**; não há
 garantia de bloqueio para administradores. Habilitação e aceite no corporativo
-pertencem ao P0-03, conforme a [Capability Matrix](docs/ai/CAPABILITY-MATRIX.md).
+pertencem ao P0-03, conforme [Corporate Production Readiness](docs/corporate-production-readiness.md).
 
-O [pacote de adoção corporativa P0-03](docs/corporate-adoption.md) reúne
-parâmetros, responsáveis, sequência e testes de aceite. É preparação local
+O [Corporate Production Readiness](docs/corporate-production-readiness.md) reúne
+os gates, responsáveis e critérios de aceite corporativo. É preparação local
 para revisão; não comprova implantação, homologação ou SLA corporativo.
 
 Os dois checks rodam **sem filtro de path**: um required check com filtro
@@ -372,7 +371,7 @@ movida: consulte o estado e siga o runbook de recuperação se necessário.
 O read-back confirma o estado naquele instante; escritores externos podem
 alterá-lo depois. Aceite hospedado P1-01: **PASS**, observado em `go1-26` e
 `go1-26-dev` no run `34768459323`, commit `e3ed682`, com read-back confirmado
-e igualdade dos digests. Ver [evidence atualizada](specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md).
+e igualdade dos digests.
 
 Isso é um canário de **tempo/CVE**, não um canário de tráfego real contra aplicações consumidoras — não há apps de referência nesta POC pra validar contra. Validar contra consumidores reais (deploy canário, smoke test de aplicação) é responsabilidade de cada pipeline de deploy downstream. O gate reavalia vulnerabilidades conhecidas no momento do scan, nas severidades configuradas e com correção disponível; ele não garante ausência de vulnerabilidades durante toda a janela de soak.
 
@@ -438,9 +437,8 @@ python3 -B -m scripts.pipeline.release.verify_promotion \
 
 Esse verificador é somente leitura no registry e não executa promoção,
 soak, re-scan ou verificação de SBOM. A evidência histórica de assinatura e
-provenance está no histórico Git; a
-[reconciliação atual](specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md)
-registra as observações hospedadas recentes e os aceites ainda pendentes.
+provenance está no histórico Git; os aceites ainda pendentes seguem descritos
+no [Consumer Verification Contract](docs/consumer-verification-contract.md).
 
 ## Configuração dos workflows reusáveis
 
@@ -510,7 +508,7 @@ Isso não substitui a imagem final da sua aplicação — é o ponto de partida 
 
 As Actions diretas dos workflows estão fixadas por SHA completo; apko, melange, Skopeo e actionlint usam digests; a versão do Trivy é fixada por tag de release. Os reusable workflows corporativos também usam SHA completo, conferido no CI. **Todo pin tem um gerenciador de atualização configurado** — Dependabot para Actions, Renovate para os digests de imagem (workflows, Makefile e o executor de contratos) e para `TRIVY_VERSION` — e um lint offline no check obrigatório reprova pin sem gerenciador ou o mesmo insumo com valores divergentes entre arquivos ([pin_inventory.py](scripts/pipeline/governance/pin_inventory.py)).
 
-Renovate ainda precisa ser instalado pelo administrador nos dois repositórios; a configuração não comprova automação ativa. Skopeo usa versão `-immutable` mais digest para evitar depender da retenção dos rebuilds diários. O runtime gerado de `gh-aw` é atualizado pelo compilador, não por alteração isolada do Dependabot.
+Renovate ainda precisa ser instalado pelo administrador nos dois repositórios; a configuração não comprova automação ativa. Skopeo usa versão `-immutable` mais digest para evitar depender da retenção dos rebuilds diários.
 
 As versões **efetivas** do que rodou ficam na evidência de cada etapa ([tool_versions.py](scripts/pipeline/operations/tool_versions.py)): apko/Trivy na validação, cosign/AWS/Docker/Skopeo na publicação, cosign/Trivy/AWS/gh/buildx na promoção, mais `python3`/`git` e a identificação da imagem do runner hospedado — que muda sem passar por nenhum pin deste repositório. Só comandos de versão em allowlist, sem dump de ambiente.
 
@@ -518,7 +516,7 @@ O workflow diário de saúde confere que **cada pin ainda existe na origem** (co
 
 O workflow de publicação configura tags imutáveis no ECR, com exceção exata para `stable`, incluindo repositórios existentes. As tags novas incluem run ID e tentativa. Reexecuções parciais do publicador reutilizam `validated-oci-<framework>` aprovado no mesmo run, independentemente de `run_attempt`. Se a validação for reexecutada, o artifact é substituído somente após o novo scan passar (`overwrite: true`). M13 mantém os gates por framework: artifact validado próprio, contrato aplicável e integração de trust continuam obrigatórios. O repositório melange também permite substituição em reexecuções completas. Artifacts expirados exigem nova validação. Os relatórios de scan continuam separados por tentativa.
 
-**P1-02 — retry parcial sem rebuild:** o gate procura `runtime-<framework>-<attempt>` somente no run corrente e seleciona numericamente a tentativa mais recente compatível com os índices/manifests atuais. Os dois reports precisam pertencer ao mesmo artifact/run/framework/revisão; contratos compilados também conferem o par `-dev` validado atual. Falha do producer mais recente, ausência, corrupção, conflitos ou digest divergente bloqueiam. Success herdado pelo GitHub não exige report novo: o publicador pode reutilizar o contrato anterior sem executar Apko/Melange. A decisão e o attempt escolhido ficam em `runtime-gate-result.json`, junto à evidência de publicação. [Spec, política de seleção e limites](specs/2026-09-13-partial-retry-without-rebuild/spec.md). O laboratório hospedado comprovou retry/reuse sem rebuild (`RETRY_REUSE_HOSTED=PASS`); a continuação da publicação permanece **PENDING**.
+**P1-02 — retry parcial sem rebuild:** o gate procura `runtime-<framework>-<attempt>` somente no run corrente e seleciona numericamente a tentativa mais recente compatível com os índices/manifests atuais. Os dois reports precisam pertencer ao mesmo artifact/run/framework/revisão; contratos compilados também conferem o par `-dev` validado atual. Falha do producer mais recente, ausência, corrupção, conflitos ou digest divergente bloqueiam. Success herdado pelo GitHub não exige report novo: o publicador pode reutilizar o contrato anterior sem executar Apko/Melange. A decisão e o attempt escolhido ficam em `runtime-gate-result.json`, junto à evidência de publicação. O laboratório hospedado comprovou retry/reuse sem rebuild (`RETRY_REUSE_HOSTED=PASS`); a continuação da publicação permanece **PENDING**.
 
 Para executar as suítes de regressão do pipeline e dos certificados, consulte [tests/README.md](tests/README.md).
 
@@ -531,7 +529,7 @@ scripts/testes de domínio e decisões de release permanecem neste repositório.
 
 Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@7a9b055a462eeb8552d3404c26538b44e8ccd83f`.
 
-Veja a [divisão de responsabilidades, contrato e adoção](docs/m09-m12-reusable-workflows.md).
+Veja a [divisão de responsabilidades, contrato e adoção](docs/repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados).
 A [policy de origem revisada](policies/governance/reusable-workflows.json)
 define o repositório permitido; os dois workflows e a composite mantêm SHAs
 literais separados. O resolvedor valida os pontos locais obrigatórios antes
@@ -543,7 +541,7 @@ Para os checks locais, `REUSABLE_WORKFLOWS_PATH` escolhe somente a localização
 do checkout; não substitui origem ou pin. Consulte [CONTRIBUTING.md](CONTRIBUTING.md).
 Os checks locais não provam publicação no destino nem acesso privado. Outra
 origem exige release revisado da chamada interna da biblioteca. O caminho
-hospedado na origem sandbox tem [PASS observado no PR #62 e na main](specs/2026-09-14-shared-origin-portability/evidence.md),
-sujeito à revisão da reconciliação; migração real e acesso privado não foram comprovados.
+hospedado na origem sandbox tem PASS observado no PR #62 e na main, sujeito à
+revisão da reconciliação; migração real e acesso privado não foram comprovados.
 A compatibilidade das assinaturas anteriores à renomeação de 10/09/2026 é
 garantida pelo alias histórico em `policies/release/signing-identities.json`.

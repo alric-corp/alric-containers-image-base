@@ -16,7 +16,7 @@ Não há novo ADR: esta proposta preserva o desenho e explicita seus limites.
 
 | Camada | Estado conhecido | Proposta / limite |
 | --- | --- | --- |
-| Trust policy | [Arquivo ativo versionado](../policies/aws/github-actions-image-base-trust.json); read-back histórico em [10/09](evidence/repository-rename-2026-09-10.json) | Preservado; template separado acrescenta repository/IDs/ref documentados pela AWS; autenticação com ele NOT RUN |
+| Trust policy | [Arquivo ativo versionado](../policies/aws/github-actions-image-base-trust.json) | Preservado; template separado acrescenta repository/IDs/ref documentados pela AWS; autenticação com ele NOT RUN |
 | Identity policy | Conteúdo anexado/inline, versão default e permissões efetivas não inventariados | Execution + provisioning com 12 actions ECR explícitas, para uma identidade de execução nos três caminhos atuais |
 | ECR repository policy | [RFC](../RFC-013-Image-Base-Completa-com-Mermaid.md) descreve aplicação histórica de pull por organizações; policy real não integra este pacote | Não substituída nem copiada; Cloud fornece acessos/denies por recurso e aprova eventual acesso entre contas |
 | Session policy / boundary / SCP / RCP / endpoint policy | Não fornecidas nem consultadas nesta sessão | EXTERNAL_PENDING; Cloud apresenta restrições aplicáveis. Não pressupor ausência |
@@ -34,9 +34,8 @@ escopo do principal e sua obtenção exige identity permission específica.
 
 ## Inventário por operação
 
-O [inventário JSON](../policies/aws/proposals/factory-permissions/inventory.json)
-é a relação testada entre `Sid`, actions, operações, comandos, recursos,
-condições e fontes locais/oficiais. A tabela abaixo facilita sua leitura.
+A tabela abaixo é o inventário testado de `Sid`, actions, operações, comandos,
+recursos, condições e fontes locais/oficiais.
 `OBSERVED_CODE` significa chamada presente; `OFFICIAL_DOCUMENTATION` confirma
 o mapeamento/API. Isso **não** é trace observado de cada request das ferramentas.
 Execução com as policies propostas é NOT RUN em todas as linhas.
@@ -114,8 +113,9 @@ Também não se acrescentam Secrets Manager, CloudWatch, CloudTrail, IAM ou Pass
 
 ## Proposta compatível e separação de provisionamento
 
-Os [templates](../policies/aws/proposals/factory-permissions/README.md) propõem
-**uma identidade de execução**, como no desenho atual. Não criam roles.
+A proposta a seguir descreve **uma identidade de execução**, como no desenho
+atual, separada em templates conceituais de execução, provisionamento e
+trust — não roles criadas nem arquivos anexados a esta árvore.
 
 | Template / Sid | Finalidade | Uso proposto |
 | --- | --- | --- |
@@ -245,144 +245,15 @@ action GitHub e também anexada ao ECR; SPDX usa Cosign. O
 [contrato de consumo](consumer-verification-contract.md) preservam trust roots,
 identidades, limites de evidence e decisão Sigstore externa.
 
-## Parâmetros e renderização local
-
-Templates são JSON sintaticamente válido com marcadores, **não documentos
-prontos para anexar**. O [renderizador local](../tools/render_iam_proposal.py)
-substitui valores JSON inteiros, inclusive lista de ARNs, sem AWS, shell
-interpolation, avaliação de permissões ou escrita dentro do checkout.
-Falha com parâmetros desconhecidos, ausentes, duplicados/incoerentes,
-wildcards, placeholder desconhecido ou destino existente. Não sobrescreve arquivos.
-
-| Parâmetro fornecido por Cloud/IAM | Regra / decisão |
-| --- | --- |
-| AWS_ACCOUNT_ID | Conta-alvo, 12 dígitos; não copiar sandbox ou fixture como conta corporativa |
-| AWS_REGION | Uma região comercial aprovada; proposta limita-se à partição aws, não GovCloud/China |
-| ECR_REPOSITORIES | Lista explícita, sem wildcard, de nomes image-base-<framework>; deve cobrir exatamente o lote autorizado |
-| GITHUB_REPOSITORY | Owner/repo corporativo concreto; nomes do sandbox não são aprovação corporativa |
-| GITHUB_REPOSITORY_ID / GITHUB_OWNER_ID | IDs numéricos confirmados pela administração GitHub |
-| GITHUB_SUB | Subject main exato confirmado, com IDs imutáveis ou formato padrão emitido; customizações diferentes exigem revisão do contrato, sem inferir valor |
-
-OIDC_PROVIDER_ARN e ECR_REPOSITORY_ARNS são derivados de conta/região/nomes,
-não inputs arbitrários. Issuer/audience/ref são os fixos descritos acima.
-Existência da região, conta, provider, repos ou claims **não** é verificada
-pelo renderizador. Cloud também fornece role name/ARN, duração de sessão,
-políticas adicionais, limites de tamanho e permissões de aprovação/aplicação;
-esses parâmetros administrativos não são criados pelo utilitário.
-
-A [fixture](../policies/aws/proposals/factory-permissions/parameters.fixture.json)
-usa conta de exemplo `111122223333`, identidade GitHub sintética e apenas
-Go runtime/-dev. Não cobre os 16 itens do catálogo. Para proposta de lote
-completo, Cloud fornece os 16 ARNs/names autorizados; conferir contra
-frameworks/ e inputs reais. Excluir um repo da proposta deve limitar o lote
-explicitamente, nunca converter sua falta de permissão em PASS.
-
-Exemplo **somente local**, com destino novo fora do checkout:
-
-```bash
-python3 -B tools/render_iam_proposal.py \
-  --parameters policies/aws/proposals/factory-permissions/parameters.fixture.json \
-  --output /tmp/p104-iam-proposal-example
-python3 -B -m unittest tests.unit.pipeline.governance.test_iam_proposal -v
-```
-
-O comando gera execution.identity.json, provisioning.identity.json e trust.json.
-Não há apply, attach, create-role ou configure-aws no utilitário. Os jobs
-AWS não consomem os exemplos como permissões; testes offline os leem no CI.
-Testes de estrutura e tamanho com todo catálogo não comprovam IAM; quotas
-usadas seguem a [referência IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html).
-
-## Validação e plano sandbox posterior — NÃO EXECUTADO
-
-| Estado | Alcance desta fatia |
-| --- | --- |
-| LOCAL_STRUCTURE_VALIDATED | JSON, parâmetros, escopo/ações/refs e negativos offline; resultado na spec |
-| AWS_VALIDATOR_CHECKED | NOT RUN |
-| AWS_SIMULATION_CHECKED | NOT RUN |
-| SANDBOX_EXECUTION_VERIFIED | NOT RUN para estas policies |
-| CORPORATE_ACCEPTED | EXTERNAL_PENDING / NOT VERIFIED |
-
-[Access Analyzer ValidatePolicy](https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-policy-validation.html)
-e [IAM Policy Simulator](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_testing-policies.html)
-são etapas oficiais futuras. Preparar JSON renderizado, policyType identity
-para execution/provisioning e `RESOURCE_POLICY` para trust, com
-`--validate-policy-resource-type AWS::IAM::AssumeRolePolicyDocument`, conforme
-[CLI oficial](https://docs.aws.amazon.com/cli/latest/reference/accessanalyzer/validate-policy.html);
-guardar findings, versões e limitações.
-Não se acrescenta acesso ao validador à role da fábrica. Simulação de actions
-no ARN permitido/outro ARN/região é útil, mas não prova trust OIDC emitida,
-repository policies efetivas ou suporte de claim inventada no contexto.
-
-### Pré-requisitos e alvos a autorizar
-
-1. Após revisão, responsável autoriza por escrito conta sandbox, região,
-   janela, operador provisionador, role **nova e isolada** `p104-iam-lab`,
-   GitHub repo de teste controlado e seus IDs/ref. Esses nomes são proposta
-   de teste, não recursos existentes. Não usar role github-actions-image-base
-   nem os ECRs correntes da fábrica.
-2. Na conta autorizada, reservar `image-base-p104-lab` e
-   `image-base-p104-lab-dev` como permitidos e `image-base-p104-denied` como
-   recurso de negativo, todos descartáveis e sem consumidores. O operador
-   usa a lista explícita correspondente; não conceder wildcard por prefixo.
-3. Operador Cloud separado fornece provider/trust/identity/repository policy,
-   verifica boundary/SCP/RCP/session/endpoint e captura baseline sanitizada.
-   Nenhuma permissão administrativa de teste integra a role da fábrica.
-4. Para cadeia completa sem tocar a atual, o repo GitHub de teste precisa
-   conter cópia revisada dos executores/gates e parâmetros/identidade de
-   assinatura ajustados explicitamente em etapa autorizada. Mapear os nomes
-   de catálogo aos ECRs isolados; não fingir que o workflow atual aceita um
-   prefixo de laboratório livre. Exercer primeiro calls isoladas, depois a
-   integração do mesmo OCI aprovado; não publicar conteúdo não validado.
-5. Autorizar coleta por observador separado de logs/request IDs/CloudTrail
-   disponíveis. O observador não exige grants na role executora. Mascarar
-   tokens/credenciais e preservar somente claims/metadados necessários.
-
-### Casos a executar na sessão futura
-
-| Caso | Resultado esperado / cuidado |
-| --- | --- |
-| Validador oficial dos três documentos | Findings registrados/resolvidos sob revisão; sem confundir com execução |
-| Main caller autorizado: publicação reusable, promoção reusable, promoção direta e recovery direto | Assunção com IDs/aud/sub/ref previstos; guardar metadados sanitizados por rota, incluindo presença/ausência de job_workflow_ref |
-| Ref/repo/owner não autorizado | Assunção negada; usar job de diagnóstico isolado explícito, nunca acrescentar OIDC às rotas PR/fork da fábrica ou expor tokens de código não confiável |
-| PR/fork do código normal | Nenhum configure-aws/id-token nos executores de validação; separado do negativo STS acima |
-| Criação/configuração dos repos permitidos | CreateRepository inicial, scanOnPush e mutabilidade; repetir repo existente e confirmar chamada PutImageTagMutability |
-| Leitura e cópia do OCI validado nos repos permitidos | Digest índice/plataformas preservados; capturar APIs reais das ferramentas e read-back |
-| Imagem, assinatura, provenance, SPDX | Cosign/gh verificam a identidade de laboratório e subjects corretos; bundles/referrers acessíveis sem concessões extras não revisadas |
-| Retag para stable de laboratório e recovery | Verificar assinatura/provenance e re-scan; write/read-back exato e evidence stored, sem stable da fábrica |
-| Mesma credencial de publicação tentando stable de laboratório | **Pode ser permitido**; registrar risco residual, não anunciar negativo publisher-isolated |
-| Outro repo/conta/região, incluindo image-base-p104-denied | Leitura/escrita/configuração negadas no contexto efetivo; sucesso de GetAuthorizationToken não invalida esse negativo |
-| DeleteRepository/BatchDeleteImage/SetRepositoryPolicy/lifecycle | Esperada negação pela ausência de grants no perfil isolado. Usar recurso vazio/sentinela descartável expressamente autorizado; nunca release real |
-| Perfil sem provisioning, opcional | No código atual, falha esperada em describe/configuração. Não é alternativa transparente; retirada futura exige mudança/revisão do publicador |
-
-Ausência de grant neste JSON não prova negação real se outra policy conceder.
-Uma negação só conta com recurso/principal corretos e erro AccessDenied,
-não por recurso inexistente, sintaxe, rede ou token expirado. Qualquer permissão
-faltante deve ser ligada ao request/fonte e revisada; não ampliar com ecr:*.
-Falha de scan upstream é bloqueio do gate, não prova de erro IAM nem autorização
-para baixar severidade. Não executar esses testes nesta fatia.
-
-### Evidence e reversão futuras
-
-Guardar hashes/versões das policies efetivamente anexadas, ARN de sessão
-sanitizado, repo/ref/workflows, run/attempt, versões de ferramentas,
-matriz de resultado por action/recurso, IDs de requests, digest e artifacts
-de publicação/signing/provenance/SBOM/promoção/read-back. Registrar condições
-externas que impedirem completar qualquer caso.
-
-Se o teste falhar, suspender uso da role de laboratório e preservar evidence.
-Operador autorizado restaura configurações de teste pela baseline registrada,
-remove anexos/role/recursos somente no escopo descartável aprovado e após
-retenção da evidence. Não apagar provider compartilhado nem alterar a role
-ou stable da fábrica. A sessão atual não precisa rollback AWS: nada aplicado.
-
 ## Pedido técnico para Cloud/IAM
 
-Avaliar os três JSON renderizados com este inventário para os workflows
-federados. Containers Products mantém código, testes e o mapeamento; Cloud/IAM
-decide conta/recursos/trust/grants, provisionamento, restrições efetivas e
-validação; Segurança avalia o risco de escrita/configuração e Sigstore;
-GitHub admins confirmam IDs/ref/provider/claims e proteções. Observabilidade
-e SLA seguem o [P1-08](m11-m04-operational-health.md), sem novas promessas.
+Avaliar o inventário e a proposta compatível (execution + provisioning +
+trust) descritos acima para os workflows federados. Containers Products
+mantém código, testes e o mapeamento; Cloud/IAM decide conta/recursos/
+trust/grants, provisionamento, restrições efetivas e validação; Segurança
+avalia o risco de escrita/configuração e Sigstore; GitHub admins confirmam
+IDs/ref/provider/claims e proteções. Observabilidade e SLA seguem o
+[P1-08](m11-m04-operational-health.md), sem novas promessas.
 
 Decisões a devolver com owner e referência autorizada:
 
@@ -393,10 +264,9 @@ Decisões a devolver com owner e referência autorizada:
   de PutImageTagMutability; não homologar isolamento que não é imposto.
 - Aceitação da trust por repo/IDs/main, claims extras reais em todas as rotas
   e necessidade corporativa de limitar o caminho do workflow.
-- Quem autoriza/provisiona/observa o laboratório e onde guardar evidence;
-  depois, critérios IAM para o primeiro aceite corporativo.
+- Quem autoriza, provisiona e observa uma eventual validação sandbox e onde
+  guardar evidence; depois, critérios IAM para o primeiro aceite corporativo.
 
 Este handoff alimenta somente IAM do P0-03. Não inicia o checklist corporativo
 inteiro. P1-01 PASS limitado, P1-02/P1-03 PENDING e os gaps operacionais do
-P1-08 permanecem. Testes/resultados desta fatia na
-[spec P1-04](../specs/2026-09-13-iam-permission-contract/evidence.md).
+P1-08 permanecem.

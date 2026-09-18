@@ -281,11 +281,11 @@ Sigstore decision; Scanner/Veracode decision; external alert destination;
 corporate SLA; first corporate E2E run. Owners e critérios estão na
 [RFC-013](../RFC-013-Image-Base-Completa-com-Mermaid.md#prontidão-para-produção).
 
-O isolamento Wolfi completo, quando exigido, pertence ao P0-03 com
-Cloud/Network/Security. Nenhum mirror, PKI, IAM ou enforcement de consumo
-é implementado por este contrato. Aceites hospedados específicos não são
-inferidos de aprovação local; consulte a tabela atual da RFC e a
-[evidence desta revisão](../specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md).
+O isolamento Wolfi completo, quando exigido, é decisão corporativa com
+Cloud/Network/Security (ver [readiness corporativo](corporate-production-readiness.md)).
+Nenhum mirror, PKI, IAM ou enforcement de consumo é implementado por este
+contrato. Aceites hospedados específicos não são inferidos de aprovação
+local; consulte a tabela atual da RFC.
 
 ## Referências oficiais dos comandos
 

@@ -117,6 +117,6 @@ ponto.
 
 ## Evidência
 
-Ver `specs/2026-09-16-stable-lifecycle-rfc013/` para o binding runtime/dev,
-o preview de lifecycle antes da aplicação, e o read-back de `stable` após a
-promoção real.
+Binding runtime/dev, preview de lifecycle antes da aplicação e read-back de
+`stable` após a promoção real foram verificados em execução hospedada real;
+detalhe no histórico Git.

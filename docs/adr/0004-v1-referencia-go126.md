@@ -7,7 +7,7 @@
 | Owners | Containers Products (`@alric-corp/github_xj7_maintainer`) + Owner da RFC-013 |
 | Revisão | `execution_scope.review_by` em [`policies/operations/health.json`](../../policies/operations/health.json) (`2026-09-30`); vencida, vira alerta do job de saúde |
 | Aplicação | `execution_scope` na política de saúde (visibilidade); `P0_04_BATCH` em [`default_batch.py`](../../scripts/pipeline/catalog/default_batch.py) (execução, já em produção desde o PR #70) |
-| Origem | `specs/2026-09-15-first-corporate-e2e/`; achado operacional de 16/09/2026 (ver `evidence.md` da mesma spec) |
+| Origem | Planejamento de Stage 1 do primeiro E2E corporativo; achado operacional de 16/09/2026 |
 
 ## Contexto
 
@@ -42,7 +42,7 @@ estado, por duas razões distintas que este ADR separa explicitamente:
    individualmente por framework nos relatórios Trivy do run
    `35049596440` — não é suposição agregada. `go1-25` passa (não resolve
    `zlib` na sua árvore de dependências). `dotnet8` já tem exceção própria
-   e ADR dedicado ([ADR-0001](0001-dotnet8-fora-do-lote-padrao.md)), por um
+   e ADR dedicado (ADR-0001, histórico — removido do catálogo em 17/09/2026), por um
    CVE diferente (`dotnet-8-sdk`), preservada sem alteração por este ADR.
 
 Sem uma distinção explícita entre essas duas categorias, o job de saúde
@@ -96,8 +96,8 @@ princípio do ADR-0001, mecanismo diferente).
   próprio para reentrar) vs. `execution_scope` (fora da execução atual,
   reentra quando a política mudar — sem precisar de código novo).
 - A expansão de catálogo (widening de `execution_scope.current`) continua
-  dependendo de dois eixos independentes: decisão corporativa (Stage 1 de
-  `specs/2026-09-15-first-corporate-e2e/`) e o upstream do zlib — nenhum
+  dependendo de dois eixos independentes: decisão corporativa (Stage 1 do
+  primeiro E2E corporativo) e o upstream do zlib — nenhum
   dos dois é resolvido por este ADR.
 
 ## Alternativas rejeitadas
@@ -136,4 +136,4 @@ propor a expansão se o zlib corrigido publicar antes disso.
 - CVE por framework: relatórios Trivy do run `35049596440` (13 frameworks,
   cada um com exatamente uma vulnerabilidade, `CVE-2026-85091`, `zlib`,
   `1.3.2.1_rc20260601-r0` → `1.3.3-r0` ausente do `APKINDEX`).
-- `dotnet8`: inalterado, ver [ADR-0001](0001-dotnet8-fora-do-lote-padrao.md).
+- `dotnet8`: inalterado por este ADR (removido do catálogo posteriormente, em 17/09/2026).

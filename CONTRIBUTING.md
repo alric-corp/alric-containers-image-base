@@ -1,9 +1,5 @@
 # Contribuição e validação local
 
-Para trabalhar com Codex, Claude Code ou Copilot, consulte o
-[guia de engenharia com IA](docs/ai/README.md) e as
-[instruções compartilhadas](AGENTS.md).
-
 Comece pelo [mapa de responsabilidades](docs/repository-architecture.md).
 Regras do produto ficam em `scripts/pipeline/`, configuração em `policies/`
 e composição de jobs em `.github/workflows/`. Os testes unitários espelham os
@@ -60,7 +56,7 @@ SHA divergente ou bytes alterados nos dois YAMLs consumidos falham explicitament
 A comparação local da URL de fetch, HEAD e conteúdo não prova publicação do
 commit ou acesso privado. O resolvedor não fornece credenciais. Configurar o
 acesso autorizado e verificar a execução no destino são etapas separadas do
-[contrato de reuso](docs/m09-m12-reusable-workflows.md).
+[contrato de reuso](docs/repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados).
 
 ## Comandos
 

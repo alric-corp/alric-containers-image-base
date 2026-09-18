@@ -8,7 +8,7 @@ Não estabelece SLA, atendimento 24x7, plantão nomeado ou autorização de serv
 
 | Dimensão | Estado desta fatia |
 | --- | --- |
-| Documentação operacional | PROPOSED para revisão independente; resultados na [spec P1-08](../specs/2026-09-13-operational-readiness-slo/evidence.md) |
+| Documentação operacional | PROPOSED para revisão independente |
 | Health, pins, resumos e timing | IMPLEMENTED, com os limites abaixo |
 | Operação exercitada | OBSERVED_IN_EVIDENCE somente nos runs e períodos registrados |
 | Envio externo pela fábrica | NOT IMPLEMENTED; `external_destination` continua null |
@@ -187,8 +187,7 @@ entrar na main; na baseline desta revisão, filtro e teto 300 já estão present
   revisão e ADR obrigatórios**. Hoje nenhuma (ver exemplo histórico abaixo).
   Não falha o job.
   **Uma exceção com `review_by` vencida gera alerta própria**: a exceção
-  também não pode apodrecer em silêncio. Desde o
-  [ADR-0001](adr/0001-dotnet8-fora-do-lote-padrao.md), toda exceção está
+  também não pode apodrecer em silêncio. Toda exceção em `exceptions` está
   também **fora do lote padrão** de `workflow.yml`; o lint
   [`default_batch.py`](../scripts/pipeline/catalog/default_batch.py), no check
   obrigatório, impede que a lista e os três lotes divirjam.
@@ -211,15 +210,15 @@ apontando correção em `8.0.129-r1`. O APKINDEX real de
 que o apko consulta** (reconferido em 12/09/2026). Rebuild não resolvia:
 dependia de a Wolfi publicar o pacote, ou de retirar `dotnet8` do catálogo.
 Registrado como exceção com dono e revisão em 09/10/2026, não como "falha
-crônica que a gente ignora". Em 12/09/2026 o framework saiu do lote padrão
-([ADR-0001](adr/0001-dotnet8-fora-do-lote-padrao.md)), continuando no catálogo
-e nesta tabela como `known`. Em 17/09/2026, com o suporte LTS do .NET 8 a
-terminar em novembro e sem correção do Wolfi à vista, `dotnet8` foi removido
-do catálogo (mesmo ADR, adendo, e ADR-0007 em
-`docs/adr/0007-multi-source-alpine-recusado.md`, PR #84); não há mais
-nenhuma exceção `known` registrada. `dotnet10`/`dotnet10-dev`
-seguem no caminho suportado. Este exemplo permanece para ilustrar como o
-mecanismo `known` funciona quando alguma exceção futura for registrada.
+crônica que a gente ignora". Em 12/09/2026 o framework saiu do lote padrão,
+continuando no catálogo e nesta tabela como `known`. Em 17/09/2026, com o
+suporte LTS do .NET 8 a terminar em novembro e sem correção do Wolfi à
+vista, `dotnet8` foi removido do catálogo; não há mais nenhuma exceção
+`known` registrada. `dotnet10`/`dotnet10-dev` seguem no caminho suportado.
+Este exemplo permanece para ilustrar como o mecanismo `known` funciona
+quando alguma exceção futura for registrada; a decisão original está
+consolidada na [RFC-013](../RFC-013-Image-Base-Completa-com-Mermaid.md) e em
+[Corporate Production Readiness](corporate-production-readiness.md).
 
 ## 3. Canal, dono e notificação
 
@@ -274,8 +273,8 @@ check obrigatório compara o declarado com o `retention-days` real de cada
 | `pipeline-summary-*`, `pipeline-health-*` | 30 dias | resultado e saúde, para comparar no tempo |
 | `image-trust-*` | 30 dias | evidência da integração de confiança de certificados |
 
-No [retry parcial P1-02](../specs/2026-09-13-partial-retry-without-rebuild/spec.md),
-o contrato de attempt anterior só é reutilizado no mesmo run, para o OCI
+No retry parcial (P1-02), o contrato de attempt anterior só é reutilizado no
+mesmo run, para o OCI
 validado atual e seu par compilado. A janela efetiva continua limitada pelo
 OCI de 3 dias; manter reports por 30 dias não prolonga essa janela nem
 autoriza rebuild automático no publicador. Metadados incompletos, histórico
@@ -289,7 +288,7 @@ cobre auditoria e diagnóstico, não recuperação de imagem.
 A [lifecycle ECR](../policies/operations/ecr-lifecycle.json) foi aplicada e
 relida nos 15 repositórios do sandbox em 10/09/2026. Seleciona somente imagens
 sem tag após 30 dias; os previews selecionaram zero imagens. Releases e
-assinaturas com tag ficam preservadas. [Evidência](evidence/ecr-lifecycle-2026-09-10.json).
+assinaturas com tag ficam preservadas.
 
 ## 5. Indicadores e semântica do tempo
 
@@ -300,8 +299,7 @@ consumidores e responsáveis; não nasce da configuração ou deste documento.
 Os indicadores abaixo distinguem o que o health já calcula do que exige
 apuração adicional. Para I01–I04, a janela padrão é a efetiva do JSON de health,
 até 7 dias; usar `generated_at` como referência, não a hora em que o relatório
-foi baixado. Resultados concretos, amostra e limites estão na
-[evidence P1-08](../specs/2026-09-13-operational-readiness-slo/evidence.md).
+foi baixado.
 
 | ID / pergunta | Fonte e cálculo | Unidade / escopo | Ausência, limite e estado |
 | --- | --- | --- | --- |
@@ -346,11 +344,11 @@ A CLI lê apenas a primeira página de jobs: verificar completude antes de usar.
 
 Health e timing calculam p90 escolhendo a amostra ordenada no índice
 `round(0.9*(n−1))`, sem interpolação, e mediana dos valores presentes. É uma
-estatística descritiva, sem intervalo de confiança ou estimativa de SLA.
-O [snapshot de timing de 09/09](evidence/ci-timing-2026-09-09.json) contém
-8 runs de fast checks e 5 de validação, com IDs e pressupostos; esses dados
-não medem tempo até stable nem comportamento corporativo. Nenhum novo
-percentil foi calculado para a amostra curta desta fatia.
+estatística descritiva, sem intervalo de confiança ou estimativa de SLA. Um
+snapshot histórico de timing (09/09/2026) cobriu 8 runs de fast checks e 5 de
+validação; esses dados não medem tempo até stable nem comportamento
+corporativo. Nenhum novo percentil foi calculado para a amostra curta desta
+fatia.
 
 ## 6. Proposta de SLO e fronteira do SLA
 
@@ -401,7 +399,7 @@ comunicação é uma responsabilidade proposta a operacionalizar, não prova de 
 | Promoção / mismatch de read-back | Conferir `promotion-evidence`, `promotion-scans`, steps de escrita/confirmação e candidato | Mismatch ou falha após escrita exige investigação: stable pode ter sido movida. Encerrar com digest confirmado e causa registrada, usando [promoção](../README.md#gate-de-promoção-para-stable-canário-de-soak) e [recovery](../README.md#recuperação-de-stable-runbook-m15) quando autorizado |
 | Recovery / quarentena | Consultar evidence própria de recovery, digest anterior/restaurado e policy; health não cobre esse caminho | Necessidade de recuperação segue autorização/runbook; encerrar com verificações e read-back, comunicando impacto. Quarentena impede repromoção via mudança explícita revisada |
 | Pin indisponível / drift Wolfi | Conferir tool-pins, falha de endpoint e hash; seguir [pins](../README.md#dependências-do-pipeline-e-tags) e [Wolfi](wolfi-signing-key.md) | Rotação/indisponibilidade requer owner e revisão; encerrar com origem/pin conferidos. Nunca atualizar trust automaticamente |
-| Exceção vencida / exclusão formal | Conferir owner, review_by UTC, motivo e [ADR-0001](adr/0001-dotnet8-fora-do-lote-padrao.md) | Decisão vencida vai ao owner/code owners/AppSec aplicável. Encerrar com decisão revisada rastreável; renovação de data sozinha não corrige CVE |
+| Exceção vencida / exclusão formal | Conferir owner, review_by UTC, motivo e o ADR referenciado na exceção | Decisão vencida vai ao owner/code owners/AppSec aplicável. Encerrar com decisão revisada rastreável; renovação de data sozinha não corrige CVE |
 | Alerta sem confirmação de recebimento | Preservar alerta, verificar se há envio/destino/recibo; hoje não há integração externa | Responsáveis pelo canal e operação definem caminho autorizado. Encerrar entrega somente com comprovante; encerrar atendimento exige ACK e resolução registrada |
 
 Diagnóstico começa por leitura. Este runbook referencia procedimentos que
