@@ -17,9 +17,7 @@
 Esta RFC descreve o que a plataforma entrega hoje e o que separa esse estado
 de uma liberação para produção. O caminho até aqui — diagnóstico original da
 POC, cada entrega, achados reais e links de PR/run — está preservado no
-histórico Git e nas specs versionadas em `specs/`.
-A reconciliação desta revisão e suas fontes estão na
-[spec P1-09/P1-10](specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md).
+histórico Git.
 Implementado significa presente no código identificado; não implica aceite
 hospedado de toda fatia nem liberação corporativa.
 
@@ -189,7 +187,7 @@ por pilar:
 
 | Pilar | Estado em 17/09/2026 |
 | --- | --- |
-| Minimalismo | Base sem shell nem gerenciador de pacotes, comprovado por execução nas variantes finais de Node, Python, Go, Java e .NET. Go 1.25/1.26, Java 21/25 e .NET 10 têm runtime separado do toolchain. `dotnet8`, o único que ainda carregava o SDK completo, foi removido do catálogo em 17/09/2026 (fim de suporte LTS em 11/2026; ver [ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md)). |
+| Minimalismo | Base sem shell nem gerenciador de pacotes, comprovado por execução nas variantes finais de Node, Python, Go, Java e .NET. Go 1.25/1.26, Java 21/25 e .NET 10 têm runtime separado do toolchain. `dotnet8`, o único que ainda carregava o SDK completo, foi removido do catálogo em 17/09/2026 (fim de suporte LTS em 11/2026). |
 | Imutabilidade | Tags de build imutáveis no ECR (exceção só para `stable`), rejeição de sobrescrita comprovada no conjunto histórico de 15 ECRs (09/09); o catálogo atual tem 16 definições. Raiz somente leitura testada em contrato; continua dependendo da configuração do consumidor em runtime. |
 | Manutenção | Rebuild diário e promoção por soak em execução; ferramentas por SHA/digest com lint de cobertura. Cron é de melhor esforço; suas lacunas e falhas de pins são monitoradas. A amostra histórica de 10% não é SLA atual. Renovate configurado não comprova instalação ativa; destino externo de alertas e SLA corporativo continuam pendentes. |
 | Verificabilidade | SPDX gerado e atestado por digest; assinatura Cosign e provenance GitHub sobre o índice, verificadas na promoção com IDs numéricos de origem. SBOM verification no consumo é uma etapa distinta; evidence disponível não é enforcement no cluster, nem atribui SLSA level formal. |
@@ -302,10 +300,9 @@ depois publica o índice multiarch.
 Nesta solução o contrato é `amd64 → scan`, `arm64 → scan`, e ambas
 precisam passar — uma diferença material. O gate também permaneceu
 bloqueante enquanto isso impediu frameworks inteiros pela CVE de zlib
-(ver [ADR-0004](docs/adr/0004-v1-referencia-go126.md) e
-[ADR-0006](docs/adr/0006-java21-zlib-blocker-remediation-options.md);
-resolvido pelo upstream em 17/09/2026, sem alterar o gate), o que mostra
-que o controle deixou de ser decorativo.
+(ver [ADR-0004](docs/adr/0004-v1-referencia-go126.md); resolvido pelo
+upstream em 17/09/2026, sem alterar o gate), o que mostra que o controle
+deixou de ser decorativo.
 
 ### 6. Contrato funcional
 
@@ -421,7 +418,7 @@ Esta solução passou a tratar certificados como um contrato de trust store,
 com mecanismo para âncoras controladas e testes de runtime. Uma dependência
 corporativa permanece, no entanto: o mecanismo evoluiu, mas o conteúdo de
 PKI real ainda precisa vir do ambiente corporativo (ver
-[Pacote de adoção](docs/corporate-adoption.md)).
+[Corporate Production Readiness](docs/corporate-production-readiness.md)).
 
 ### 14. Reusable workflow
 
@@ -530,9 +527,11 @@ Trivy bloqueante, sem exceção.
 Não precisa mais de decisão: o Wolfi publicou `zlib` a partir exatamente
 desse commit em 17/09/2026, e a revalidação completa do catálogo confirmou
 16/16 definições limpas nas duas arquiteturas sem qualquer mudança no gate.
-Registro e evidência no
-[ADR-0006](docs/adr/0006-java21-zlib-blocker-remediation-options.md)
-(estado `RESOLVED`, addendum). O pacote próprio nunca foi construído.
+O pacote próprio nunca foi construído; a decisão e sua resolução foram
+consolidadas nesta RFC e em
+[Corporate Production Readiness](docs/corporate-production-readiness.md)
+na minimização final do LAB (17/09/2026), com o ADR original preservado no
+histórico Git.
 
 #### 3. Estratégia de rollout das linguagens
 
@@ -553,7 +552,7 @@ entra no catálogo ativo.
 - **Scanner** — Trivy.
 - **CA corporativa** — buscar no S3 durante o build, usando o equivalente
   corporativo de [`certificados.sh`](scripts/certificates/certificados.sh)
-  já provado no lab (ver [Pacote de adoção](docs/corporate-adoption.md), PAR-13).
+  já provado no lab (ver [Corporate Production Readiness](docs/corporate-production-readiness.md)).
 - **Consumo** — `stable` oficial + build tag imutável + digest (ver
   [Consumer Verification Contract](docs/consumer-verification-contract.md)).
 - **Lifecycle** — 7 dias preservando `stable`; direção já formalizada em
@@ -590,9 +589,10 @@ consultada no registry. As contagens históricas de 17 definições, 15 ECRs ou
 `dotnet8` foi removido do catálogo inicial em 17/09/2026: o suporte LTS
 termina em novembro de 2026 e a correção da CVE que o bloqueava nunca chegou
 ao Wolfi. Um POC provou tecnicamente que Alpine v3.24 resolveria a CVE na
-origem, mas a adoção do multi-source foi recusada por custo/benefício. Ver
-[ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md) (adendo) e
-[ADR-0007](docs/adr/0007-multi-source-alpine-recusado.md). `dotnet10`/`dotnet10-dev`
+origem, mas a adoção do multi-source foi recusada por custo/benefício —
+decisões consolidadas nesta RFC e em
+[Corporate Production Readiness](docs/corporate-production-readiness.md), com
+os ADRs originais preservados no histórico Git. `dotnet10`/`dotnet10-dev`
 são o caminho suportado. O repositório ECR `image-base-dotnet8`, vazio, foi
 removido pelo Terraform do Registry em 17/09/2026 (episódio 4 de
 `drift-remediation/` em `alric-containers-registry`); catálogo, Registry e AWS
@@ -636,10 +636,10 @@ substituições automáticas: policy, referências literais dos chamadores/actio
 chamada Trivy interna, checkouts e Dependabot precisam concordar. Os checks
 conferem origem local, SHA e bytes dos dois YAMLs consumidos; não comprovam
 publicação do commit ou acesso privado. A origem sandbox e seus pins foram
-preservados. A [reconciliação de 14/09/2026](specs/2026-09-14-shared-origin-portability/evidence.md)
-registra PASS hospedado observado no PR #62 e na main para a origem sandbox,
-sujeito à revisão independente dessa coleta. Migração real a outra origem
-continua NOT RUN e acesso privado NOT VERIFIED. Ver [contrato de reuso](docs/m09-m12-reusable-workflows.md).
+preservados. A reconciliação de 14/09/2026 registrou PASS hospedado observado
+no PR #62 e na main para a origem sandbox, sujeito à revisão independente
+dessa coleta. Migração real a outra origem continua NOT RUN e acesso privado
+NOT VERIFIED. Ver [contrato de reuso](docs/repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados).
 
 ### Fatias recentes da RFC-013
 
@@ -651,35 +651,35 @@ continua NOT RUN e acesso privado NOT VERIFIED. Ver [contrato de reuso](docs/m09
 | P1-04 — contrato de permissões IAM | [Inventário e templates locais propostos](docs/iam-permission-contract.md), sem aplicação IAM | Validação AWS/sandbox NOT RUN; aceite corporativo EXTERNAL_PENDING; PutImage no mesmo ECR não isola stable por principal |
 | P1-05 — Sigstore Trust Model ADR | [ADR-0002](docs/adr/0002-sigstore-trust-model.md) PROPOSED; documenta o modelo existente | Decisão corporativa EXTERNAL / PENDING; sem novo controle ou aceite hospedado |
 | P1-06 — controles em workflows federados | [ADR-0003](docs/adr/0003-controles-seguranca-workflows-federados.md); premissa de autoria/sustentação separada dos requisitos externos | Requisitos e primeiro aceite corporativo pendentes; somente documentação |
-| P1-08 — contrato operacional, alertas e proposta de SLO/SLA | [Contrato operacional](docs/m11-m04-operational-health.md) proposto nesta fatia; mecanismos existentes preservados | Operação observada em amostra datada na [evidence](specs/2026-09-13-operational-readiness-slo/evidence.md); entrega externa, responsáveis e SLA corporativos pendentes; não encerra o P1-08 completo |
+| P1-08 — contrato operacional, alertas e proposta de SLO/SLA | [Contrato operacional](docs/m11-m04-operational-health.md) proposto nesta fatia; mecanismos existentes preservados | Operação observada em amostra datada; entrega externa, responsáveis e SLA corporativos pendentes; não encerra o P1-08 completo |
 | P1-09 / P1-10 — contrato e estado da RFC | Documentação proposta nesta revisão | Revisão independente posterior; nenhum enforcement novo |
 
-As specs originais conservam seus snapshots pré-merge. Para P1-03, a consulta
-posterior confirmou preflight com hash igual e lock hospedado com chave local,
-seguido de build/publicação Go no run 34735740791; isso é evidence observada
-desse caminho, não aprovação formal, isolamento exclusivo ou lote inteiro verde.
-P1-01 tem aceite hospedado comprovado no commit
+O histórico Git preserva os snapshots pré-merge de cada entrega. Para P1-03, a
+consulta posterior confirmou preflight com hash igual e lock hospedado com
+chave local, seguido de build/publicação Go no run 34735740791; isso é
+evidence observada desse caminho, não aprovação formal, isolamento exclusivo
+ou lote inteiro verde. P1-01 tem aceite hospedado comprovado no commit
 `e3ed68259f66af41e8054a4c0ac29a54082ddd60`: no run `34768459323`, promoção,
 re-scan e read-back passaram para `go1-26` e `go1-26-dev`. O artifact
 `promotion-go1-26-1` registra `promoted=true`, `read_back_status=confirmed` e
 `candidate_digest == stable_digest_observed == sha256:f658ed77f8734e1c3d218e07684f876f5cd38964afd79bb5c7a7c9e6571d339f`.
-Detalhes na [evidence](specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md).
-Em 14/09/2026, a [nova coleta P1-03](specs/2026-09-13-wolfi-signing-key/evidence.md#reconciliação-hospedada--2026-09-14)
-comprovou na main o mínimo preflight/Melange/Apko dos dois Go, nas duas
-arquiteturas: PASS nesse escopo; lote PARTIAL / BLOCKED_UPSTREAM. P1-02
-continua PENDING: a [coleta dirigida](specs/2026-09-13-partial-retry-without-rebuild/evidence.md#reconciliação-hospedada--2026-09-14)
-não encontrou retry na janela e o gate observado registra reused=false.
-As conclusões novas aguardam revisão independente, sem aceite corporativo.
+Em 14/09/2026, uma nova coleta P1-03 comprovou na main o mínimo
+preflight/Melange/Apko dos dois Go, nas duas arquiteturas: PASS nesse escopo;
+lote PARTIAL / BLOCKED_UPSTREAM. P1-02 continua PENDING: a coleta dirigida
+daquela mesma data não encontrou retry na janela e o gate observado registra
+reused=false. As conclusões novas aguardam revisão independente, sem aceite
+corporativo.
 
 ## Prontidão para produção
 
 **Não.** A fábrica executa no sandbox; as identidades, decisões e aceites
 corporativos abaixo ainda precisam ser configurados e comprovados.
 
-O [pacote P0-03](docs/corporate-adoption.md) organiza os parâmetros reais,
-dependências, responsáveis, ordem de execução e checklist de aceite do destino.
-O pacote local é revisável; implantação e homologação corporativas permanecem
-pendentes. Não substitui os contratos nem encerra aceites hospedados anteriores.
+O [Corporate Production Readiness](docs/corporate-production-readiness.md)
+organiza os gates, dependências, responsáveis e checklist de aceite do
+destino (P0-03). O documento é revisável; implantação e homologação
+corporativas permanecem pendentes. Não substitui os contratos nem encerra
+aceites hospedados anteriores.
 
 ### 1. Estado real da main e dos bloqueios
 
@@ -717,9 +717,9 @@ os nomes de destino nesta RFC são planejamento, não infraestrutura implantada.
 | First corporate E2E run | EXTERNAL — pendente | Owners conjuntos: build → scan/contrato → publish/attest → promote/read-back → consumo/recovery |
 
 No sandbox, `enforce_admins` permanece desligado por decisão explícita;
-a exigência de habilitá-lo pertence ao P0-03. Ver
-[Capability Matrix](docs/ai/CAPABILITY-MATRIX.md). Não há alegação de merge
-sem bypass administrativo no ambiente pessoal.
+a exigência de habilitá-lo pertence ao P0-03 (ver
+[Corporate Production Readiness](docs/corporate-production-readiness.md)).
+Não há alegação de merge sem bypass administrativo no ambiente pessoal.
 
 A premissa de autoria/sustentação e as perguntas corporativas do P1-06 estão
 no [ADR-0003](docs/adr/0003-controles-seguranca-workflows-federados.md).
@@ -735,10 +735,8 @@ explicita proxies baseados em jobs, limites da coleta, scheduler compartilhado,
 SLIs e SLOs apenas propostos. Relatório/falha de job não comprova entrega ou
 reconhecimento de alerta; `external_destination` continua null. Nenhum
 framework está excluído do lote padrão hoje; `dotnet8`, o único caso já
-registrado, foi removido do catálogo em 17/09/2026
-([ADR-0001](docs/adr/0001-dotnet8-fora-do-lote-padrao.md),
-[ADR-0007](docs/adr/0007-multi-source-alpine-recusado.md)) — reintroduzi-lo
-exigiria uma nova decisão de catálogo, não só a correção do Wolfi.
+registrado, foi removido do catálogo em 17/09/2026 — reintroduzi-lo exigiria
+uma nova decisão de catálogo, não só a correção do Wolfi.
 
 CAs corporativas, enforcement de consumo/admission e ARM nativo não são
 propriedades obtidas por esta documentação. Enforcement e ARM nativo são
@@ -775,7 +773,7 @@ define o que o consumidor deve conferir; não instala enforcement no deploy.
 | Automação no GitHub com scheduler diário | Entregue; cadência real do agendador medida e documentada |
 | Scan das imagens a cada build | Entregue com Trivy; scanner corporativo em decisão |
 | Documentação de uso para consumidores | [Contrato canônico](docs/consumer-verification-contract.md), proposto nesta revisão; README mantém exemplos |
-| Trilha de troubleshooting distroless | Toolkit em `troubleshooting/`, ciclo de vida separado |
+| Trilha de troubleshooting distroless | Toolkit mantido como produto independente (`alric-containers-troubleshooting`), ciclo de vida separado |
 
 ## Fora de escopo
 
@@ -962,6 +960,7 @@ com scan e testes. Exemplos para Node.js, .NET e Java no [README](README.md#como
 | `https://github.com/corporate-org/corporate-containers-k8s-tools` | Ferramentas de troubleshooting do ambiente de containers (nome ilustrativo) |
 | `https://github.com/alric-corp/alric-containers-image-base` | Sandbox onde a implementação e as evidências desta RFC estão (antes `itau-xj7-containers-image-base`) |
 | `https://github.com/alric-corp/alric-containers-reusable-workflows` | Executores compartilhados (validação, contrato, Trivy) consumidos por SHA |
+| `https://github.com/alric-corp/alric-containers-troubleshooting` | Sandbox: toolkit de diagnóstico operacional, extraído de `image-base/troubleshooting/` como produto independente em 17/09/2026 |
 | `https://github.com/gersontpc/image-base` | POC de referência |
 
 ## Referências

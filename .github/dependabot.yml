@@ -10,9 +10,6 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
-    # Runtime pins must be updated by the matching gh-aw compiler.
-    ignore:
-      - dependency-name: "github/gh-aw-actions/*"
     groups:
       # Keep this origin aligned with policies/governance/reusable-workflows.json.
       # The reviewed-origin resolver rejects partial migrations of this group.

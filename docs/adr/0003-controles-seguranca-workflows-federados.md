@@ -31,7 +31,7 @@ projeto. A tarefa é tornar claro o que existe, o que requer confirmação e
 quem mantém cada parte. Preservar o desenho atual; não propor sua substituição
 por workflows governados apenas por serem mantidos por Pipelines.
 
-O [contrato de reuso](../m09-m12-reusable-workflows.md) continua válido.
+O [contrato de reuso](../repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados) continua válido.
 Uso seletivo de componentes compartilhados aprovados pode ser avaliado quando
 houver benefício e compatibilidade demonstrados, sem transferir a Pipelines
 a manutenção dos workflows da fábrica. Esta entrega não implementa integração,
@@ -65,8 +65,6 @@ e do [contrato de consumo](../consumer-verification-contract.md).
 | Trust de composição | [integração de CAs](../../.github/workflows/image-trust.yml), [Wolfi](../wolfi-signing-key.md), preflight local/pin e drift detect-only | CAs corporativas reais pendentes; chave Wolfi não é trust set exclusivo por causa de discovery/JWKS Apko |
 | Governança e operação | [ci.yml](../../.github/workflows/ci.yml), [CODEOWNERS](../../.github/CODEOWNERS), lints/pins e [saúde](../m11-m04-operational-health.md) | Proteções/aplicação corporativa a confirmar; enforce_admins=false é decisão do sandbox. Alerta externo e SLA ainda pendentes |
 
-Evidências já registradas: [reconciliação P1-09/P1-10](../../specs/2026-09-13-consumer-contract-rfc-refresh/evidence.md)
-e [observações P1-05](../../specs/2026-09-13-sigstore-trust-model-adr/evidence.md).
 P1-01 hosted PASS; P1-02 e P1-03 PENDING preservados. Esta documentação não
 produz novo aceite hospedado, corporativo ou lote inteiro aprovado.
 

@@ -47,9 +47,9 @@ class RealTreeTests(unittest.TestCase):
     """O estado versionado é o primeiro caso de aceite (A01/A02).
 
     dotnet8 foi removido do catálogo em 17/09/2026 (fim de suporte LTS em
-    11/2026; ver docs/adr/0001-dotnet8-fora-do-lote-padrao.md, adendo, e
-    docs/adr/0007-multi-source-alpine-recusado.md): a árvore real não tem
-    mais nenhuma exceção registrada, e os três lotes são o catálogo inteiro.
+    11/2026; decisão consolidada no histórico Git e na RFC-013): a árvore
+    real não tem mais nenhuma exceção registrada, e os três lotes são o
+    catálogo inteiro.
     """
 
     def test_the_three_batches_are_the_catalog_with_no_exclusions(self):

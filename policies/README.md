@@ -11,8 +11,6 @@ em `scripts/pipeline/` aplicam as regras; os workflows controlam a execução.
 | `release/promotion-quarantine.json` | `release/find_promotion_candidate.py` | Digests retirados de stable que não podem ser promovidos novamente |
 | `release/signing-identities.json` | `release/verify_promotion.py` | Nome atual, nomes históricos e IDs imutáveis assinados do repositório e da organização |
 | `aws/github-actions-image-base-trust.json` | IAM, role `github-actions-image-base` | Trust policy OIDC aplicada, restrita ao subject exato da main |
-| `aws/corporate-like/image-base-ecr-target.json` | Nenhum workflow consome; documento-alvo para revisão | P0-04 `CORPORATE_LIKE`: policy ECR alvo para a role Containers (target `alric-github-repo-1360616627`, legacy `github-actions-image-base`), equalizada à role corporativa observada; não aplicada |
-| `aws/corporate-like/image-base-trust-target.json` | Nenhum workflow consome; documento-alvo para revisão | Trust OIDC alvo com `repository_id`/`repository_owner_id` explícitos, além do `sub`/`aud` já usados pela trust ativa; não aplicada |
 
 Alterações passam por PR e revisão dos donos em `.github/CODEOWNERS`. O lint
 compara a política de retenção com os workflows locais e reutilizáveis reais.
@@ -31,9 +29,8 @@ A migração de nomes de 10/09/2026 registrou aplicação, verificação
 e limites. Nomes históricos só são aceitos para assinaturas/provenance, com
 IDs assinados iguais aos do repositório atual; eles não têm acesso OIDC à role.
 
-O [contrato IAM P1-04](../docs/iam-permission-contract.md) e os
-[templates em proposals](aws/proposals/factory-permissions/README.md) são
-propostas locais separadas: inventário, execução/provisionamento e trust
-corporativa para revisão Cloud/IAM. Não substituem a policy acima nem são
-consumidos como permissões pelos workflows. Validação local não comprova
-autorização efetiva ou isolamento de stable.
+O [contrato IAM P1-04](../docs/iam-permission-contract.md) descreve o
+inventário de operações e a proposta de execução/provisionamento para
+revisão Cloud/IAM. Não substitui a policy acima nem é consumido como
+permissão pelos workflows. Validação local não comprova autorização efetiva
+ou isolamento de stable.

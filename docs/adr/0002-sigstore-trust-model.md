@@ -31,8 +31,6 @@ O installer fixado instala **Cosign v3.0.6**; os comandos não configuram
 chave estática, KMS, instância privada ou bypass de transparência. A action
 de provenance é `actions/attest-build-provenance` v4, fixada por SHA. A CLI
 `gh` vem do runner e tem sua versão registrada; não é pinada pelo projeto.
-As versões/defaults e amostras hospedadas estão na
-[evidence P1-05](../../specs/2026-09-13-sigstore-trust-model-adr/evidence.md).
 
 ## Decision
 
@@ -134,8 +132,7 @@ pública do log. No **Cosign v3.0.6**, os defaults de sign/attest usam bundles
 e DSSE com signing config; descrever todo evento como o formato legado
 `hashedrekord` seria incorreto. O caminho efetivo é explicado pelas fontes
 [sign](https://github.com/sigstore/cosign/blob/v3.0.6/cmd/cosign/cli/sign/sign.go),
-[attest](https://github.com/sigstore/cosign/blob/v3.0.6/cmd/cosign/cli/attest/attest.go)
-e pela análise versionada na [evidence](../../specs/2026-09-13-sigstore-trust-model-adr/evidence.md).
+[attest](https://github.com/sigstore/cosign/blob/v3.0.6/cmd/cosign/cli/attest/attest.go).
 
 | Dado | Exposição no modelo atual |
 | --- | --- |
@@ -180,8 +177,7 @@ e GitHub, obtendo o material pelas respectivas raízes TUF. A instância privada
 usa evidência temporal de TSA em lugar de Rekor; ausência de log nesse modelo
 não é uma flag de bypass do Cosign. Não há `--custom-trusted-root` ou restrição
 a uma única dessas instâncias no verificador atual. Detalhes e fontes da CLI
-estão no [verificador gh v2.100.0](https://github.com/cli/cli/blob/v2.100.0/pkg/cmd/attestation/verification/sigstore.go)
-e na [evidence](../../specs/2026-09-13-sigstore-trust-model-adr/evidence.md).
+estão no [verificador gh v2.100.0](https://github.com/cli/cli/blob/v2.100.0/pkg/cmd/attestation/verification/sigstore.go).
 
 ## Verification model
 

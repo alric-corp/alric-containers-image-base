@@ -10,31 +10,20 @@ import unittest
 from unittest.mock import Mock, patch
 from urllib.parse import unquote, urlsplit
 
+from scripts.pipeline.governance.doc_links import link_targets
 from scripts.pipeline.governance.workflow_dependencies import approved_repository, dependencies
 from scripts.pipeline.release.publish_sboms import publish
 from scripts.pipeline.release.verify_promotion import IDENTITIES, verify_promotion
-from tools.check_ai_context import link_targets
 
 ROOT = Path(__file__).resolve().parents[4]
 CONTRACT = ROOT / "docs/consumer-verification-contract.md"
 TRUST_ADR = ROOT / "docs/adr/0002-sigstore-trust-model.md"
 FEDERATED_ADR = ROOT / "docs/adr/0003-controles-seguranca-workflows-federados.md"
-SPEC = ROOT / "specs/2026-09-13-consumer-contract-rfc-refresh"
-TRUST_SPEC = ROOT / "specs/2026-09-13-sigstore-trust-model-adr"
-FEDERATED_SPEC = ROOT / "specs/2026-09-13-federated-factory-security-controls"
-OPERATIONS_SPEC = ROOT / "specs/2026-09-13-operational-readiness-slo"
-ADOPTION = ROOT / "docs/corporate-adoption.md"
-ADOPTION_SPEC = ROOT / "specs/2026-09-13-corporate-adoption"
-ORIGIN_SPEC = ROOT / "specs/2026-09-14-shared-origin-portability"
 DOCUMENTS = [ROOT / name for name in (
     "README.md", "RFC-013-Image-Base-Completa-com-Mermaid.md", "docs/README.md",
-    "docs/repository-architecture.md", "docs/m09-m12-reusable-workflows.md",
-    "docs/adr/README.md", "docs/m11-m04-operational-health.md", "CONTRIBUTING.md",
-)] + [CONTRACT, TRUST_ADR, FEDERATED_ADR, ADOPTION] + [directory / name for directory in (
-    SPEC, TRUST_SPEC, FEDERATED_SPEC, OPERATIONS_SPEC, ADOPTION_SPEC, ORIGIN_SPEC,
-) for name in (
-    "spec.md", "acceptance.md", "plan.md", "tasks.md", "evidence.md", "handoff.md",
-)]
+    "docs/repository-architecture.md", "docs/adr/README.md",
+    "docs/m11-m04-operational-health.md", "CONTRIBUTING.md",
+)] + [CONTRACT, TRUST_ADR, FEDERATED_ADR]
 
 
 class ConsumerDocumentationTests(unittest.TestCase):
@@ -57,7 +46,7 @@ class ConsumerDocumentationTests(unittest.TestCase):
         return [Template(token).substitute(variables or self.variables)
                 for token in shlex.split(matches[0].split(" > ")[0])]
 
-    def test_local_links_in_consumer_docs_and_spec_exist(self):
+    def test_local_links_in_consumer_docs_exist(self):
         for path in DOCUMENTS:
             for target in link_targets(path.read_text(encoding="utf-8")):
                 parsed = urlsplit(target)
@@ -70,7 +59,7 @@ class ConsumerDocumentationTests(unittest.TestCase):
                     self.assertTrue(destination.exists())
 
     def test_consumer_bash_examples_have_valid_syntax(self):
-        for document in (CONTRACT, OPERATIONS_SPEC / "evidence.md", ADOPTION):
+        for document in (CONTRACT,):
             with self.subTest(document=document.relative_to(ROOT)):
                 examples = "\n".join(re.findall(
                     r"(?ms)^```bash\n(.*?)^```$", document.read_text(encoding="utf-8")))
@@ -97,8 +86,7 @@ class ConsumerDocumentationTests(unittest.TestCase):
     def test_architecture_docs_reference_the_current_shared_workflow_pin(self):
         pin = dependencies(ROOT)[0]["ref"]
         current = f"Biblioteca aprovada: `{approved_repository(ROOT)}@{pin}`."
-        for name in ("RFC-013-Image-Base-Completa-com-Mermaid.md",
-                     "docs/m09-m12-reusable-workflows.md", "README.md",
+        for name in ("RFC-013-Image-Base-Completa-com-Mermaid.md", "README.md",
                      "docs/repository-architecture.md"):
             with self.subTest(document=name):
                 self.assertEqual((ROOT / name).read_text(encoding="utf-8").splitlines().count(current), 1)

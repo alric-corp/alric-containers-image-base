@@ -16,7 +16,7 @@ class PRExecutionScopeTests(unittest.TestCase):
 
     def test_docs_only_change_remains_p0_04(self):
         self.assert_profile('P0_04', 'docs/repository-architecture.md',
-                            'specs/2026-09-15-first-corporate-e2e/plan.md')
+                            'docs/corporate-production-readiness.md')
 
     def test_shared_workflow_and_pipeline_changes_use_full(self):
         self.assert_profile('FULL', '.github/workflows/build-base-images.yml')
