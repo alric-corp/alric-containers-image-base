@@ -18,7 +18,6 @@ on:
       - '.github/scripts/**'
       - 'scripts/**'
       - 'policies/**'
-      - '.github/workflows/promote-stable.yml'
       # O contrato funcional é gate de publicação (M08/M10): mudar um projeto
       # mínimo ou um probe muda o que autoriza publicar.
       - 'tests/runtime/**'
@@ -36,14 +35,12 @@ on:
       - '.github/scripts/**'
       - 'scripts/**'
       - 'policies/**'
-      - '.github/workflows/promote-stable.yml'
       # O contrato funcional é gate de publicação (M08/M10): mudar um projeto
       # mínimo ou um probe muda o que autoriza publicar.
       - 'tests/runtime/**'
       - 'Makefile'
   schedule:
     - cron: "0 3 * * *"   # build diário: 00:00 America/Sao_Paulo (03:00 UTC)
-    - cron: "17 * * * *"  # promoção horária; soak mínimo contado desde o push
   workflow_dispatch:
     # P0-04: o primeiro E2E corporativo tem seleção fixa e auditável.
     # A capacidade FULL continua disponível nos workflows reutilizáveis;
@@ -88,8 +85,8 @@ jobs:
     # M14: um novo commit no mesmo PR cancela a validação obsoleta (apko +
     # Trivy, sem AWS) em vez de rodar as duas até o fim; PRs diferentes têm
     # grupos diferentes e não se cancelam. Grupo próprio, nunca compartilhado
-    # com build-base-images/promote-stable abaixo — esses nunca podem ser
-    # cancelados por um PR/build novo.
+    # com build-base-images abaixo — esse nunca pode ser cancelado por um
+    # PR/build novo.
     concurrency:
       group: validate-pr-${{ github.event.pull_request.number }}
       cancel-in-progress: true
@@ -118,18 +115,3 @@ jobs:
       aws-region: ${{ vars.AWS_REGION }}
       aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
       frameworks: '["go1-26", "go1-26-dev"]'
-
-  promote-stable:
-    if: github.ref == 'refs/heads/main' && github.event.schedule == '17 * * * *'
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
-      attestations: read
-    uses: ./.github/workflows/promote-stable.yml
-    with:
-      aws-region: ${{ vars.AWS_REGION }}
-      aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
-      soak-hours: 6
-      frameworks: '["go1-26", "go1-26-dev"]'
-# no-op, testing M14 cancel-in-progress

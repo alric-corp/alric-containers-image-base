@@ -345,24 +345,28 @@ def workflow_created_at(fetch, repository, workflow_path):
     return None
 
 
-def collect(fetch, repository, policy, now, workflow_path='.github/workflows/workflow.yml',
-            max_queries=40):
+def collect(fetch, repository, policy, now, max_queries=40):
     window_days = policy['thresholds']['window_days']
     start = now - timedelta(days=window_days)
-    workflow = yaml.safe_load((ROOT / workflow_path).read_text())
-    crons = [entry['cron'] for entry in (workflow.get(True) or workflow.get('on'))['schedule']]
     schedules = declared_schedules(policy)
-    missing_declaration = sorted(set(crons) ^ set(schedules))
-    if missing_declaration:
-        raise ValueError('política e workflow discordam sobre os crons: '
-                         f'{missing_declaration}')
+    problems = schedule_declaration(policy)
+    if problems:
+        raise ValueError('política e workflows discordam sobre os crons: ' + '; '.join(problems))
+    workflow_paths = sorted({options['workflow'] for options in schedules.values()})
+    crons = sorted(schedules)
     # Catálogo como fonte única: todo framework versionado deveria estar
     # sendo publicado e promovido. Uma lista à parte na política divergiria
     # do catálogo em silêncio.
     frameworks = sorted(path.stem for path in (ROOT / 'frameworks').glob('*.yaml'))
 
-    created = workflow_created_at(fetch, repository, workflow_path)
-    effective_start = max(start, created) if created else start
+    # O build diário e a promoção horária vivem em arquivos de workflow
+    # diferentes desde a separação de schedules; a janela efetiva usa o mais
+    # antigo dos dois, para não contar uma ocorrência anterior à existência
+    # de qualquer um deles como ausente.
+    created = [instant for instant in
+              (workflow_created_at(fetch, repository, path) for path in workflow_paths)
+              if instant is not None]
+    effective_start = max(start, min(created)) if created else start
     end = now
 
     runs = []
@@ -374,7 +378,7 @@ def collect(fetch, repository, policy, now, workflow_path='.github/workflows/wor
             break
     window_runs = [run for run in runs
                    if moment(run['created_at']) >= effective_start
-                   and run.get('path') == workflow_path]
+                   and run.get('path') in workflow_paths]
 
     cache = {}
 
@@ -389,8 +393,8 @@ def collect(fetch, repository, policy, now, workflow_path='.github/workflows/wor
         'generated_at': now.isoformat(),
         'window': {'requested_start': start.isoformat(), 'start': effective_start.isoformat(),
                    'end': end.isoformat(), 'days': window_days,
-                   'workflow_created_at': created.isoformat() if created else None},
-        'workflow': workflow_path,
+                   'workflow_created_at': min(created).isoformat() if created else None},
+        'workflow': ', '.join(workflow_paths),
         'runs_analysed': len(window_runs),
         'schedules': [dict(schedule_health(cron, attributed[cron], effective_start, end, now),
                            purpose=schedules[cron].get('purpose'))
@@ -509,20 +513,39 @@ def workflow_files():
     return resolved_workflows(ROOT)
 
 
-def schedule_declaration(policy, workflow_path='.github/workflows/workflow.yml'):
-    """A política tem de declarar exatamente os crons que o workflow agenda."""
-    workflow = yaml.safe_load((ROOT / workflow_path).read_text())
-    crons = {entry['cron'] for entry in (workflow.get(True) or workflow.get('on'))['schedule']}
-    declared = set(declared_schedules(policy))
-    problems = [f'cron `{cron}` agendado em {workflow_path} sem declaração na política '
-                '(job de atribuição e limite de lacuna)' for cron in sorted(crons - declared)]
-    problems += [f'política declara o cron `{cron}`, que {workflow_path} não agenda mais'
-                 for cron in sorted(declared - crons)]
-    for cron in sorted(crons & declared):
-        options = declared_schedules(policy)[cron]
-        missing = [key for key in ('job', 'purpose', 'gap_alert_hours') if key not in options]
+def scheduled_crons(root=ROOT):
+    """Todo cron agendado nativamente por algum `.github/workflows/*.yml`, mapeado
+    para o(s) arquivo(s) que o declaram."""
+    found = {}
+    for path in sorted((root / '.github/workflows').glob('*.yml')):
+        workflow = yaml.safe_load(path.read_text()) or {}
+        triggers = workflow.get(True) or workflow.get('on') or {}
+        for entry in triggers.get('schedule') or []:
+            found.setdefault(entry['cron'], []).append(str(path.relative_to(root)))
+    return found
+
+
+def schedule_declaration(policy):
+    """A política tem de declarar exatamente os crons agendados nos workflows do
+    repositório, cada um apontando para o arquivo que de fato o agenda."""
+    declared = declared_schedules(policy)
+    actual = scheduled_crons()
+    problems = [f'cron `{cron}` agendado em mais de um workflow: {", ".join(files)}'
+                for cron, files in sorted(actual.items()) if len(files) > 1]
+    problems += [f'cron `{cron}` agendado em {", ".join(actual[cron])} sem declaração na '
+                 'política (job de atribuição e limite de lacuna)'
+                 for cron in sorted(set(actual) - set(declared))]
+    problems += [f'política declara o cron `{cron}`, que nenhum workflow agenda mais'
+                 for cron in sorted(set(declared) - set(actual))]
+    for cron in sorted(set(actual) & set(declared)):
+        options = declared[cron]
+        missing = [key for key in ('job', 'workflow', 'purpose', 'gap_alert_hours')
+                   if key not in options]
         if missing:
             problems.append(f'cron `{cron}` sem {", ".join(missing)} na política')
+        elif options['workflow'] not in actual[cron]:
+            problems.append(f'cron `{cron}` declarado para {options["workflow"]} na política, '
+                            f'mas agendado em {", ".join(actual[cron])}')
     return problems
 
 

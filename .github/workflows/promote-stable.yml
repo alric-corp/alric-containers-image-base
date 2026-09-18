@@ -29,6 +29,8 @@ on:
         description: "Horas mínimas que um build imutável precisa esperar antes de poder virar stable."
         type: number
         default: 6
+  schedule:
+    - cron: "17 * * * *"  # promoção horária; soak mínimo contado desde o push
   # Dispatch manual para testar o gate de promoção sem esperar as 6h reais de
   # soak (ex.: soak-hours=0 contra um build que acabou de ser publicado).
   workflow_dispatch:
@@ -49,8 +51,31 @@ permissions:
   attestations: read
 
 jobs:
+  # workflow_call/workflow_dispatch already carry frameworks/soak-hours as
+  # explicit inputs; a native `schedule` trigger has no inputs at all (GitHub
+  # Actions does not apply declared input defaults outside workflow_call and
+  # workflow_dispatch). This job resolves the same fail-safe defaults the
+  # former workflow.yml caller used to pass, in exactly one place, so no
+  # other job or step duplicates the literal fallback values.
+  resolve-defaults:
+    name: Resolve scheduled-run defaults
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      frameworks: ${{ steps.defaults.outputs.frameworks }}
+      soak-hours: ${{ steps.defaults.outputs.soak-hours }}
+    steps:
+      - id: defaults
+        env:
+          FRAMEWORKS: ${{ inputs.frameworks }}
+          SOAK_HOURS: ${{ inputs.soak-hours }}
+        run: |
+          echo "frameworks=${FRAMEWORKS:-[\"go1-26\",\"go1-26-dev\"]}" >> "$GITHUB_OUTPUT"
+          echo "soak-hours=${SOAK_HOURS:-6}" >> "$GITHUB_OUTPUT"
+
   promote:
     name: Promote ${{ matrix.framework }}
+    needs: [resolve-defaults]
     # RFC-013/ADR-0005: stable restaurado como referência oficial de consumo.
     # O kill switch abaixo continua existindo por design -- não é um relaxamento
     # temporário, é o controle operacional permanente que permite desligar a
@@ -80,7 +105,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        framework: ${{ fromJSON(inputs.frameworks) }}
+        framework: ${{ fromJSON(needs.resolve-defaults.outputs.frameworks) }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -89,13 +114,13 @@ jobs:
 
       - name: Validate workflow inputs before privileged operations
         env:
-          FRAMEWORKS: ${{ inputs.frameworks }}
-          SOAK_HOURS: ${{ inputs.soak-hours }}
+          FRAMEWORKS: ${{ needs.resolve-defaults.outputs.frameworks }}
+          SOAK_HOURS: ${{ needs.resolve-defaults.outputs.soak-hours }}
         run: python3 -B -m scripts.pipeline.catalog.validate_inputs
 
-      # inputs.aws-region/aws-role-arn só existem no workflow_call (o path de
-      # produção, chamado por workflow.yml); no workflow_dispatch direto
-      # (usado pra testar o gate manualmente) caem para as vars do repo.
+      # inputs.aws-region/aws-role-arn só existem no workflow_call; no
+      # schedule direto (produção) e no workflow_dispatch direto (usado pra
+      # testar o gate manualmente) caem para as vars do repo.
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6
         with:
@@ -118,7 +143,7 @@ jobs:
         env:
           FRAMEWORK: ${{ matrix.framework }}
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          SOAK_HOURS: ${{ inputs.soak-hours }}
+          SOAK_HOURS: ${{ needs.resolve-defaults.outputs.soak-hours }}
         run: |
           python3 -B -m scripts.pipeline.release.find_promotion_candidate \
             images.json "$SOAK_HOURS" "$REGISTRY" "image-base-${FRAMEWORK}" \
@@ -263,7 +288,7 @@ jobs:
   # que verificar aqui -- não é falha.
   verify-pair:
     name: Verify runtime/dev promotion pair binding
-    needs: promote
+    needs: [promote, resolve-defaults]
     if: ${{ !cancelled() && needs.promote.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -285,7 +310,7 @@ jobs:
 
       - name: Verify runtime/dev pair binding
         env:
-          FRAMEWORKS: ${{ inputs.frameworks }}
+          FRAMEWORKS: ${{ needs.resolve-defaults.outputs.frameworks }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           python3 -B -m scripts.pipeline.release.verify_promotion_pairs \
@@ -304,7 +329,7 @@ jobs:
   # M11/M04: mesma tabela do build, agora com a coluna de promoção preenchida.
   summary:
     name: Promotion summary
-    needs: promote
+    needs: [promote, resolve-defaults]
     # Sem legs de promoção não há o que resumir; com qualquer resultado (mesmo
     # falha parcial) a tabela é justamente o que interessa.
     if: ${{ !cancelled() && needs.promote.result != 'skipped' }}
@@ -338,7 +363,7 @@ jobs:
 
       - name: Publish per-framework promotion table
         env:
-          FRAMEWORKS: ${{ inputs.frameworks }}
+          FRAMEWORKS: ${{ needs.resolve-defaults.outputs.frameworks }}
           REPOSITORY: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
         run: |

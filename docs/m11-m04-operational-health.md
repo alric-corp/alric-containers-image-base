@@ -77,11 +77,16 @@ não execução ou expiração; nenhuma delas é PASS.
 - **intervalo entre criação e início do run** (`created_at` → `run_started_at`),
   exibido como fila; não isola toda espera por runner nem dependências de jobs.
 
-O coletor considera somente runs cujo path é `workflow.yml`. Publicação e
-promoção usam eventos push/schedule/dispatch da main; dispatch direto de
-`promote-stable.yml` e recovery não entram nessa série. Ordena runs por
-`created_at` decrescente e retém o primeiro job qualificante encontrado;
-não ordena globalmente todas as conclusões de jobs entre attempts/runs.
+O coletor considera runs cujo path é um dos arquivos declarados em
+`policies/operations/health.json` → `schedules` (hoje `workflow.yml`,
+`promote-stable.yml` e `pipeline-health.yml`). Publicação e promoção usam
+eventos push/schedule/dispatch da main; desde a separação build/promoção,
+um dispatch manual de `promote-stable.yml` que promova de fato também entra
+nessa série — o que não acontecia quando só `workflow.yml` era considerado.
+`recover-stable.yml` não tem schedule próprio e continua fora dela. Ordena
+runs por `created_at` decrescente e retém o primeiro job qualificante
+encontrado; não ordena globalmente todas as conclusões de jobs entre
+attempts/runs.
 
 A janela pedida é 7 dias, encurtada se o workflow foi criado depois. Busca
 até seis páginas de 100 runs do repositório antes do filtro de path; jobs
@@ -108,12 +113,17 @@ cancelamento ou upload com warning pode deixar evidence incompleta.
 ### Como cada run agendado é atribuído ao seu cron
 
 A atribuição implementada sai de **qual grupo de jobs não ficou skipped**,
-não de adivinhar pelo horário de criação: `build-base-images`
-só roda no cron diário e `promote-stable` só no horário — o outro aparece
-`skipped`. O mapa cron → job está declarado em
-[`policies/operations/health.json`](../policies/operations/health.json) e um lint
-offline (no check obrigatório) exige que política e workflow declarem os
-mesmos crons.
+não de adivinhar pelo horário de criação. Desde a separação build/promoção,
+cada cron agendado vive no seu próprio arquivo (`0 3 * * *` em
+`workflow.yml`, `17 * * * *` em `promote-stable.yml`, `40 5 * * *` em
+`pipeline-health.yml`), então hoje nenhum arquivo tem dois crons competindo
+pelo mesmo run — o mecanismo de "job não-skipped" continua existindo porque
+generaliza para esse caso sem exigir outra reescrita se algum dia voltar a
+acontecer. O mapa cron → arquivo → job está declarado em
+[`policies/operations/health.json`](../policies/operations/health.json) e um
+lint offline (no check obrigatório) exige que a política declare exatamente
+os crons agendados em `.github/workflows/*.yml`, cada um apontando para o
+arquivo que de fato o agenda.
 
 Sem grupo único, o run fica `unattributed_scheduled_runs`; não se inventa
 um cron. Para cobertura/atraso, o código associa cada criação ao slot nominal
