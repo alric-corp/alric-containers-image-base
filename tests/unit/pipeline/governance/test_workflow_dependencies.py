@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import yaml
 
+from tests.helpers.subprocess_env import with_python3_shim
 from scripts.pipeline.governance import workflow_dependencies as dependency
 
 ROOT = dependency.ROOT
@@ -108,7 +109,7 @@ class DependencyTests(unittest.TestCase):
             env.update(extra_env)
         return subprocess.run(
             ['python3', '-B', '-m', 'scripts.pipeline.governance.workflow_dependencies',
-             mode, '--root', str(self.root)], cwd=ROOT, env=env,
+             mode, '--root', str(self.root)], cwd=ROOT, env=with_python3_shim(env),
             capture_output=True, text=True)
 
     def rejected(self, mode='lint'):

@@ -10,6 +10,8 @@ import subprocess
 import tempfile
 import unittest
 
+from tests.helpers.subprocess_env import bash_command
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / 'scripts/verify-image.sh'
 GOOD_DIGEST = 'sha256:' + 'a' * 64
@@ -72,8 +74,8 @@ class VerifyImageGuardRailTests(unittest.TestCase):
     real PATH, so a bug that reaches a real network call fails loudly."""
 
     def _run(self, *args):
-        return subprocess.run(['bash', str(SCRIPT), *args],
-                               capture_output=True, text=True)
+        return subprocess.run(bash_command(str(SCRIPT), *args),
+                               capture_output=True, text=True, encoding='utf-8')
 
     def test_missing_account_rejected(self):
         result = self._run('go1-26', GOOD_DIGEST)
@@ -113,10 +115,10 @@ class VerifyImageStubbedRunTests(unittest.TestCase):
 
     def _run(self, *args, env_overrides=None):
         env = dict(os.environ)
-        env['PATH'] = f"{self.stub_bin}:{env['PATH']}"
+        env['PATH'] = str(self.stub_bin) + os.pathsep + env['PATH']
         env.update(env_overrides or {})
-        return subprocess.run(['bash', str(SCRIPT), *args],
-                               capture_output=True, text=True, env=env)
+        return subprocess.run(bash_command(str(SCRIPT), *args),
+                               capture_output=True, text=True, encoding='utf-8', env=env)
 
     def test_digest_input_skips_tag_resolution_and_passes(self):
         result = self._run('go1-26', GOOD_DIGEST, '--account', GOOD_ACCOUNT)

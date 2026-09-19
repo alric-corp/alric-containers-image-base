@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import yaml
 
+from tests.helpers.subprocess_env import bash_command, with_python3_shim, windows_native_stub
 from scripts.pipeline.artifacts.oci_artifact import INDEX, MANIFEST
 from scripts.pipeline.release.verify_publication import verify_publication
 from scripts.pipeline.release.verify_stable import main
@@ -48,9 +49,10 @@ def registry_response(**overrides):
 
 def record_outcome(directory, promoted, skipped='false'):
     recorder = next(step for step in promotion_steps() if step['name'] == 'Record promotion outcome')
-    result = subprocess.run(['bash', '-c', recorder['run']], cwd=directory,
-                            env={**os.environ, 'PROMOTED': promoted, 'SKIPPED': skipped,
-                                 'REASON': 'candidato elegível'}, capture_output=True, text=True)
+    env = with_python3_shim({**os.environ, 'PROMOTED': promoted, 'SKIPPED': skipped,
+                             'REASON': 'candidato elegível'})
+    result = subprocess.run(bash_command('-c', recorder['run']), cwd=directory,
+                            env=env, capture_output=True, text=True)
     if result.returncode:
         raise AssertionError(result.stderr)
     return json.loads((Path(directory) / 'reports/promotion-evidence.json').read_text())
@@ -120,11 +122,13 @@ class StableReadBackTests(unittest.TestCase):
             aws = Path(directory) / 'aws'
             aws.write_text('#!/bin/sh\nprintf "%s\\n" "$TEST_ECR_RESPONSE"\n')
             aws.chmod(0o755)
+            native_env = windows_native_stub(directory, 'aws', stdout_env='TEST_ECR_RESPONSE')
             result = subprocess.run(
                 [sys.executable, '-B', '-m', 'scripts.pipeline.release.verify_stable',
                  IMAGE, CANDIDATE, '--evidence', str(path)], cwd=ROOT,
                 env={**os.environ, 'PATH': directory + os.pathsep + os.environ['PATH'],
-                     'TEST_ECR_RESPONSE': json.dumps(registry_response(imageDigest=OTHER))},
+                     'TEST_ECR_RESPONSE': json.dumps(registry_response(imageDigest=OTHER)),
+                     **native_env},
                 capture_output=True, text=True)
             self.assertEqual(result.returncode, 1)
             evidence = record_outcome(directory, 'false')
@@ -257,7 +261,7 @@ class RecoveryReadBackRegressionTests(unittest.TestCase):
                 aws = Path(directory) / 'aws'
                 aws.write_text('#!/bin/sh\nprintf "%s\\n" "$TEST_OBSERVED"\nexit "$TEST_AWS_EXIT"\n')
                 aws.chmod(0o755)
-                result = subprocess.run(['bash', '-c', step['run']], capture_output=True, text=True,
+                result = subprocess.run(bash_command('-c', step['run']), capture_output=True, text=True,
                                         env={**os.environ, 'PATH': directory + os.pathsep + os.environ['PATH'],
                                              'FRAMEWORK': 'go1-26', 'DIGEST': CANDIDATE,
                                              'TEST_OBSERVED': observed, 'TEST_AWS_EXIT': str(code)})

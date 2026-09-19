@@ -9,6 +9,8 @@ import sys
 import tempfile
 import unittest
 
+from tests.helpers.subprocess_env import bash_command
+
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / 'scripts/certificates/certificados.sh'
 FILES = ('ca_bundle.crt', 'cacorp.cer', 'cloud-s0653.cer',
@@ -89,8 +91,8 @@ sys.exit(subprocess.call([os.environ['CERT_TEST_REAL_CP'], *sys.argv[1:]]))
                             b'\n# Second certificate\n' +
                             (cls.source / 'ca_bundle.crt').read_bytes())
         cls.baseline = cls.root / 'baseline.sha256'
-        result = subprocess.run(['bash', str(SCRIPT), '--pin', '--lockfile',
-                                 str(cls.baseline)], env=cls.env, capture_output=True, text=True)
+        result = subprocess.run(bash_command(str(SCRIPT), '--pin', '--lockfile',
+                                 str(cls.baseline)), env=cls.env, capture_output=True, text=True)
         if result.returncode:
             raise RuntimeError(result.stderr)
 
@@ -108,8 +110,8 @@ sys.exit(subprocess.call([os.environ['CERT_TEST_REAL_CP'], *sys.argv[1:]]))
         self.env = {**type(self).env, 'CERT_TEST_FIXTURES': str(self.fixtures)}
 
     def run_script(self, *, pin=False, relative=False):
-        args = ['bash', str(SCRIPT), '--pin' if pin else str(self.output),
-                '--lockfile', self.lock.name if relative else str(self.lock)]
+        args = bash_command(str(SCRIPT), '--pin' if pin else str(self.output),
+                             '--lockfile', self.lock.name if relative else str(self.lock))
         return subprocess.run(args, cwd=self.case, env=self.env,
                               capture_output=True, text=True, timeout=30)
 

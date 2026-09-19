@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import Mock, patch
 from urllib.parse import unquote, urlsplit
 
+from tests.helpers.subprocess_env import bash_command
 from scripts.pipeline.governance.doc_links import link_targets
 from scripts.pipeline.governance.workflow_dependencies import approved_repository, dependencies
 from scripts.pipeline.release.publish_sboms import publish
@@ -64,7 +65,7 @@ class ConsumerDocumentationTests(unittest.TestCase):
                 examples = "\n".join(re.findall(
                     r"(?ms)^```bash\n(.*?)^```$", document.read_text(encoding="utf-8")))
                 self.assertTrue(examples)
-                result = subprocess.run(["bash", "-n"], input=examples,
+                result = subprocess.run(bash_command("-n"), input=examples,
                                         capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
