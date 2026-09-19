@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import yaml
 
-from tests.helpers.subprocess_env import with_python3_shim
+from tests.helpers.subprocess_env import python3_test_environment
 from scripts.pipeline.governance import workflow_dependencies as dependency
 
 ROOT = dependency.ROOT
@@ -107,10 +107,11 @@ class DependencyTests(unittest.TestCase):
         env.pop('GITHUB_OUTPUT', None)
         if extra_env:
             env.update(extra_env)
-        return subprocess.run(
-            ['python3', '-B', '-m', 'scripts.pipeline.governance.workflow_dependencies',
-             mode, '--root', str(self.root)], cwd=ROOT, env=with_python3_shim(env),
-            capture_output=True, text=True)
+        with python3_test_environment(env) as shimmed_env:
+            return subprocess.run(
+                ['python3', '-B', '-m', 'scripts.pipeline.governance.workflow_dependencies',
+                 mode, '--root', str(self.root)], cwd=ROOT, env=shimmed_env,
+                capture_output=True, text=True)
 
     def rejected(self, mode='lint'):
         self.output.write_text('existing=value\n')

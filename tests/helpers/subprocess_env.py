@@ -13,8 +13,9 @@ Some of the same scripts also call ``python3``, exactly as the GitHub
 Actions runner does. A stock python.org install on Windows only provides
 ``python.exe`` -- the ``python3`` name on PATH is normally the
 WindowsApps execution-alias stub, which fails unless configured.
-``with_python3_shim`` makes ``python3`` resolve to the real interpreter
-for such a script's subprocess, without touching the script itself.
+``python3_test_environment`` makes ``python3`` resolve to the real
+interpreter for such a script's subprocess, without touching the script
+itself, for exactly the duration of a ``with`` block.
 
 A third case needs more than PATH resolution: a test that runs a product
 script directly (``[sys.executable, '-m', ...]``, no bash involved)
@@ -29,6 +30,7 @@ this interpreter plus a ``sitecustomize`` hook) for that one case.
 None of this changes behaviour on Linux/macOS: ``bash`` and ``python3``
 already resolve normally there, and ``windows_native_stub`` is a no-op.
 """
+import contextlib
 import functools
 import os
 import shutil
@@ -101,56 +103,87 @@ def bash_command(*args):
     return [bash_executable(), *args]
 
 
-@functools.lru_cache(maxsize=1)
-def _python3_shim_dir():
-    """Directory holding a working 'python3' for both invocation styles
-    seen in this suite: from bash (a plain POSIX shell script, run via
-    its shebang like any other script on PATH) and from a plain native
-    subprocess with no shell involved (a copy of this interpreter named
-    'python3.exe' -- a real launcher is the only thing Windows'
+def _write_python3_shim(directory):
+    """Write a working 'python3' into `directory`, for both invocation
+    styles seen in this suite: from bash (a plain POSIX shell script,
+    run via its shebang like any other script on PATH) and from a plain
+    native subprocess with no shell involved (a copy of this interpreter
+    named 'python3.exe' -- a real launcher is the only thing Windows'
     CreateProcess can run by a bare name; unlike the 'aws' case in
     windows_native_stub, no argv-intercepting hook is needed here, since
     every caller invokes it as '-B -m some.module ...', which is exactly
     the CLI shape this interpreter already knows how to run itself).
-    Both forward argv, stdio and exit status untouched.
+    Both forward argv, stdio and exit status untouched. Always written
+    fresh against the *current* sys.executable -- see
+    python3_test_environment for why this must never be a stale, reused
+    copy from an earlier process.
     """
-    directory = Path(tempfile.gettempdir()) / 'alric-test-harness-shims'
-    directory.mkdir(parents=True, exist_ok=True)
+    directory = Path(directory)
     shim = directory / 'python3'
-    content = '#!/bin/sh\nexec "%s" "$@"\n' % sys.executable.replace('\\', '/')
-    if not shim.is_file() or shim.read_text() != content:
-        shim.write_text(content)
+    shim.write_text('#!/bin/sh\nexec "%s" "$@"\n' % sys.executable.replace('\\', '/'))
     shim.chmod(shim.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     if os.name == 'nt':
-        native = directory / 'python3.exe'
-        if not native.is_file():
-            shutil.copy2(sys.executable, native)
-    return str(directory)
+        shutil.copy2(sys.executable, directory / 'python3.exe')
 
 
-def with_python3_shim(env):
-    """Copy of env with a working 'python3' available on PATH.
+# Reentrancy bookkeeping for python3_test_environment: nested `with` blocks
+# share the outermost one's shim directory and PATH entry instead of each
+# creating (and PATH-prepending) their own. Not thread-safe -- this suite
+# runs unittest sequentially in one process/thread, never concurrently.
+_shim_state = {'depth': 0, 'tmpdir': None, 'saved_path': None}
 
-    No-op on Linux/macOS, where 'python3' already resolves normally --
-    the workflow scripts under test keep calling 'python3' exactly as
-    they do on the GitHub Actions runner; only its resolution changes.
 
-    Also prepends the shim to this process' own PATH (os.environ), not
-    just the returned copy: a plain ``subprocess.run(['python3', ...],
-    env=...)`` with no shell involved resolves the bare name via
-    Windows' CreateProcess, which -- unlike a shell -- searches using
-    the *calling* process' real environment, not the `env=` argument
-    being handed to the child. Without this, callers using ``env=``
-    only would still resolve to the broken WindowsApps alias.
+@contextlib.contextmanager
+def python3_test_environment(env):
+    """Context manager yielding a copy of `env` with a working 'python3'
+    on PATH, for exactly the duration of the `with` block.
+
+    No-op on Linux/macOS -- yields `env` unchanged and touches nothing --
+    where 'python3' already resolves normally; the workflow scripts under
+    test keep calling 'python3' exactly as they do on the GitHub Actions
+    runner, only its resolution changes, and only on Windows.
+
+    On Windows, the shim lives in a fresh TemporaryDirectory scoped to
+    this context -- never a cached, reused directory -- so there is no
+    risk of running a copy of an interpreter that no longer matches
+    sys.executable (e.g. after a Python upgrade between test runs). The
+    directory is removed, and this process' own os.environ['PATH'] is
+    restored to its exact prior value, in a `finally` on exit -- even if
+    the `with` block raises. PATH must be restored on the real
+    os.environ, not just the returned copy, because a plain
+    ``subprocess.run(['python3', ...], env=...)`` with no shell involved
+    resolves the bare name via Windows' CreateProcess, which -- unlike a
+    shell -- searches using the *calling* process' real environment, not
+    the `env=` argument being handed to the child.
+
+    Reentrant: a nested ``with python3_test_environment(...)`` inside
+    another reuses the same shim directory and does not add a second
+    PATH entry; only the outermost exit restores PATH and removes the
+    directory.
     """
     if os.name != 'nt':
-        return env
-    shim_dir = _python3_shim_dir()
-    if shim_dir not in os.environ.get('PATH', ''):
-        os.environ['PATH'] = shim_dir + os.pathsep + os.environ.get('PATH', '')
-    env = dict(env)
-    env['PATH'] = shim_dir + os.pathsep + env.get('PATH', '')
-    return env
+        yield env
+        return
+    is_outermost = _shim_state['depth'] == 0
+    if is_outermost:
+        tmpdir = tempfile.TemporaryDirectory(prefix='alric-python3-shim-')
+        _write_python3_shim(tmpdir.name)
+        _shim_state['tmpdir'] = tmpdir
+        _shim_state['saved_path'] = os.environ.get('PATH', '')
+        os.environ['PATH'] = tmpdir.name + os.pathsep + _shim_state['saved_path']
+    _shim_state['depth'] += 1
+    try:
+        shim_dir = _shim_state['tmpdir'].name
+        shimmed = dict(env)
+        shimmed['PATH'] = shim_dir + os.pathsep + shimmed.get('PATH', '')
+        yield shimmed
+    finally:
+        _shim_state['depth'] -= 1
+        if _shim_state['depth'] == 0:
+            os.environ['PATH'] = _shim_state['saved_path']
+            _shim_state['tmpdir'].cleanup()
+            _shim_state['tmpdir'] = None
+            _shim_state['saved_path'] = None
 
 
 def windows_native_stub(bin_dir, name, *, stdout_env):
@@ -171,6 +204,14 @@ def windows_native_stub(bin_dir, name, *, stdout_env):
 
     Returns environment overrides the caller must merge into the
     subprocess env for the stub to work (empty dict off Windows).
+
+    Implicit dependency: the copied interpreter still needs its native
+    runtime DLL (e.g. python313.dll) to start, which Windows locates via
+    the normal DLL search order -- including PATH. PYTHONHOME only tells
+    it where the *standard library* lives, not the DLL. This works today
+    because callers build their env from ``{**os.environ, 'PATH': ...}``,
+    which keeps the original interpreter's directory on PATH; an env
+    that dropped it would fail to launch the copy at all.
     """
     if os.name != 'nt':
         return {}
