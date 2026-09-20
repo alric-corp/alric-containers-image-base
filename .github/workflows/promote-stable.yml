@@ -122,7 +122,7 @@ jobs:
       # schedule direto (produção) e no workflow_dispatch direto (usado pra
       # testar o gate manualmente) caem para as vars do repo.
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: ${{ inputs.aws-role-arn || vars.AWS_ROLE_ARN }}
           aws-region: ${{ inputs.aws-region || vars.AWS_REGION }}
