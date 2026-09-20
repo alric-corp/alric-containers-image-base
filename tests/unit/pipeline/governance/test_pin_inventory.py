@@ -8,6 +8,8 @@ from unittest.mock import Mock, patch
 
 from scripts.pipeline.governance import pin_inventory as inventory
 
+ROOT = inventory.ROOT
+
 RENOVATE = {'customManagers': [{
     'customType': 'regex',
     'managerFilePatterns': ['/^\\.github/workflows/build\\.yml$/', '/^Makefile$/'],
@@ -99,8 +101,44 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual(release['managers'], ['dependabot'])
         self.assertTrue(any('SHA completo' in problem for problem in inventory.lint([release])))
 
+    def test_terraform_manager_is_scoped_to_infra_workflow_version_pins(self):
+        config = json.loads((ROOT / 'renovate.json').read_text())
+        paths = []
+        for name in ('infra-pr.yml', 'infra-apply.yml', 'unrelated.yml'):
+            path = self.root / '.github/workflows' / name
+            path.write_text("env:\n  TF_VERSION: '1.15.8'\n  OTHER_VERSION: '2.0.0'\n")
+            paths.append(path)
+        matches = inventory.renovate_matches(config, paths)
+        self.assertEqual(set(matches), {
+            ('.github/workflows/infra-pr.yml', '1.15.8'),
+            ('.github/workflows/infra-apply.yml', '1.15.8'),
+        })
+        for match in matches.values():
+            self.assertEqual(match['name'], 'hashicorp/terraform')
+            self.assertEqual(match['datasource'], 'github-releases')
+            self.assertEqual(match['extract_version'], '^v(?<version>.*)$')
+
 
 class RepositoryTests(unittest.TestCase):
+    def test_both_infra_terraform_pins_have_release_aware_renovate_coverage(self):
+        paths = inventory.scanned_files()
+        config = json.loads((inventory.ROOT / 'renovate.json').read_text())
+        entries = inventory.coverage(
+            inventory.pins(paths), inventory.renovate_matches(config, paths), set())
+        terraform = [entry for entry in entries if entry['name'] == 'TF_VERSION']
+        self.assertEqual({entry['file'] for entry in terraform}, {
+            '.github/workflows/infra-pr.yml', '.github/workflows/infra-apply.yml',
+        })
+        self.assertEqual(len(terraform), 2)
+        for entry in terraform:
+            self.assertEqual(entry['managers'], ['renovate'])
+            self.assertEqual(entry['source'], 'hashicorp/terraform')
+            self.assertEqual(entry['source_tag'], 'v' + entry['current'])
+        managers = [manager for manager in config['customManagers']
+                    if manager.get('depNameTemplate') == 'hashicorp/terraform']
+        self.assertEqual(len(managers), 1)
+        self.assertEqual(managers[0]['versioningTemplate'], 'hashicorp')
+
     def test_this_repository_has_no_uncovered_or_divergent_pin(self):
         paths = inventory.scanned_files()
         entries = inventory.coverage(
@@ -116,6 +154,42 @@ class RepositoryTests(unittest.TestCase):
 
 
 class AvailabilityTests(unittest.TestCase):
+    def test_declared_prefix_extraction_checks_the_exact_release_tag_at_its_origin(self):
+        entry = {'kind': 'tool', 'name': 'TF_VERSION', 'current': '1.15.8',
+                 'file': '.github/workflows/infra-pr.yml', 'pinned': True}
+        entries = inventory.coverage([entry], {(entry['file'], entry['current']): {
+            'name': 'hashicorp/terraform', 'datasource': 'github-releases',
+            'extract_version': '^v(?<version>.*)$',
+        }}, set())
+        for tag in ('v1.15.8', '1.15.8', 'v1.15.7', None):
+            with self.subTest(tag=tag):
+                run = Mock(return_value=subprocess.CompletedProcess(
+                    [], 0 if tag else 1, json.dumps({'tag_name': tag}), ''))
+                result = inventory.availability(entries, run)[0]
+                run.assert_called_once_with(
+                    ['gh', 'api', 'repos/hashicorp/terraform/releases/tags/v1.15.8'],
+                    check=False, capture_output=True, text=True, timeout=60)
+                self.assertEqual(result['available'], tag == 'v1.15.8')
+                self.assertEqual(result['origin'], 'https://github.com/hashicorp/terraform')
+                self.assertEqual(result['current'], '1.15.8')
+
+    def test_other_release_managers_keep_literal_current_tag_lookup(self):
+        for extraction in (None, '^release-(?<version>.*)$'):
+            entry = {'kind': 'tool', 'name': 'TRIVY_VERSION', 'current': 'v0.72.0',
+                     'file': 'workflow.yml', 'pinned': True}
+            entries = inventory.coverage([entry], {(entry['file'], entry['current']): {
+                'name': 'aquasecurity/trivy', 'datasource': 'github-releases',
+                'extract_version': extraction,
+            }}, set())
+            with self.subTest(extraction=extraction):
+                self.assertNotIn('source_tag', entries[0])
+                run = Mock(return_value=subprocess.CompletedProcess(
+                    [], 0, json.dumps({'tag_name': 'v0.72.0'}), ''))
+                result = inventory.availability(entries, run)[0]
+                self.assertTrue(result['available'])
+                self.assertEqual(run.call_args.args[0], [
+                    'gh', 'api', 'repos/aquasecurity/trivy/releases/tags/v0.72.0'])
+
     def test_reusable_workflow_commit_is_checked_at_its_origin(self):
         def run(argv, **kwargs):
             self.assertEqual(argv[2], 'repos/alric-corp/alric-containers-reusable-workflows/commits/' + 'a' * 40)
