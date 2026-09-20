@@ -1,1 +1,11 @@
 .github/workflows/*.lock.yml linguist-generated=true merge=ours
+
+# Keep shell syntax and recipe continuations intact with core.autocrlf=true.
+Makefile text eol=lf
+*.sh text eol=lf
+
+# These verified text files are hashed or compared byte for byte. Certificate
+# extensions are intentionally not covered: they may contain binary formats.
+melange/keys/wolfi-signing.rsa.pub text eol=lf
+scripts/certificates/certificados.sha256 text eol=lf
+scripts/certificates/certificados.metadata.txt text eol=lf
