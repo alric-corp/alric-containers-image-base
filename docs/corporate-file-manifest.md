@@ -1,29 +1,33 @@
 # Corporate file manifest
 
-Exact list of what to copy **by hand** into the corporate monorepo from the
-three sandbox repositories, after the production minimization completed on
-17–18/09/2026. No `git clone` is used at the destination: files are copied
-individually or by directory, from each repository's working tree as it
-exists after that cleanup.
+Allowlist of what to copy **by hand** from the two active LAB repositories
+into their two corporate counterparts. The greenfield rehearsal colocates
+product and Infra in image-base and keeps shared execution in its own
+repository. No `git clone` is used at the destination: copy the listed files
+or directories from the reviewed working tree.
 
-This manifest reflects the FINAL tree, not the full sandbox history. Every
+This manifest reflects the current product topology. Every
 path under **Copy** exists in the corresponding repository today. Every path
 under **Do not copy** either does not belong in the corporate destination or
 must never leave the sandbox. If a path is not listed under Copy, treat it as
 excluded by default — this manifest is the allowlist, not a starting point to
 prune from.
 
-Source repositories (sandbox):
+Active sources and corporate destinations:
 
-| Repository | Role | Files after cleanup |
+| LAB source | Corporate destination | Role |
 | --- | --- | --- |
-| `alric-corp/alric-containers-image-base` | Image factory (product) | 189 |
-| `alric-corp/alric-containers-registry` | Infrastructure (Terraform/IAM/ECR) | 31 |
-| `alric-corp/alric-containers-reusable-workflows` | Shared execution (validation/runtime/Trivy) | 16 |
+| `alric-corp/alric-containers-image-base` | `itau-xj7-container-image-base` | Product + its Infra |
+| `alric-corp/alric-containers-reusable-workflows` | `itau-xj7-reusable-containers-products` | Shared execution (validation/runtime/Trivy) |
+
+The factory stays at the image-base repository root: keep `frameworks/`,
+`distroless/`, `melange/`, `scripts/`, and the root build files in place.
+Place Infra under `infra/`; do not introduce a `factory/` relocation.
+The superseded registry repository is not an active source for this copy.
 
 ## Copy
 
-### Image factory (`alric-containers-image-base`)
+### Product + Infra (`alric-containers-image-base`)
 
 Root:
 
@@ -31,10 +35,11 @@ Root:
 - `Makefile`, `requirements-dev.txt`, `renovate.json`
 - `.editorconfig`, `.gitattributes`, `.gitignore`
 
-`.github/` (19 files):
+`.github/`:
 
 - `CODEOWNERS`, `dependabot.yml`, `pull_request_template.md`
-- `workflows/` — all 9: `build-base-images.yml`, `ci.yml`, `image-trust.yml`,
+- `workflows/` — `build-base-images.yml`, `ci.yml`, `image-trust.yml`,
+  `infra-pr.yml`, `infra-apply.yml`,
   `pipeline-health.yml`, `promote-stable.yml`, `recover-stable.yml`,
   `test-runtime-images.yml`, `validate-base-images.yml`, `workflow.yml`
 - `scripts/` — all 7: `README.md`, `oci_artifact.py`, `report_unfixed_cves.py`,
@@ -81,14 +86,15 @@ Root:
   not a trustworthy corporate pin, even though the lockfile *mechanism*
   (pin + drift detection) is exactly what corporate should keep using
 
-`scripts/pipeline/` — all 38 files (the five domains: `artifacts/`,
+`scripts/pipeline/` — the six domains: `artifacts/`,
 `catalog/`, `governance/`, `operations/`, `release/`, `runtime/`, plus
-`__init__.py` files).
+`__init__.py` files.
 
-`docs/` (13 files):
+`docs/`:
 
 - `README.md`, `repository-architecture.md`, `image-composition.md`
 - `consumer-verification-contract.md`, `corporate-production-readiness.md`
+- `corporate-file-manifest.md`
 - `iam-permission-contract.md`, `m11-m04-operational-health.md`
 - `wolfi-signing-key.md`
 - `adr/README.md`, `adr/0002-sigstore-trust-model.md`,
@@ -101,48 +107,49 @@ Root:
 `tests/`:
 
 - `__init__.py`, `README.md`
-- `unit/` — all 41 files (mirrors `scripts/pipeline/` domains, no
-  infrastructure dependency)
-- `integration/` — all 14 files (certificates, TLS, adapters, shared
-  workflow contract)
+- `unit/` — mirrors `scripts/pipeline/` domains, no
+  infrastructure dependency
+- `integration/` — certificates, TLS, adapters and product integration contracts
 - `runtime/` — all 14 files: `README.md`, `certificate_contract.py`,
   `probe.cjs`, `probe.py`, `projects/dotnet/*` (4), `projects/go/*` (3),
   `projects/java/*` (3) — the functional-contract fixtures exercised against
   real candidate images; no dated evidence JSON remains in this tree
 
-### Infrastructure (`alric-containers-registry`)
+`infra/` — copy the product-owned Infra from this same repository:
 
-Root:
+- `README.md`, `.gitignore`, `backend.py`, `readback.py`
+- `ecr/` — `backend.tf`, `locals.tf`, `main.tf`, `outputs.tf`,
+  `providers.tf`, `variables.tf`, `versions.tf`, `.terraform.lock.hcl`,
+  `verify_plan.py`, `policies/ecr-lifecycle-7-days.json`,
+  `policies/ecr-repository-org-pull.json`, `tests/catalog.tftest.hcl`
+- `iam/` — `README.md`, `.gitignore`, `main.tf`, `outputs.tf`,
+  `variables.tf`, `versions.tf`, `.terraform.lock.hcl`,
+  `build-publication-policy.json`, `tests/boundaries.tftest.hcl`
+- `tests/` — `test_backend.py`, `test_ecr_catalog.py`, `test_ecr_plan.py`,
+  `test_iam.py`, `test_readback.py`, `test_workflows.py`
 
-- `README.md`, `backend.tf`, `locals.tf`, `main.tf`, `outputs.tf`,
-  `providers.tf`, `variables.tf`, `versions.tf`
-- `.terraform.lock.hcl`, `.gitignore`
+The ECR root derives its catalog from the root `frameworks/` definitions.
+Its backend is ensured by the pipeline before init and remains independent
+of the ECR Terraform state. `infra/iam` is a separate bootstrap root; build
+and Infra roles keep separate permissions and explicit OIDC subjects.
 
-`.github/workflows/` — both: `terraform-apply.yml`, `terraform-pr.yml`.
+Before corporate execution, substitute the LAB account, repository/owner
+IDs and subjects, backend identity, regions, environment, Source tags and
+organization policy with the corporate values in code, workflows, reviewed
+policy documents and their fixtures. In particular,
+`build-publication-policy.json` is a LAB policy document to adapt, not a
+corporate account grant ready to apply. Supply corporate IAM input values
+separately; do not copy `infra/iam/lab.tfvars` as deployment configuration.
+See `infra/README.md` and `infra/iam/README.md` for the bootstrap sequence.
 
-`bootstrap/iam/` — `main.tf`, `outputs.tf`, `variables.tf`, `versions.tf`,
-`README.md`, `.terraform.lock.hcl`. **Not** `terraform.tfstate` — see Do not
-copy.
-
-`iam/` — `README.md`, `policies/containers-registry-ecr-permanent.json`,
-`policies/containers-registry-terraform-backend.json`,
-`policies/containers-registry-trust.json`.
-
-`policies/` — `ecr-lifecycle-7-days.json`, `ecr-repository-org-pull.json`.
-
-`drift-remediation/` — `README.md`, `policy.json`. This is the generic,
-reusable one-off mutability-drift mechanism (attach once, use once, detach);
-the closed `dotnet8`/`dotnet8-dev` destroy episodes and their policy files
-were removed as closed history — see `drift-remediation/README.md`.
-
-`tests/` — all 5 files: `test_ecr_catalog.py`, `test_iam_policies.py`,
-`test_lifecycle_policy.py`, `test_repository_policy.py`,
-`test_terraform_workflows.py`.
+Provision all 16 catalog repositories. Publication remains a separate
+phase limited initially to `go1-26` and `go1-26-dev`; copying or applying
+Infra does not authorize publishing the full catalog.
 
 ### Shared execution (`alric-containers-reusable-workflows`)
 
-Everything in this repository's final tree (16 files) is Copy — there is no
-partial-copy case here:
+Copy the following shared-execution files into its separate corporate
+repository:
 
 - `README.md`, `renovate.json`, `.gitignore`
 - `.github/CODEOWNERS`, `.github/dependabot.yml`,
@@ -157,22 +164,26 @@ partial-copy case here:
 
 ## Do not copy
 
-- `.git/` in all three repositories — the destination is populated by manual
+- `.git/` in either source repository — the destination is populated by manual
   copy, not by cloning history.
-- `alric-containers-registry/bootstrap/iam/terraform.tfstate` —
-  **`EXCLUDE: bootstrap/iam/terraform.tfstate`**. Legitimate local LAB
-  Terraform state, already gitignored and untracked; it describes sandbox
-  AWS resources and must never reach the corporate destination.
+- `alric-containers-registry/` — no active Terraform root, workflows, IAM
+  bootstrap, state, or policies are copied from the superseded repository.
+  Its retirement evidence stays in the LAB; archiving requires separate
+  explicit approval.
+- `drift-remediation/` — the legacy mechanism does not migrate, including
+  its README and temporary-permission policy.
+- `infra/iam/lab.tfvars` and any other LAB deployment inputs or credentials.
 - `troubleshooting/` — **moved to an independent operational troubleshooting
   image**, not part of this factory's product. It has been removed from
   `alric-containers-image-base` entirely (not relocated to another folder in
   this repository); its content is staged separately for a future,
   independent `alric-containers-troubleshooting` repository with its own
   lifecycle and security posture. Do not copy it into the corporate
-  image-factory monorepo under any path.
+  corporate image-base repository under any path.
 - Any local Terraform working state or plan output: `.terraform/`,
-  `*.tfstate`, `*.tfstate.*`, `*.tfplan`, `tfplan`, `crash*.log`,
-  `*.tfbackend`, `override.tf*` — a manual copy does not respect
+  `*.tfstate`, `*.tfstate.*`, `*.tfplan`, `tfplan`, `tfplan.bin`,
+  `tfplan*.json`, `tfplan*.txt`, `plan.json`, `plan.txt`, `post-apply.*`,
+  `crash*.log`, `*.tfbackend`, `override.tf*` — a manual copy does not respect
   `.gitignore`, so these must be excluded explicitly if present on disk in
   the sandbox checkout at copy time.
 - Any local Python/tooling cache or environment: `__pycache__/`,
@@ -188,7 +199,7 @@ partial-copy case here:
   (`specs/`, `prompts/`, `playbooks/`, `docs/ai/`, `docs/fundamentals/`,
   `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`,
   `.github/agents/`, `.github/aw/`, and their dedicated tests) — removed from
-  all three repositories in this minimization as AI-assisted-development
+  the LAB repositories in the prior minimization as AI-assisted-development
   tooling and spec-driven-process artifacts, not product requirements. They
   do not exist in the final tree; nothing to exclude going forward unless
   reintroduced.
