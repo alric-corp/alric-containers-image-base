@@ -1,9 +1,14 @@
 name: Image trust
 on:
   workflow_call:
+    inputs:
+      frameworks:
+        description: "Requested framework batch as JSON."
+        type: string
+        required: true
     outputs:
       result:
-        description: "Result of the default trust gate across all runtime families."
+        description: "Result of the default trust gate for the requested batch."
         value: ${{ jobs.image-trust-gate.outputs.result }}
 permissions:
   contents: read
@@ -11,13 +16,35 @@ env:
   APKO_IMAGE: cgr.dev/chainguard/apko@sha256:37e3aa165456e6c55fcded1e11af7ae9b010af914f0b25015c9a4247ec139c67
   MELANGE_IMAGE: cgr.dev/chainguard/melange@sha256:43d6581e5f04b2f63b842782e581c4e06ff9ea23c81f0b3c8b9967034e38d90b
 jobs:
+  plan:
+    name: Plan requested certificate trust fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      fixtures: ${{ steps.plan.outputs.fixtures }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Resolve requested trust contracts before building
+        id: plan
+        env:
+          FRAMEWORKS: ${{ inputs.frameworks }}
+        run: |
+          set -euo pipefail
+          fixtures=$(python3 -B -m scripts.pipeline.runtime.trust_plan)
+          printf 'fixtures=%s\n' "$fixtures" >> "$GITHUB_OUTPUT"
+          printf 'TRUST_MATRIX=%s\n' "$fixtures"
+
   trust:
+    name: Certificate trust ${{ matrix.framework }}
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        framework: [python3-13, nodejs22, go1-26, java21, dotnet10]
+        framework: ${{ fromJSON(needs.plan.outputs.fixtures) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -41,7 +68,7 @@ jobs:
   image-trust-gate:
     outputs:
       result: ${{ steps.require.outputs.result }}
-    needs: trust
+    needs: [plan, trust]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -49,12 +76,14 @@ jobs:
       - name: Require all default trust contracts
         id: require
         env:
+          PLAN_RESULT: ${{ needs.plan.result }}
           TRUST_RESULT: ${{ needs.trust.result }}
           REVISION: ${{ github.sha }}
           ATTEMPT: ${{ github.run_attempt }}
           RUN_ID: ${{ github.run_id }}
         run: |
           set -eu
+          test "$PLAN_RESULT" = success
           test "$TRUST_RESULT" = success
           echo "result=success" >> "$GITHUB_OUTPUT"
           python3 - <<'PY'

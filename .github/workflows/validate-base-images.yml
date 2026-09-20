@@ -28,6 +28,8 @@ jobs:
   image-trust:
     needs: wolfi-trust
     uses: ./.github/workflows/image-trust.yml
+    with:
+      frameworks: ${{ inputs.frameworks }}
   validate:
     needs: wolfi-trust
     uses: alric-corp/alric-containers-reusable-workflows/.github/workflows/validate-apko-images.yml@7a9b055a462eeb8552d3404c26538b44e8ccd83f # reviewed shared workflows
