@@ -41,20 +41,18 @@
     }
   },
   "retention_days": {
-    "melange-repo": 30,
-    "validated-oci-": 3,
-    "build-scans-": 30,
     "publication-": 30,
     "promotion-scans-": 30,
     "promotion-": 30,
     "recovery-scans-": 30,
     "recovery-evidence-": 30,
-    "runtime-": 30,
     "pipeline-summary-": 30,
     "pipeline-health-": 30,
-    "$comment": "Melange, locks, SBOMs e evidências: 30d para auditoria e replay (dependências Wolfi ainda precisam estar disponíveis). OCI validado: 3d para retry sem rebuild. SBOMs assinados no ECR acompanham o digest; artifacts de CI não são backup do registry.",
-    "sbom-": 30,
-    "image-trust-": 30
+    "image-trust-": 30,
+    "infra-apply-plan-": 1,
+    "infra-apply-evidence-": 5,
+    "infra-pr-plan-": 5,
+    "$comment": "Evidências de produto: 30d para auditoria e replay. Infra mantém o plano binário por 1d e evidências/planos de PR por 5d, conforme os workflows vigentes. `melange-repo`, `build-scans-`, `sbom-` e `runtime-` (30d) e `validated-oci-` (3d, retry sem rebuild) são artifacts que o executor compartilhado sobe -- declarados e testados em alric-containers-reusable-workflows, fora do lint deste repositório."
   },
   "exceptions": {},
   "execution_scope": {

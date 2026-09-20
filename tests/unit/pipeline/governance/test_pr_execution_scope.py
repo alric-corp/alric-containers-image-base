@@ -20,7 +20,7 @@ class PRExecutionScopeTests(unittest.TestCase):
 
     def test_shared_workflow_and_pipeline_changes_use_full(self):
         self.assert_profile('FULL', '.github/workflows/build-base-images.yml')
-        self.assert_profile('FULL', '.reusable-workflows/.github/workflows/test-runtime-images.yml')
+        self.assert_profile('FULL', 'policies/governance/reusable-workflows.json')
         self.assert_profile('FULL', 'scripts/pipeline/runtime/runtime_images.py')
 
     def test_shared_composition_ca_scanner_and_trust_use_full(self):

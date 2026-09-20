@@ -25,49 +25,35 @@ sintéticos e os downloads são substituídos por fixtures; não usa AWS.
 `make lint-workflows` usa actionlint e seu ShellCheck, se disponível. O CI
 executa actionlint em uma imagem fixada por digest.
 
-## Checkout da dependência revisada
+## Dependência revisada do executor compartilhado
 
-Os checks de integração leem os workflows compartilhados do **mesmo commit**
-usado pelos chamadores, na origem aprovada em
+A origem aprovada de `alric-corp/alric-containers-reusable-workflows` fica em
 [policies/governance/reusable-workflows.json](policies/governance/reusable-workflows.json).
-Prepare um checkout separado do seu trabalho local. O comando `checkout`
-valida as referências locais antes de emitir outputs; não faz clone nem
-valida os arquivos remotos nessa fase:
-
-```sh
-set -eu
-python3 -B -m scripts.pipeline.governance.workflow_dependencies checkout
-SHARED_REPOSITORY="$(python3 -B -c 'from scripts.pipeline.governance.workflow_dependencies import approved_repository; print(approved_repository())')"
-SHARED_REF="$(python3 -B -c 'from scripts.pipeline.governance.workflow_dependencies import dependencies; print(dependencies()[0]["ref"])')"
-git clone --no-checkout "https://github.com/${SHARED_REPOSITORY}.git" .reusable-workflows
-git -C .reusable-workflows fetch origin "$SHARED_REF"
-git -C .reusable-workflows checkout --detach "$SHARED_REF"
-make check
-```
-
-Se o clone já existe, confira a URL `origin` contra a policy antes do fetch e
-execute o checkout somente em uma árvore limpa. Não descarte trabalho existente.
-Também é possível exportar `REUSABLE_WORKFLOWS_PATH` apontando para um checkout
-existente: a variável escolhe apenas a localização, sem substituir origem ou
-pin. `--root` seleciona a árvore de configuração em testes locais; não é um
-override da origem por ambiente. No lint, origem divergente, checkout ausente,
-SHA divergente ou bytes alterados nos dois YAMLs consumidos falham explicitamente.
-
-A comparação local da URL de fetch, HEAD e conteúdo não prova publicação do
-commit ou acesso privado. O resolvedor não fornece credenciais. Configurar o
-acesso autorizado e verificar a execução no destino são etapas separadas do
-[contrato de reuso](docs/repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados).
+`scripts/pipeline/governance/workflow_dependencies.py` confere, só a partir
+dos arquivos deste repositório: essa origem, o SHA completo e único
+compartilhado pelos dois chamadores (`validate-base-images.yml`,
+`test-runtime-images.yml`), ausência de refs móveis, os inputs exatos enviados
+pelos chamadores (incluindo `locked-build: true`), o alinhamento da action
+Trivy interna entre promoção/recuperação e o grupo do Dependabot. Nada aqui
+clona, abre ou lê o repositório compartilhado — `git clone` deste
+repositório sozinho já é suficiente para `make check` e `make lint-workflows`
+passarem, com Python, dependências de desenvolvimento, Git Bash no Windows,
+GNU Make e actionlint instalados. A implementação do executor compartilhado,
+seu contrato interno de inputs/outputs,
+hardening, actionlint e retenção de artifacts são verificados pelo CI do
+próprio `alric-containers-reusable-workflows`
+([contrato de reuso](docs/repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados)),
+não duplicados aqui.
 
 ## Comandos
 
 | Comando | Escopo |
 | --- | --- |
 | `make test-unit` | Regras Python, arquitetura e filtros de CI; sem infraestrutura |
-| `make test-integration` | Certificados, TLS, adaptadores e contrato compartilhado |
-| `make lint-local` | Hardening dos workflows, cobertura/consistência dos pins e lote padrão do catálogo |
-| `make lint-shared` | Origem, SHA, inputs, Trivy, retenção e cron dos executores reais |
-| `make lint-workflows` | actionlint nos YAML locais e compartilhados |
-| `make check` | Todos os testes e lints acima |
+| `make test-integration` | Certificados, TLS, adaptadores e retenção dos workflows locais |
+| `make lint-local` | Hardening, origem/SHA/inputs/tooling dos chamadores do executor compartilhado, cobertura/consistência dos pins, retenção e lote padrão do catálogo |
+| `make lint-workflows` | actionlint nos YAML deste repositório |
+| `make check` | `test` + `lint-local` + `lint-workflows` |
 | `make list` / `make build FRAMEWORK=...` | Catálogo e build local com Docker |
 
 `PYTHON` e `ACTIONLINT` podem ser sobrescritos para instalações locais.

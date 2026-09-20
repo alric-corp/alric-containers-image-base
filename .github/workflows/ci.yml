@@ -36,22 +36,6 @@ jobs:
           persist-credentials: false
       - name: Install YAML parser
         run: python3 -m pip install --quiet -r requirements-dev.txt
-      - name: Resolve reviewed reusable workflows
-        id: shared
-        run: python3 -B -m scripts.pipeline.governance.workflow_dependencies checkout
-      - name: Checkout reusable workflows at the caller SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: ${{ steps.shared.outputs.repository }}
-          ref: ${{ steps.shared.outputs.ref }}
-          path: .reusable-workflows
-          persist-credentials: false
-      - name: Record reusable workflow commit
-        id: shared-commit
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf 'sha=%s\n' "$(git -C .reusable-workflows rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Test pipeline unit contracts
         run: make test-unit
       - name: Test integration contracts without AWS
@@ -67,22 +51,6 @@ jobs:
           persist-credentials: false
       - name: Install YAML parser
         run: python3 -m pip install --quiet -r requirements-dev.txt
-      - name: Resolve reviewed reusable workflows
-        id: shared
-        run: python3 -B -m scripts.pipeline.governance.workflow_dependencies checkout
-      - name: Checkout reusable workflows at the caller SHA
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: ${{ steps.shared.outputs.repository }}
-          ref: ${{ steps.shared.outputs.ref }}
-          path: .reusable-workflows
-          persist-credentials: false
-      - name: Record reusable workflow commit
-        id: shared-commit
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf 'sha=%s\n' "$(git -C .reusable-workflows rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: actionlint
         run: |
           make lint-workflows ACTIONLINT="docker run --rm -v $PWD:/repo --workdir /repo \
@@ -90,11 +58,10 @@ jobs:
 
       # M16: regras que o actionlint não checa — checkout sem credencial Git
       # persistida, nenhuma entrada interpolada dentro de `run`, limite de
-      # duração por job executor, permissões declaradas e Actions por SHA
-      # completo. Vale daqui pra frente, não só na limpeza inicial.
-      - name: Workflow hardening and tool pin coverage
+      # duração por job executor, permissões declaradas, Actions por SHA
+      # completo, origem/SHA pinado dos chamadores do executor compartilhado,
+      # pins e retenção dos artifacts deste repositório e lote padrão do
+      # catálogo. O executor compartilhado (alric-containers-reusable-workflows)
+      # valida sua própria implementação/hardening/retenção no CI dele mesmo.
+      - name: Workflow hardening and local contract coverage
         run: make lint-local
-
-      # The same reviewed checkout supplies inputs, tool pins and retention.
-      - name: Shared workflow and retention contracts
-        run: make lint-shared

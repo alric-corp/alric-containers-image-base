@@ -507,10 +507,11 @@ def gh_json(path):
 
 
 def workflow_files():
-    # Retention remains a product policy even when the uploader lives elsewhere.
-    # Read the actual workflow at the caller's SHA; never silently omit it.
-    from scripts.pipeline.governance.workflow_dependencies import workflow_files as resolved_workflows
-    return resolved_workflows(ROOT)
+    # Retention of artifacts the shared workflow uploads is that library's own
+    # policy, verified by its own CI (see alric-containers-reusable-workflows);
+    # this only covers artifacts this repository's own workflows upload.
+    from scripts.pipeline.governance.workflow_dependencies import local_workflows
+    return local_workflows(ROOT)
 
 
 def scheduled_crons(root=ROOT):

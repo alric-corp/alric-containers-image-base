@@ -279,7 +279,6 @@ Executar:
 make test-unit
 make test-integration
 make lint-local
-make lint-shared
 make lint-workflows
 git diff --check
 

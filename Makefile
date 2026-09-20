@@ -1,7 +1,6 @@
 .DEFAULT_GOAL := help
 PYTHON ?= python3
 ACTIONLINT ?= actionlint
-REUSABLE_WORKFLOWS_PATH ?= .reusable-workflows
 # Generated agent workflows are validated by their compiler, not edited by hand.
 WORKFLOWS := $(wildcard .github/workflows/*.yml)
 
@@ -22,7 +21,7 @@ MELANGE_REPO := melange/packages
 DOCKER_MELANGE := docker run --rm -v "$(CURDIR)/melange":/work -w /work cgr.dev/chainguard/melange@sha256:43d6581e5f04b2f63b842782e581c4e06ff9ea23c81f0b3c8b9967034e38d90b
 
 
-.PHONY: certificates oci help list keygen bundle build run clean test test-unit test-integration lint lint-local lint-shared lint-workflows check wolfi-trust
+.PHONY: certificates oci help list keygen bundle build run clean test test-unit test-integration lint lint-local lint-workflows check wolfi-trust
 
 help:
 	@echo "Build local das imagens deste repositorio (sem publicar em nenhum registry)."
@@ -33,9 +32,15 @@ help:
 	@echo "       ENTRYPOINT=/usr/bin/go ARGS=version   builda e roda um comando na imagem"
 	@echo "  make clean                            remove chave e pacotes locais"
 	@echo "  make test-unit                        testes sem Docker, AWS ou rede"
-	@echo "  make test-integration                 certificados, TLS e contrato do reusable"
-	@echo "  make lint-local                       hardening, cobertura dos pins e lote padrao do catalogo"
-	@echo "  make check                            testes e lints (inclui checkout do reusable)"
+	@echo "  make test-integration                 certificados, TLS e adaptadores"
+	@echo "  make lint-local                       hardening, origem/SHA dos chamadores, pins, retencao e lote do catalogo"
+	@echo "  make lint-workflows                   actionlint nos workflows deste repositorio"
+	@echo "  make check                            testes + lints acima"
+	@echo ""
+	@echo "Tudo isso roda so com este clone -- nenhum outro repositorio precisa ser"
+	@echo "clonado localmente. A biblioteca compartilhada (alric-containers-reusable-workflows)"
+	@echo "e consumida remotamente por SHA nos workflows e valida sua propria"
+	@echo "implementacao/hardening/retencao no CI dela mesma."
 	@echo ""
 	@echo "Variaveis: ARCH (padrao: $(ARCH), detectado do host)"
 
@@ -61,17 +66,13 @@ lint-local:
 	$(PYTHON) -B -m scripts.pipeline.governance.lint_workflow_hardening
 	$(PYTHON) -B -m scripts.pipeline.governance.pin_inventory lint
 	$(PYTHON) -B -m scripts.pipeline.catalog.default_batch lint
-
-lint-shared:
-	$(PYTHON) -B -m scripts.pipeline.governance.workflow_dependencies lint
+	$(PYTHON) -B -m scripts.pipeline.governance.workflow_dependencies
 	$(PYTHON) -B -m scripts.pipeline.operations.operational_health lint
 
 lint-workflows:
-	$(ACTIONLINT) $(WORKFLOWS) \
-		"$(REUSABLE_WORKFLOWS_PATH)/.github/workflows/validate-apko-images.yml" \
-		"$(REUSABLE_WORKFLOWS_PATH)/.github/workflows/test-runtime-images.yml"
+	$(ACTIONLINT) $(WORKFLOWS)
 
-lint: lint-local lint-shared lint-workflows
+lint: lint-local lint-workflows
 
 check: test lint
 
