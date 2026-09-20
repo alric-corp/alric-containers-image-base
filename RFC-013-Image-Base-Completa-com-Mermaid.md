@@ -386,11 +386,15 @@ numa propriedade da identidade do workflow, não num segredo compartilhado.
 
 ### 11. Infraestrutura como código
 
-A POC não administra o registry. Nesta solução existe um produto separado,
-`alric-containers-registry`, responsável por ECR, mutability, exclusão de
-`stable`, `scanOnPush`, AES256, lifecycle, IAM/OIDC de Infra e o Terraform
-state — e já provamos que `image-base` publica e, em seguida,
-`terraform plan` não mostra mudanças. É uma evidência forte de ownership.
+A POC não administra o registry. Nesta solução existe um domínio de Infra
+separado do produto, hoje colocado no mesmo repositório em `infra/`
+(`infra/ecr` e `infra/iam`, com backend, state e identidades OIDC próprios),
+responsável por ECR, mutability, exclusão de `stable`, `scanOnPush`, AES256,
+lifecycle, IAM/OIDC de Infra e o Terraform state — e já provamos que
+`image-base` publica e, em seguida, `terraform plan` não mostra mudanças. É
+uma evidência forte de ownership. O repositório `alric-containers-registry`,
+que hospedou essa Infra até o rehearsal greenfield de 20/09/2026, não tem
+mais ownership AWS ativo (ver [infra/README.md](infra/README.md)).
 
 ### 12. Lifecycle
 
@@ -510,10 +514,13 @@ segunda foi resolvida pelo próprio upstream antes da conversa (ver abaixo).
 
 #### 1. Um repositório ou dois
 
-- Um único repositório para factory + Terraform/ECR; ou
-- Dois repositórios separados — o desenho atual: `image-base`
-  (build/publicação/supply chain) e `alric-containers-registry`
-  (Terraform/ECR/lifecycle/policies). Ver
+- Um único repositório para factory + Terraform/ECR — o desenho atual desde
+  o rehearsal greenfield de 20/09/2026: `image-base` (build/publicação/supply
+  chain na raiz) + `infra/` (Terraform/ECR/lifecycle/policies/IAM), com
+  boundary de ownership por path, role OIDC e environment, não por
+  repositório; ou
+- Dois repositórios separados — o desenho anterior, com o Terraform em
+  `alric-containers-registry` (superseded, sem ownership AWS ativo). Ver
   [Fronteira entre produto e workflows compartilhados](docs/repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados)
   para a separação equivalente entre produto e executor.
 
