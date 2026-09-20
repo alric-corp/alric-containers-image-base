@@ -68,6 +68,12 @@ exit code zero and pass the complete no-op graph check. AWS read-back independen
 checks all 16 repositories and their policies. The rehearsal also requires them
 to be empty; `--expect-empty` is removed only in the later product phase.
 
+The first initialization runs through the protected dispatch: its Infra apply
+identity can create the initially empty state. Subsequent PR plans reuse that
+state with read-only state permissions (plus locking). The provider lockfiles
+include verified Linux amd64 and macOS arm64 checksums, so readonly initialization
+works in both the hosted runner and the LAB operator environment.
+
 Repository variables:
 
 | Variable | LAB value |
