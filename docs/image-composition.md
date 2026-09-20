@@ -53,6 +53,17 @@ PEM, substituir `SSL_CERT_FILE`/`NODE_EXTRA_CA_CERTS` ou configurar um store
 Java/.NET no cliente. Um segundo servidor com CA desconhecida deve ser rejeitado.
 As imagens de teste e suas chaves não são artifacts de publicação.
 
+O gate recebe o mesmo lote JSON `frameworks` de `validate-base-images.yml`.
+Antes de qualquer build, `scripts.pipeline.runtime.trust_plan` valida o catálogo
+e produz fixtures únicas, ordenadas e restritas ao lote solicitado. Go, Java
+e .NET exigem runtime e `-dev` no lote e usam uma única fixture pareada;
+Python e Node (incluindo Node `-dev`) usam seus contratos individuais.
+Assim, `["go1-26", "go1-26-dev"]` gera somente `["go1-26"]`, cuja fixture
+constrói as duas imagens. O catálogo completo atual gera 11 fixtures cobrindo
+as 16 definições. JSON inválido, nomes desconhecidos, pares incompletos e
+lotes vazios falham; nenhum lote válido do catálogo atual fica sem contrato.
+O gate só passa quando o planejamento e todos os contratos passam.
+
 Os contratos rodam em amd64 e arm64, distinguindo emulação de execução nativa.
 O publicador exige o resultado do gate comum, além do contrato do próprio
 candidato e do scan. Os contratos do candidato mantêm o teste suplementar

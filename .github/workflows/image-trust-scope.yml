@@ -1,0 +1,27 @@
+name: Image trust scope regression
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/image-trust-scope.yml'
+      - '.github/workflows/image-trust.yml'
+      - '.github/workflows/validate-base-images.yml'
+      - 'scripts/pipeline/runtime/trust_plan.py'
+      - 'tests/unit/pipeline/runtime/test_trust_plan.py'
+      - 'tests/unit/pipeline/runtime/test_certificate_trust_scope.py'
+      - 'tests/unit/pipeline/governance/test_image_trust_workflow.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-trust-scope-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # A fixed regression input, not a production scope override. This calls the
+  # real certificate gate only: no candidate build, publication, AWS or apply.
+  go126-requested-batch:
+    uses: ./.github/workflows/image-trust.yml
+    with:
+      frameworks: '["go1-26", "go1-26-dev"]'
