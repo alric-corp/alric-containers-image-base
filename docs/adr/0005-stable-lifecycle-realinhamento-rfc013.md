@@ -2,11 +2,11 @@
 
 | Informação | Valor |
 | --- | --- |
-| Estado | Proposto (Aceito com a aprovação de code owner do PR que o integra) |
+| Estado | Aceito |
 | Data | 16/09/2026 |
-| Owners | Containers Products (`@alric-corp/github_xj7_maintainer`) + Infra (`alric-containers-registry`) |
+| Owners | Containers Products (`@alric-corp/github_xj7_maintainer`) + Infra (`alric-containers-image-base/infra`) |
 | Revisão | Sem data de expiração — isto é a intenção original da RFC-013 restaurada, não uma exceção temporária |
-| Aplicação | `alric-containers-registry/main.tf` (mutability exclusion + lifecycle); `scripts/pipeline/release/validate_ecr_repository.py` (preflight); `promote-stable.yml` (kill switch + pair binding) |
+| Aplicação | `infra/ecr/main.tf` (mutability exclusion) e `infra/ecr/locals.tf` (lifecycle); `scripts/pipeline/release/validate_ecr_repository.py` (preflight); `.github/workflows/promote-stable.yml` (kill switch + pair binding) |
 | Origem | RFC-013 "Convenção de imagens"/"Publicação e retenção"; achado operacional de 16/09/2026 (ADR-0004) que desativou a promoção automática como mitigação temporária |
 | Substitui | Nenhum ADR anterior. Refina o estado que o [ADR-0004](0004-v1-referencia-go126.md) deixou como `STABLE = OUT_OF_SCOPE` — este ADR reverte especificamente essa parte, para `go1-26`/`go1-26-dev` |
 
@@ -37,20 +37,25 @@ de continuar adiando.
 
 ## Decisão
 
-1. **`alric-containers-registry`** muda o `image_tag_mutability` desejado
+1. **`infra/ecr`** (image-base) muda o `image_tag_mutability` desejado
    dos dois repositórios Go de `IMMUTABLE` para `IMMUTABLE_WITH_EXCLUSION`,
    com exatamente uma exclusão: `{filterType: WILDCARD, filter: "stable"}`.
    Nenhum outro filtro (`latest`, `*`, `build*`) é aceito. Mutability
    continua sendo responsabilidade exclusiva de Infra — o publisher nunca
    volta a chamar `ecr:PutImageTagMutability`.
 
-2. **Reconciliação one-time.** A role Infra corporate-like não tem
-   `ecr:PutImageTagMutability` (decisão deliberada, não um bug). Trazer os
-   dois repositórios já existentes ao novo estado desejado usa o mecanismo
-   já preparado em `drift-remediation/` (`alric-containers-registry`):
-   política temporária, anexada, usada uma vez, removida — nunca uma
-   concessão permanente. Repositórios novos (expansão futura) já nascem no
-   formato correto, sem precisar dessa reconciliação.
+2. **Reconciliação one-time (nota histórica de implementação no LAB).** A
+   role Infra corporate-like não tem `ecr:PutImageTagMutability` (decisão
+   deliberada, não um bug). Trazer os dois repositórios então existentes ao
+   novo estado desejado usou o mecanismo preparado em `drift-remediation/`,
+   no repositório pré-greenfield `alric-containers-registry`: política
+   temporária, anexada, usada uma vez, removida — nunca uma concessão
+   permanente. Esse mecanismo pertencia à topologia legada; o rehearsal
+   greenfield de 19–20/09/2026 recriou os repositórios já no estado
+   desejado, e nenhuma implementação atual depende de
+   `alric-containers-registry` ou do seu `drift-remediation/`. Repositórios
+   novos (expansão futura) já nascem no formato correto, sem precisar dessa
+   reconciliação.
 
 3. **Preflight fail-closed.** `validate_ecr_repository.py` (Containers)
    passa a exigir exatamente `IMMUTABLE_WITH_EXCLUSION` com exatamente
@@ -74,7 +79,7 @@ de continuar adiando.
 
 6. **Lifecycle de 7 dias**, com `stable` protegida por prioridade de regra
    (não por "não bater no padrão da build tag" — uma mesma imagem pode ter
-   as duas). Ver `alric-containers-registry/locals.tf` para o mecanismo
+   as duas). Ver `infra/ecr/locals.tf` (image-base) para o mecanismo
    exato (duas regras, a primeira reivindica qualquer imagem tagueada
    `stable` antes que a segunda possa expirá-la por idade).
 
