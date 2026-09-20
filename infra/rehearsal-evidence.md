@@ -59,6 +59,13 @@ subject. The environment requires reviewer `TomasAlric`, permits only `main`,
 and disables administrator bypass. Deployment approvals were recorded through
 the API under the user's explicit authorization for this LAB execution.
 
+[PR plan run 35482961202](https://github.com/alric-corp/alric-containers-image-base/actions/runs/35482961202)
+also passed for [PR #93](https://github.com/alric-corp/alric-containers-image-base/pull/93),
+which is merged. It assumed the separate plan role using the exact immutable
+`:pull_request` subject, reused the existing backend, completed init and produced
+no changes with read-only state permissions. Its backend/init/plan artifacts are
+included in the local evidence archive.
+
 ## Retirement and state ownership
 
 The old ECR root's reviewed plan contained exactly 16 repositories, 16 lifecycle
@@ -98,12 +105,15 @@ was not modified. No repository was archived or deleted.
 
 The existing product CI failure resolving its shared-workflow verification
 checkout predates this rehearsal and is separate from the passing Infra workflow.
+[The PR's product CI run](https://github.com/alric-corp/alric-containers-image-base/actions/runs/35482961282)
+confirmed both failing checks stopped at that same pre-existing checkout step.
 Pre-existing local product/Windows/CRLF/UTF-8 changes were left unstaged and were
 not included in the rehearsal commits.
 
 Raw plans, state snapshots, IAM simulations, command records and downloaded run
 artifacts are retained locally in the ignored rehearsal evidence archive under
-`reports/`. State snapshots and plans are not committed. Hosted plan artifacts
+`reports/greenfield-corporate-topology-20260920.tar.gz`. State snapshots and plans
+are not committed. Hosted plan artifacts
 expire after one day and verification artifacts after five days.
 
 Next: port the same structure to corporate DEV and prove only the
