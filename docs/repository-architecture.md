@@ -106,26 +106,34 @@ só aceita `workflow_call`, sem cron, dispatch ou secrets próprios.
 Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@7a9b055a462eeb8552d3404c26538b44e8ccd83f`.
 
 Os dois chamadores usam esse commit. Actions externas e reusable workflows
-exigem SHA completo; imagens de ferramentas usam digest. O CI faz um segundo
-checkout no commit indicado. A origem aprovada fica em
+exigem SHA completo; imagens de ferramentas usam digest. A origem aprovada
+fica em
 [policies/governance/reusable-workflows.json](../policies/governance/reusable-workflows.json).
-O resolvedor valida as referências locais e o wiring dos checkouts antes de
-emitir origem/SHA; o lint posterior confere `origin`, HEAD, bytes dos dois
-YAMLs consumidos, inputs, hardening, retenção e alinhamento da action Trivy
-interna com promoção/recuperação. Dependabot agrupa a origem aprovada;
-Renovate acompanha os digests locais.
+O lint (`scripts/pipeline/governance/workflow_dependencies.py`) confere, só a
+partir dos arquivos **deste** repositório: origem aprovada, SHA completo e
+único entre os dois chamadores, ausência de refs móveis, inputs exatos dos
+chamadores (incluindo build bloqueado), alinhamento da action
+Trivy interna entre promoção/recuperação e o grupo do Dependabot. Ele nunca
+abre nem clona o repositório compartilhado — implementação, contrato interno de inputs/outputs,
+hardening, actionlint e retenção dos dois YAMLs consumidos são verificados
+pelo CI do próprio `alric-containers-reusable-workflows`, não duplicados
+aqui. Dependabot agrupa a origem aprovada; Renovate acompanha os digests
+locais.
 
-`REUSABLE_WORKFLOWS_PATH` só escolhe a localização. A conferência local não
-prova publicação do commit, acesso privado ou o conteúdo integral da biblioteca
-e da composite no seu SHA separado. Uma origem nova exige referências estáticas
-coerentes e futuro release da chamada interna. A biblioteca e os pins sandbox
-permanecem inalterados; migração para outra origem e acesso privado a uma
-biblioteca corporativa continuam pendentes (ver
+Essa conferência local não prova publicação do commit, acesso privado, nem
+substitui a verificação interna da biblioteca. Uma origem nova exige
+referências estáticas coerentes e futuro release da chamada interna. A
+biblioteca e os pins sandbox permanecem inalterados; migração para outra
+origem e acesso privado a uma biblioteca corporativa continuam pendentes (ver
 [readiness corporativo](corporate-production-readiness.md)).
 
 O nome e a retenção dos artifacts trocados com o executor são parte da API:
-`melange-repo` (30 dias), `validated-oci-*` (3 dias), `build-scans-*`,
-`sbom-*` e `runtime-*` (30 dias). Um run deve chamar a validação uma única vez
+`melange-repo`, `build-scans-*`, `sbom-*` e `runtime-*` (30 dias) e
+`validated-oci-*` (3 dias). Todos são artifacts que o executor compartilhado
+sobe; sua retenção é declarada e testada em
+`alric-containers-reusable-workflows`, não pelo lint deste repositório (que só
+cobre os artifacts que os workflows deste repositório sobem). Um run deve
+chamar a validação uma única vez
 com o lote completo, porque os nomes dos artifacts são compartilhados dentro
 do run. `verify_promotion.py` preserva a identidade exata do workflow
 assinante; a compatibilidade com um nome de repositório anterior exige IDs
@@ -161,9 +169,12 @@ foi preservado.
 
 [CONTRIBUTING.md](../CONTRIBUTING.md) descreve o ambiente e os comandos.
 `make test-unit` é independente de infraestrutura. `make check` acrescenta
-integração, actionlint, hardening, pins e política de retenção.
-O CI usa os mesmos alvos e preserva os nomes dos checks `test` e
-`lint-workflows`; os testes de certificados executam uma única vez.
+integração e o lint local (hardening, origem/SHA/tooling dos chamadores,
+pins, retenção e lote padrão) e `make lint-workflows` roda actionlint nos
+YAMLs deste repositório. Nenhum dos dois clona ou abre outro repositório: um
+`git clone` deste repositório sozinho basta. O CI usa os mesmos alvos e
+preserva os nomes dos checks `test` e `lint-workflows`; os testes de
+certificados executam uma única vez.
 
 `CODEOWNERS` cobre os domínios e também arquivos novos pelo dono padrão.
 Os testes verificam que mudanças nos insumos movidos continuam cobertas pelos

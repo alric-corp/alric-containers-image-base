@@ -56,10 +56,10 @@ Descoberto na árvore da baseline acima, não copiado de números históricos.
 | .NET | `dotnet10` / `dotnet10-dev`. `dotnet8` removido do catálogo em 17/09/2026 — fim de suporte LTS em 11/2026 (ADR-0001, histórico) |
 | Exceções ao lote padrão (`policies/operations/health.json` → `exceptions`) | Nenhuma. Lote FULL = catálogo inteiro |
 | Golden path (`execution_scope.current`) | `go1-26` + `go1-26-dev` — build automático, publicação e promoção restritos a esse par ([ADR-0004](adr/0004-v1-referencia-go126.md)); os outros 14 permanecem no catálogo e no lote FULL, sem publicação automática |
-| Publicação / promoção no LAB | Par Go publicado por digest, assinado, atestado e verificado externamente; `stable` promovida com read-back e recuperada sem rebuild; Terraform sem drift depois de tudo (fechamento hospedado real, ver histórico Git e [ADR-0005](adr/0005-stable-lifecycle-realinhamento-rfc013.md)). Promoção automática protegida por kill switch (`STABLE_PROMOTION_AUTHORIZED`) |
+| Publicação / promoção no LAB | Provas anteriores constam no histórico e na [ADR-0005](adr/0005-stable-lifecycle-realinhamento-rfc013.md). Após o [rehearsal greenfield](../infra/rehearsal-evidence.md), os 16 ECRs estão vazios; build/promoção pausados e `STABLE_PROMOTION_AUTHORIZED=false`. O novo golden path Go 1.26 ainda não começou |
 | Catálogo completo | 16/16 definições **buildam e passam no Trivy nas duas arquiteturas** em run real de CI (17/09/2026). O contrato funcional não roda no caminho de PR por desenho; para os 14 fora do `execution_scope` ele existe em código e foi exercitado em runs anteriores, mas não faz parte da execução automática atual |
 | Bloqueios upstream | Nenhum aberto. O bloqueio zlib (`CVE-2026-85091`) que travava Java 21 e mais 12 definições foi resolvido pelo próprio Wolfi em 17/09/2026 (ADR-0006, histórico); gate não relaxado |
-| Registry (`alric-containers-registry`) | Terraform declara os mesmos 16 repositórios ECR do catálogo; AWS tem 16 `image-base-*`. O `image-base-dotnet8` vazio foi destruído pelo Terraform em 17/09/2026 (episódio 4 de `drift-remediation/`, permissão de delete temporária, removida em seguida). O corporativo provisiona primeiro só o que o golden path precisa |
+| Infra (`alric-containers-image-base/infra`) | `infra/ecr` possui 16 ECRs e 32 policies, catálogo idêntico ao produto e plano sem mudanças. Backend independente bootstrapado pela pipeline. `alric-containers-registry` não possui ownership AWS ativo: `SUPERSEDED_READY_FOR_ARCHIVE`, sem arquivamento automático |
 | Decisões externas em aberto | Sigstore (ADR-0002), scanner/requisitos da fábrica federada (ADR-0003), CA corporativa, IAM/OIDC, destino de alerta e SLA — todas `EXTERNAL_PENDING`, listadas em [RFC-013 → Prontidão](../RFC-013-Image-Base-Completa-com-Mermaid.md#prontidão-para-produção) |
 
 ## Capacidades já comprovadas no LAB
@@ -194,22 +194,22 @@ nenhum ID de LAB deve ser tratado como corporativo. Placeholders neutros
 (`<corporate-account-id>`, `<corporate-role>`, `<corporate-ca>`) são a forma
 correta até que o valor seja fornecido e revisado no destino.
 
-## Adaptação para monorepo
+## Topologia corporativa ensaiada no LAB
 
-No LAB a fábrica ocupa três repositórios (`alric-containers-image-base`,
-`alric-containers-registry`, `alric-containers-reusable-workflows`). No
-corporativo a implementação **pode** usar um único repositório sem perder os
-boundaries arquiteturais. Estrutura conceitual, não prescritiva:
+O rehearsal consolidou produto e sua Infra em `alric-containers-image-base`.
+A fábrica permanece na raiz; `alric-containers-reusable-workflows` continua
+separado. O port mantém essa estrutura em `itau-xj7-container-image-base` e
+`itau-xj7-reusable-containers-products`, respectivamente:
 
 ```text
-containers-image-factory/
+container-image-base/
 ├── infra/
 │   ├── ecr/            # Terraform: repositórios, mutabilidade, lifecycle, resource policy
-│   └── iam/            # bootstrap da role Infra, trust, policies corporate-like
-├── factory/
-│   ├── frameworks/     # catálogo declarativo (um YAML por runtime/variante)
-│   ├── distroless/     # base comum
-│   └── melange/        # pacote de CAs, chave Wolfi e pin
+│   ├── iam/            # bootstrap independente das identidades Infra
+│   └── tests/          # contratos de backend, IAM/OIDC e ECR
+├── frameworks/         # catálogo declarativo (um YAML por runtime/variante)
+├── distroless/         # base comum
+├── melange/            # pacote de CAs, chave Wolfi e pin
 ├── scripts/            # domínios Python: catalog, artifacts, runtime, release, operations, governance
 ├── policies/           # health, quarentena, signing-identities, origem de workflows
 ├── tests/              # unit / integration / runtime (contratos)
@@ -217,36 +217,34 @@ containers-image-factory/
 └── .github/workflows/  # CI, build, trust, promote, recover, health, terraform-plan/apply
 ```
 
-O que o monorepo **não** muda:
+O que a colocation **não** muda:
 
 ```text
 repository boundary != security/ownership boundary
 ```
 
 - **Infra job → Infra role.** Terraform plan/apply continua com apply
-  human-approved, `terraform-apply.yml` separado de `terraform-pr.yml`, e a
+  human-approved, `infra-apply.yml` separado de `infra-pr.yml`, e a
   role Infra sem `ecr:DeleteRepository`/`DeleteLifecyclePolicy` permanentes.
 - **Build/publish job → Containers role.** O publicador continua
   `PREPROVISIONED_ONLY`, sem `CreateRepository`, `PutImageTagMutability`,
   `PutLifecyclePolicy` ou `SetRepositoryPolicy` no código.
 - Cada job assume **somente** a role da sua responsabilidade; um único
   repositório não justifica uma única role.
-- `CODEOWNERS` por caminho (`infra/**` vs `factory/**`) preserva a revisão por
-  competência dentro do mesmo repositório.
+- `CODEOWNERS` distingue `infra/**` dos caminhos do produto na raiz e
+  preserva a revisão por competência dentro do mesmo repositório.
 
 ```text
 Infra provides the destination.
 Containers provides the trusted artifact.
 ```
 
-Adaptações concretas que o monorepo exige (pequenas e localizadas, mas
-`CODE_CHANGE_REQUIRED`): a policy de origem dos workflows compartilhados e o
-resolvedor (`policies/governance/reusable-workflows.json`,
-`scripts/pipeline/governance/workflow_dependencies.py`) hoje exigem uma
-origem externa por SHA — com os executores vendorizados como workflows locais
-(`uses: ./.github/workflows/...`), essa policy passa a apontar para a origem
-local e o lint precisa aceitá-la; os seis adaptadores em `.github/scripts/`
-permanecem até o executor consumir o pacote canônico diretamente.
+A policy de origem (`policies/governance/reusable-workflows.json`) e os
+callers continuam exigindo a biblioteca separada por SHA completo. No port,
+a origem e os pins precisam de release e revisão no destino; não se vendorizam
+os executores no produto. Os seis adaptadores em `.github/scripts/` permanecem.
+As identidades Infra e Build continuam separadas mesmo pertencendo ao mesmo
+repositório. Veja o contrato vigente em [infra/README.md](../infra/README.md).
 
 ## Portabilidade para ambiente sem clone externo
 
@@ -261,17 +259,18 @@ Transportar prioritariamente:
 - `frameworks/`, `distroless/`, `melange/` (receita de CAs, chave pública Wolfi e pin — não a private key, que não é versionada);
 - `scripts/` (todos os domínios) e `.github/scripts/` (adaptadores);
 - `tests/` inteiro (unit, integration, runtime com os projetos mínimos);
-- workflows relevantes de `.github/workflows/` e os dois executores compartilhados;
+- workflows relevantes de `.github/workflows/`; os executores compartilhados vão para seu próprio repositório;
 - `policies/` genéricas (health, quarentena, lote, origem de workflows, propostas IAM corporate-like);
-- Terraform do registry (`main.tf`, `locals.tf`, módulo ECR pinado, bootstrap IAM, `drift-remediation/`);
+- `infra/` do produto (raízes ECR/IAM independentes, bootstrap de backend, testes e módulo ECR pinado);
 - documentação essencial: RFC-013, ADRs, contratos (consumer, IAM, operacional), arquitetura, este documento.
 
 **Não** transportar:
 
+- o `drift-remediation/` histórico do registry, nem sua antiga identidade de backend;
 - `.git`, histórico de commits, branches, tags de LAB;
 - credenciais, chaves privadas, tokens, `.tfvars`, `*.tfbackend`;
 - `terraform.tfstate*`, `tfplan*`, `.terraform/`;
-- artifacts gerados: `reports/`, `sbom-*.spdx.json`, `melange/packages/`, layouts OCI, `.reusable-workflows/`;
+- artifacts gerados: `reports/`, `sbom-*.spdx.json`, `melange/packages/`, layouts OCI;
 - identidades IAM do LAB (trust, roles, policies com ARNs reais);
 - configuração específica do sandbox (`health.json` owners/escalation, `signing-identities.json` com IDs do LAB, `CODEOWNERS` com slugs do LAB);
 - evidências datadas de runs do LAB como se fossem aceites corporativos.
@@ -379,7 +378,7 @@ tem como prová-los, e nenhuma evidence de LAB os substitui.
 | ECR resource policies | Org IDs corporativos, principals consumidores, negativo fora do escopo |
 | Registry connectivity | Login, push, pull, `describe-images`, lifecycle preview |
 | Repositórios de artifacts internos | Se as ferramentas/pins precisarem vir de origem interna |
-| Checkout privado da biblioteca compartilhada | Se `alric-containers-reusable-workflows` for privado no destino, o segundo `actions/checkout` de `ci.yml` hoje usa o token padrão do próprio repo — sem solução implementada de leitura cross-repo segura para PR/fork. Bloqueado até existir desenho de acesso revisado; não injetar secret em PR/fork para contornar |
+| Acesso privado à biblioteca compartilhada | Se `alric-containers-reusable-workflows` for privado no destino, o GitHub Actions do destino precisa resolver os `uses:` reais de `validate-base-images.yml`/`test-runtime-images.yml`/`promote-stable.yml`/`recover-stable.yml` (execução real, não uma verificação local) — sem solução implementada de leitura cross-repo segura para PR/fork. `ci.yml` não faz mais checkout de verificação da biblioteca (removido: a lint deste repositório só lê seus próprios arquivos; implementação/hardening/retenção são responsabilidade do CI da própria biblioteca), então esse checkout específico não é mais um ponto de bloqueio — mas a resolução nativa do `uses:` continua sendo. Bloqueado até existir desenho de acesso revisado; não injetar secret em PR/fork para contornar |
 | Terraform backend | Bucket, versioning, locking, permissões da role Infra |
 | Branch / Environment protection | Revisão de code owner exigida, `enforce_admins`, apply human-approved |
 | Permissões das contas consumidoras | Pull no escopo permitido, acesso a attestations no GitHub |

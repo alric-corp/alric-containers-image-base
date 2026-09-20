@@ -198,9 +198,16 @@ detalha responsabilidades, dependências e compatibilidade.
 └── README.md
 ```
 
-Validação rápida: `make test-unit lint-local`. Validação completa da automação:
-`make check`, com o checkout compartilhado preparado conforme o guia de contribuição.
-Os required checks do CI mantêm os nomes `test` e `lint-workflows`.
+Validação rápida: `make test-unit lint-local`. `make check` acrescenta
+`test-integration` e `make lint-workflows` roda actionlint — nenhum dos dois
+precisa clonar outro repositório: `git clone` deste repositório e `make check`
+bastam, com as ferramentas do guia de contribuição instaladas. Origem, SHA
+pinado, inputs exatos e alinhamento de tooling dos dois chamadores do
+executor compartilhado são conferidos a partir dos arquivos deste
+repositório; a implementação, o contrato interno de inputs/outputs, o hardening e a retenção do
+executor compartilhado são verificados pelo CI do próprio
+`alric-containers-reusable-workflows`, não duplicados aqui. Os required
+checks do CI mantêm os nomes `test` e `lint-workflows`.
 
 ## Como as imagens são compostas
 
@@ -481,7 +488,7 @@ jobs:
 | `frameworks` | ambos | input | sim | array JSON com os nomes dos arquivos em `frameworks/*.yaml` a processar |
 | `soak-hours` | promote-stable | input | não (default `6`) | horas mínimas que um build imutável espera antes de poder virar `stable` |
 
-Pré-requisito de infraestrutura: provider OIDC e role aprovados por Cloud/IAM, com trust restrita e permissões conforme o [contrato P1-04](docs/iam-permission-contract.md). Seus exemplos locais não alteram a policy ativa. O publicador atual também cria/configura ECRs; PutImage no mesmo repositório não reserva stable exclusivamente ao promotor.
+Pré-requisito de infraestrutura: provider OIDC e roles aprovados por Cloud/IAM, com trust restrita e permissões conforme o [contrato P1-04](docs/iam-permission-contract.md). Seus exemplos locais não alteram a policy ativa. A [Infra do produto](infra/README.md) provisiona os ECRs; o publicador é `PREPROVISIONED_ONLY`, sem administração de repositórios. `PutImage` no mesmo repositório não reserva `stable` exclusivamente ao promotor.
 
 ## Build local
 
@@ -532,16 +539,21 @@ Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@7a9b055a462
 Veja a [divisão de responsabilidades, contrato e adoção](docs/repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados).
 A [policy de origem revisada](policies/governance/reusable-workflows.json)
 define o repositório permitido; os dois workflows e a composite mantêm SHAs
-literais separados. O resolvedor valida os pontos locais obrigatórios antes
-de emitir os outputs usados pelo checkout. O lint posterior confere origem,
-HEAD, os dois YAMLs consumidos e a referência Trivy interna, além dos contratos
-existentes. Alterar o nome não permite omitir uma dependência da validação.
+literais separados. O lint (`scripts/pipeline/governance/workflow_dependencies.py`)
+confere, só a partir dos arquivos deste repositório, origem, SHA completo e
+único entre os dois chamadores, seus inputs exatos e a referência Trivy local, além dos
+contratos existentes. Alterar o nome não permite omitir uma dependência da
+validação. Ele nunca clona nem abre o repositório compartilhado: `git clone`
+deste repositório sozinho basta para `make check`/`make lint-workflows`
+(consulte [CONTRIBUTING.md](CONTRIBUTING.md)). Implementação, contrato interno de inputs/outputs,
+hardening, actionlint e retenção do executor compartilhado são verificados
+pelo CI do próprio `alric-containers-reusable-workflows`.
 
-Para os checks locais, `REUSABLE_WORKFLOWS_PATH` escolhe somente a localização
-do checkout; não substitui origem ou pin. Consulte [CONTRIBUTING.md](CONTRIBUTING.md).
-Os checks locais não provam publicação no destino nem acesso privado. Outra
-origem exige release revisado da chamada interna da biblioteca. O caminho
-hospedado na origem sandbox tem PASS observado no PR #62 e na main, sujeito à
-revisão da reconciliação; migração real e acesso privado não foram comprovados.
+Esses checks locais não provam publicação no destino nem acesso privado; isso
+é responsabilidade da resolução nativa do `uses:` pelo GitHub Actions do
+destino. Outra origem exige release revisado da chamada interna da
+biblioteca. O caminho hospedado na origem sandbox tem PASS observado no PR
+#62 e na main, sujeito à revisão da reconciliação; migração real e acesso
+privado não foram comprovados.
 A compatibilidade das assinaturas anteriores à renomeação de 10/09/2026 é
 garantida pelo alias histórico em `policies/release/signing-identities.json`.

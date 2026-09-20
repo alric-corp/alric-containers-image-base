@@ -116,7 +116,8 @@ def renovate_matches(config, paths):
                         continue
                     name = groups.get('depName') or manager.get('depNameTemplate')
                     covered[(relative, value)] = {
-                        'name': name, 'datasource': manager.get('datasourceTemplate')}
+                        'name': name, 'datasource': manager.get('datasourceTemplate'),
+                        'extract_version': manager.get('extractVersionTemplate')}
     return covered
 
 
@@ -141,6 +142,11 @@ def coverage(entries, renovate, dependabot):
             # aquasecurity/trivy): é ela que a disponibilidade consulta.
             if match['datasource'] == 'github-releases' and (match['name'] or '').count('/') == 1:
                 entry['source'] = match['name']
+                # Terraform uses unprefixed versions locally and v-prefixed
+                # release tags. Honor only this explicit Renovate extraction;
+                # all other managers retain the literal current-tag lookup.
+                if match.get('extract_version') == '^v(?<version>.*)$':
+                    entry['source_tag'] = 'v' + entry['current']
         entry['managers'] = managers
     return entries
 
@@ -219,8 +225,9 @@ def availability(entries, run=subprocess.run):
                 record['available'] = None
                 record['origin'] = None
             else:
-                release = gh_json(f"repos/{source}/releases/tags/{entry['current']}", run)
-                record['available'] = bool(release and release.get('tag_name') == entry['current'])
+                tag = entry.get('source_tag', entry['current'])
+                release = gh_json(f"repos/{source}/releases/tags/{tag}", run)
+                record['available'] = bool(release and release.get('tag_name') == tag)
                 record['origin'] = f'https://github.com/{source}'
         checked.append(record)
     return checked

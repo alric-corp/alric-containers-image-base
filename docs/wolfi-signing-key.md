@@ -67,8 +67,8 @@ local. Nem mismatch nem erro de rede escrevem chave ou pin.
 4. Preparar PR atualizando conjuntamente chave pública, `expected_sha256` e
    fontes do JSON. Registrar legitimidade da rotação, evidência de anúncio
    quando disponível, impacto e testes. Nenhum comando de build faz repin.
-5. Executar `make test-unit test-integration lint-local lint-shared
-   lint-workflows`, `actionlint`, check de contexto e diff; mínimos reais e
+5. Executar `make check` (`test-unit test-integration lint-local
+   lint-workflows`), `actionlint`, check de contexto e diff; mínimos reais e
    negativos de chave errada/ausente. Preservar a evidência da limitação de
    discovery; reavaliá-la se o comportamento das ferramentas mudar, sem
    exigir sua eliminação como aceite local desta fatia.

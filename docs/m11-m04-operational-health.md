@@ -270,18 +270,25 @@ SLO numérico. O destino segue null nesta entrega.
 
 A finalidade de cada prazo está em `retention_days`, e um lint offline no
 check obrigatório compara o declarado com o `retention-days` real de cada
-`upload-artifact`. Política que diverge do workflow não protege prazo nenhum.
+`upload-artifact` **deste repositório**. Política que diverge do workflow não
+protege prazo nenhum. Os artifacts que o executor compartilhado sobe
+(`melange-repo`, `build-scans-*`, `sbom-*`, `runtime-*`, `validated-oci-*`) têm
+sua retenção declarada e testada em `alric-containers-reusable-workflows`, não
+por este `retention_days` nem por este lint.
 
 | Artifact | Prazo | Finalidade |
 | --- | --- | --- |
-| `melange-repo`, locks e `sbom-*` | 30 dias | insumos/evidências para auditoria e replay, sujeitos à disponibilidade upstream |
-| `validated-oci-*` | 3 dias | janela de retry da publicação sem revalidar |
-| `build-scans-*`, `publication-*` | 30 dias | auditoria do que foi escaneado e publicado |
-| `runtime-*` | 30 dias | evidência do contrato funcional que autorizou publicar |
+| `melange-repo`, locks e `sbom-*` (executor compartilhado) | 30 dias | insumos/evidências para auditoria e replay, sujeitos à disponibilidade upstream |
+| `validated-oci-*` (executor compartilhado) | 3 dias | janela de retry da publicação sem revalidar |
+| `build-scans-*` (executor compartilhado) | 30 dias | auditoria do que foi escaneado |
+| `runtime-*` (executor compartilhado) | 30 dias | evidência do contrato funcional que autorizou publicar |
+| `publication-*` | 30 dias | auditoria do que foi publicado |
 | `promotion-*`, `promotion-scans-*` | 30 dias | por que promoveu ou não, e o re-scan do soak |
 | `recovery-*` | 30 dias | runbook de recuperação do M15 |
 | `pipeline-summary-*`, `pipeline-health-*` | 30 dias | resultado e saúde, para comparar no tempo |
 | `image-trust-*` | 30 dias | evidência da integração de confiança de certificados |
+| `infra-apply-plan-*` | 1 dia | plano binário aprovado, consumido somente pelo mesmo run/revisão |
+| `infra-apply-evidence-*`, `infra-pr-plan-*` | 5 dias | evidências de apply e plano somente leitura do PR |
 
 No retry parcial (P1-02), o contrato de attempt anterior só é reutilizado no
 mesmo run, para o OCI

@@ -1,16 +1,19 @@
-"""Resolve the reviewed GitHub.com library and verify its static callers.
+"""Verify this repository's own contract with the reviewed shared library.
 
-The versioned policy approves the origin; literal uses approve the commits.
-Checkout mode validates local references before emitting repository/ref.
-Lint additionally verifies the consumed Git commit, workflow bytes and APIs.
-Neither mode downloads code or grants access to a private repository.
+The versioned policy approves the origin; literal `uses:` pin the commit.
+This only inspects files that live in this repository: the approved origin,
+the local callers' pinned SHA (immutable, no moving refs, one release shared
+across callers), their expected input bindings, this repository's own action
+pins and Dependabot grouping. Input bindings protect the product's locked
+build and forwarding choices; they do not mirror the executor's internal API.
+It never opens or downloads anything from the shared repository itself --
+that library's own implementation, inputs/outputs, hardening, actionlint and
+retention are verified by its own CI (alric-containers-reusable-workflows).
 """
 import argparse
 import json
-import os
 from pathlib import Path
 import re
-import subprocess
 import sys
 
 import yaml
@@ -20,14 +23,23 @@ POLICY = Path('policies/governance/reusable-workflows.json')
 REPOSITORY_NAME = re.compile(
     r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?/'
     r'[A-Za-z0-9][A-Za-z0-9_.-]{0,99}')
-SHA = re.compile(r'[0-9a-f]{40}')
 # Locations, not origin-filtered search results, define the required inventory.
 CALLERS = {
     ('validate-base-images.yml', 'validate'): '.github/workflows/validate-apko-images.yml',
     ('test-runtime-images.yml', 'runtime'): '.github/workflows/test-runtime-images.yml',
 }
+CALLER_INPUTS = {
+    ('validate-base-images.yml', 'validate'): {
+        'frameworks': '${{ inputs.frameworks }}',
+        'melange-config': 'image-base-ca-certificates.yaml',
+        'locked-build': True,
+    },
+    ('test-runtime-images.yml', 'runtime'): {
+        'framework': '${{ inputs.framework }}',
+        'artifact-run-id': '${{ inputs.artifact-run-id }}',
+    },
+}
 LOCAL_ACTIONS = {'promote-stable.yml': 'promote', 'recover-stable.yml': 'recover'}
-SHARED_ACTIONS = {'validate-apko-images.yml': 'validate'}
 TRIVY = 'actions/setup-trivy'
 
 
@@ -128,11 +140,29 @@ def required_step(job, name, location):
     return matches[0]
 
 
+def _caller_inputs(job, expected, location):
+    supplied = job.get('with')
+    if (not isinstance(supplied, dict)
+            or any(not isinstance(name, str) for name in supplied)):
+        raise ValueError(f'{location}: expected caller inputs mapping with string keys')
+    missing = sorted(set(expected) - set(supplied))
+    unknown = sorted(set(supplied) - set(expected))
+    if missing or unknown:
+        raise ValueError(f'{location}: incompatible caller inputs; '
+                         f'missing={missing}, unknown={unknown}')
+    for name, value in expected.items():
+        # bool is an int subclass in Python; equality alone would accept 1.
+        if type(supplied[name]) is not type(value) or supplied[name] != value:
+            raise ValueError(f'{location}: {name} must retain its reviewed input binding '
+                             f'and {type(value).__name__} type')
+
+
 def _dependencies(documents, repository):
     found = []
     for (name, job_id), target in CALLERS.items():
         job = required_job(documents, name, job_id)
         ref = reference(job.get('uses'), repository, target, f'{name}/{job_id}')
+        _caller_inputs(job, CALLER_INPUTS[(name, job_id)], f'{name}/{job_id}')
         found.append({'caller': required_document(documents, name)[0], 'job': job, 'path': target,
                       'ref': ref, 'repository': repository})
     if len({entry['ref'] for entry in found}) != 1:
@@ -171,34 +201,11 @@ def _tooling(documents, repository, expected):
                         raise ValueError(f'{name}/{job_id}/step {index}: '
                                          'unregistered library action point')
     if len(pins) != 1:
-        raise ValueError('validation, promotion and recovery must use one Trivy setup SHA')
+        raise ValueError('promotion and recovery must use one Trivy setup SHA')
 
 
 def tooling_consistency(paths, root=ROOT):
-    _tooling(workflow_documents(paths), approved_repository(root),
-             {**LOCAL_ACTIONS, **SHARED_ACTIONS})
-
-
-def _checkout_wiring(documents):
-    name = 'ci.yml'
-    for job_id in ('test', 'lint-workflows'):
-        job = required_job(documents, name, job_id)
-        steps = job.get('steps', [])
-        resolvers = [(i, step) for i, step in enumerate(steps) if step.get('id') == 'shared']
-        if (len(resolvers) != 1 or resolvers[0][1].get('run') !=
-                'python3 -B -m scripts.pipeline.governance.workflow_dependencies checkout'):
-            raise ValueError(f'{name}/{job_id}: required reviewed-origin resolver missing or changed')
-        index, step = required_step(job, 'Checkout reusable workflows at the caller SHA',
-                                    f'{name}/{job_id}')
-        uses = step.get('uses', '')
-        settings = step.get('with')
-        if (index <= resolvers[0][0] or not isinstance(uses, str)
-                or not re.fullmatch(r'actions/checkout@[0-9a-f]{40}', uses)
-                or settings != {'repository': '${{ steps.shared.outputs.repository }}',
-                                'ref': '${{ steps.shared.outputs.ref }}',
-                                'path': '.reusable-workflows', 'persist-credentials': False}):
-            raise ValueError(f'{name}/{job_id}: checkout must consume reviewed repository/ref '
-                             'outputs without extra credentials')
+    _tooling(workflow_documents(paths), approved_repository(root), LOCAL_ACTIONS)
 
 
 def _dependabot(root, repository):
@@ -221,88 +228,19 @@ def _local_contract(root):
     documents = workflow_documents(local_workflows(root))
     entries = _dependencies(documents, repository)
     _tooling(documents, repository, LOCAL_ACTIONS)
-    _checkout_wiring(documents)
     _dependabot(root, repository)
     return repository, entries
 
 
-def git_output(checkout, *args):
-    return subprocess.run(['git', '--no-replace-objects', '-C', str(checkout), *args],
-                          check=True, capture_output=True).stdout
-
-
-def shared_workflows(root=ROOT, checkout=None):
-    repository, entries = _local_contract(root)
-    checkout = Path(checkout or os.environ.get('REUSABLE_WORKFLOWS_PATH')
-                    or root / '.reusable-workflows').resolve()
-    if not (checkout / '.git').exists():
-        raise ValueError(f'missing shared checkout; check out {repository}@{entries[0]["ref"]}')
-    origin = git_output(checkout, 'remote', 'get-url', '--all', 'origin').decode().strip()
-    accepted_urls = {prefix + repository + suffix
-                     for prefix in ('https://github.com/', 'git@github.com:', 'ssh://git@github.com/')
-                     for suffix in ('', '.git')}
-    if origin not in accepted_urls:
-        raise ValueError('shared checkout origin differs from the approved GitHub.com repository')
-    head = git_output(checkout, 'rev-parse', '--verify', 'HEAD^{commit}').decode().strip()
-    if not SHA.fullmatch(head) or head != entries[0]['ref']:
-        raise ValueError('shared checkout HEAD differs from the caller release')
-    files = []
-    for entry in entries:
-        path = checkout / entry['path']
-        expected = git_output(checkout, 'show', f'{head}:{entry["path"]}')
-        if not path.is_file() or path.is_symlink() or path.read_bytes() != expected:
-            raise ValueError(f'{entry["path"]}: shared workflow differs from its pinned commit')
-        doc = document(path)
-        events = doc.get('on', doc.get(True))
-        if not isinstance(events, dict) or set(events) != {'workflow_call'}:
-            raise ValueError(f'{path.name}: shared executor must accept workflow_call only')
-        call = events['workflow_call'] or {}
-        if not isinstance(call, dict) or not isinstance(call.get('inputs', {}), dict):
-            raise ValueError(f'{path.name}: invalid workflow_call inputs')
-        declared = call.get('inputs', {})
-        supplied = entry['job'].get('with', {})
-        if (not isinstance(supplied, dict)
-                or any(not isinstance(value, dict) for value in declared.values())):
-            raise ValueError(f'{path.name}: invalid inputs mapping')
-        missing = [name for name, definition in declared.items()
-                   if definition.get('required') and name not in supplied]
-        unknown = sorted(set(supplied) - set(declared))
-        if missing or unknown:
-            raise ValueError(f'{entry["caller"].name}: incompatible inputs; '
-                             f'missing={missing}, unknown={unknown}')
-        files.append(path)
-    tooling_consistency(local_workflows(root) + files, root)
-    return files
-
-
-def workflow_files(root=ROOT, checkout=None):
-    return local_workflows(root) + shared_workflows(root, checkout)
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['checkout', 'lint'])
     parser.add_argument('--root', type=Path, default=ROOT,
                         help='consumer checkout containing the reviewed policy and callers')
     args = parser.parse_args(argv)
     try:
-        if args.mode == 'checkout':
-            repository, entries = _local_contract(args.root)
-            output = f'repository={repository}\nref={entries[0]["ref"]}\n'
-            if os.environ.get('GITHUB_OUTPUT'):
-                with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
-                    stream.write(output)
-            else:
-                print(output, end='')
-        else:
-            from scripts.pipeline.governance.lint_workflow_hardening import check
-            problems = []
-            for path in workflow_files(args.root):
-                problems += check(path.name, document(path))
-            if problems:
-                raise ValueError('; '.join(problems))
-            print('Shared workflow origin, SHA, inputs and hardening verified.')
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        _local_contract(args.root)
+        print('Origin, pinned SHA and local caller/tooling contract verified.')
+    except (OSError, ValueError) as error:
         print(f'::error::{error}', file=sys.stderr)
         return 1
     return 0
