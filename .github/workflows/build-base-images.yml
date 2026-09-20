@@ -265,7 +265,7 @@ jobs:
           if ! aws ecr describe-repositories --region "$EXPECTED_REGION" \
             --repository-names "$REPO" > ecr-repository.json 2>ecr-error.txt; then
             if grep -q 'RepositoryNotFoundException' ecr-error.txt; then
-              echo "::error::Pre-provisioned ECR repository not found. Provision it through alric-containers-registry before publishing: ${REPO}" >&2
+              echo "::error::Pre-provisioned ECR repository not found. Provision it through this product's infra/ecr before publishing: ${REPO}" >&2
             else
               cat ecr-error.txt >&2
             fi

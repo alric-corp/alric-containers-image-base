@@ -4,7 +4,7 @@
 RFC-013/ADR-0005 contract: exactly `IMMUTABLE_WITH_EXCLUSION` with exactly
 one exclusion filter, `{filterType: WILDCARD, filter: stable}` -- `stable`
 is mutable/movable, every other tag (including the immutable build tag)
-stays immutable. Infra (`alric-containers-registry`) owns this
+stays immutable. This product's Infra (`infra/ecr`) owns this
 configuration via Terraform; this module only ever reads it back and fails
 closed on any divergence -- plain `IMMUTABLE`, `MUTABLE`, a different or
 additional exclusion filter, all rejected.

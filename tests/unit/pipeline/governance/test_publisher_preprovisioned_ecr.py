@@ -53,7 +53,7 @@ class PublisherPreprovisionedEcrTests(unittest.TestCase):
         command = step['run']
         self.assertIn('RepositoryNotFoundException', command)
         self.assertIn('Pre-provisioned ECR repository not found.', command)
-        self.assertIn('alric-containers-registry', command)
+        self.assertIn("this product's infra/ecr", command)
         self.assertIn('exit 1', command)
 
     def test_repository_name_is_derived_from_validated_framework(self):

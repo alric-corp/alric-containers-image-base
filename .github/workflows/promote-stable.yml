@@ -82,8 +82,8 @@ jobs:
     # promoção automática sem reverter código (ex.: durante uma reconciliação
     # de Infra, ou se um ciclo de promoção precisar de pausa manual). Os dois
     # ECRs Go só aceitam a escrita de `stable` de forma sustentável depois que
-    # `alric-containers-registry` aplica `IMMUTABLE_WITH_EXCLUSION` com a
-    # exclusão exata `stable` (ver alric-containers-registry/main.tf) -- sem
+    # a Infra do produto aplica `IMMUTABLE_WITH_EXCLUSION` com a
+    # exclusão exata `stable` (ver infra/ecr/main.tf) -- sem
     # isso, a primeira promoção teria sucesso mas a segunda falharia ao tentar
     # mover a tag (immutable tag mutation). A variável de repositório abaixo
     # é o kill switch: ausente/diferente de "true" -> job não roda, em nenhum
