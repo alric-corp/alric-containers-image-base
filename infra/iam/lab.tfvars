@@ -1,0 +1,8 @@
+aws_region                 = "us-east-1"
+aws_account_id             = "712107929769"
+github_repository_id       = "1360616627"
+github_repository_owner_id = "178685987"
+github_subject_prefix      = "repo:alric-corp@178685987/alric-containers-image-base@1360616627"
+github_apply_environment   = "lab-image-base-infra"
+backend_bucket             = "712107929769-alric-containers-image-base-tfstate"
+backend_region             = "us-east-2"

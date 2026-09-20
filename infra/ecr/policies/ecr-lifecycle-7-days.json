@@ -1,0 +1,27 @@
+{
+  "rules": [
+    {
+      "rulePriority": 1,
+      "description": "Protect the image currently referenced by stable (never actually expires)",
+      "selection": {
+        "tagStatus": "tagged",
+        "tagPatternList": ["stable"],
+        "countType": "imageCountMoreThan",
+        "countNumber": 999999
+      },
+      "action": { "type": "expire" }
+    },
+    {
+      "rulePriority": 2,
+      "description": "Expire build-tagged images older than 7 days",
+      "selection": {
+        "tagStatus": "tagged",
+        "tagPatternList": ["*"],
+        "countType": "sinceImagePushed",
+        "countUnit": "days",
+        "countNumber": 7
+      },
+      "action": { "type": "expire" }
+    }
+  ]
+}

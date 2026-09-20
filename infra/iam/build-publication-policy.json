@@ -1,0 +1,49 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EcrAuthentication",
+      "Effect": "Allow",
+      "Action": ["ecr:GetAuthorizationToken"],
+      "Resource": "*",
+      "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}}
+    },
+    {
+      "Sid": "PublishAndReadExactCatalog",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage",
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:DescribeRepositories",
+        "ecr:DescribeImages",
+        "ecr:ListImages",
+        "ecr:GetRepositoryPolicy",
+        "ecr:GetLifecyclePolicy",
+        "ecr:ListTagsForResource"
+      ],
+      "Resource": [
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-dotnet10",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-dotnet10-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-go1-25",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-go1-25-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-go1-26",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-go1-26-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-java21",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-java21-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-java25",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-java25-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-nodejs22",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-nodejs22-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-nodejs24",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-nodejs24-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-python3-13",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-python3-14"
+      ]
+    }
+  ]
+}
