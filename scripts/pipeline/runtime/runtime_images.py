@@ -445,6 +445,49 @@ def plan(requested):
     return planned, skipped
 
 
+def publication_contract(framework, requested):
+    """Resolve a publication target to its required executable contract.
+
+    Functional planning may skip a compiled build companion, but publication
+    of either member requires the same complete runtime/build pair. Keep that
+    authorization decision separate from the generic plan's gradual coverage.
+    """
+    if (not isinstance(requested, list) or not requested
+            or any(not isinstance(item, str) for item in requested)):
+        raise ValueError('publication requires a non-empty requested framework list')
+    if len(requested) != len(set(requested)):
+        raise ValueError('publication requested frameworks must be unique')
+    catalog_names = {path.stem for path in (ROOT / 'frameworks').glob('*.yaml')}
+    for item in requested:
+        if item not in catalog_names:
+            raise ValueError('publication framework must exist in the repository catalog')
+    if not isinstance(framework, str) or framework not in requested:
+        raise ValueError('publication framework must belong to the requested batch')
+
+    base = framework.removesuffix('-dev')
+    compiled = any(re.fullmatch(pattern, base) for pattern, _, _ in COMPILED)
+    if compiled:
+        # project() also requires both catalog definitions; an absent catalog
+        # companion must not turn a compiled artifact into optional coverage.
+        _, dev, _ = project(base)
+        if base not in requested or dev not in requested:
+            raise ValueError(f'publication of {framework} requires {base} and {dev} '
+                             'in the same requested batch')
+        role = 'dev' if framework == dev else 'runtime'
+        return {'required': True, 'publication_framework': framework,
+                'contract_framework': base, 'runtime_framework': base,
+                'dev_framework': dev, 'target_role': role,
+                'counterpart_framework': base if role == 'dev' else dev}
+
+    # A direct executable contract authorizes interpreted candidates. Unknown
+    # coverage remains a planning concern and cannot authorize publication.
+    supported(framework)
+    return {'required': True, 'publication_framework': framework,
+            'contract_framework': framework, 'runtime_framework': framework,
+            'dev_framework': '', 'target_role': 'runtime',
+            'counterpart_framework': ''}
+
+
 def gate(reports, framework, layout=None, artifact_metadata=None, job_metadata=None,
          run_id=None, attempt=None, repository=None, revision=None, dev_layout=None,
          download_result='success'):
@@ -472,11 +515,41 @@ def gate(reports, framework, layout=None, artifact_metadata=None, job_metadata=N
     return result
 
 
+def publication_gate(reports, framework, requested, layout=None, counterpart_layout=None,
+                     artifact_metadata=None, job_metadata=None, run_id=None, attempt=None,
+                     repository=None, revision=None, download_result='success'):
+    """Authorize the current target using canonical runtime/dev pair evidence."""
+    result = {'publication_framework': framework, 'passed': False, 'run_id': run_id,
+              'run_attempt': attempt, 'selected_attempt': None}
+    try:
+        resolution = publication_contract(framework, requested)
+    except (OSError, ValueError, TypeError) as error:
+        result['error'] = str(error)
+        return result
+    result.update(resolution)
+    if resolution['dev_framework']:
+        if layout is None or counterpart_layout is None:
+            result['error'] = 'compiled publication requires both current validated OCI layouts'
+            return result
+        runtime_layout, dev_layout = ((counterpart_layout, layout)
+                                     if resolution['target_role'] == 'dev'
+                                     else (layout, counterpart_layout))
+    else:
+        runtime_layout, dev_layout = layout, None
+    result.update(gate(reports, resolution['contract_framework'], runtime_layout,
+                       artifact_metadata, job_metadata, run_id, attempt, repository,
+                       revision, dev_layout, download_result))
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('layout', nargs='?', help='layout OCI da variante de runtime')
+    parser.add_argument('layout', nargs='?',
+                        help='runtime OCI layout, or current publication target with --publication-gate')
     parser.add_argument('framework', nargs='?')
     parser.add_argument('--dev-layout', help='layout OCI da variante -dev (contratos compilados)')
+    parser.add_argument('--counterpart-layout',
+                        help='current validated paired OCI layout for publication authorization')
     parser.add_argument('--reports', default='reports')
     parser.add_argument('--baked-ca', help='isolated fixture TLS identity prefix (.pem/.key)')
     # 600s por plataforma: o build multi-stage mais lento observado foi 19,3s
@@ -484,14 +557,19 @@ def main():
     # ainda dentro do timeout do job — o erro do script é mais legível que um
     # job morto por limite de duração.
     parser.add_argument('--build-timeout', type=int, default=600)
-    parser.add_argument('--list-contracts', action='store_true',
-                        help='lista os frameworks com contrato funcional e sai')
-    parser.add_argument('--gate', metavar='FRAMEWORK',
-                        help='avalia os relatórios de --reports e falha se o contrato não passou')
-    parser.add_argument('--plan', metavar='JSON',
-                        help='imprime o plano de contratos para um lote de frameworks')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--list-contracts', action='store_true',
+                      help='lista os frameworks com contrato funcional e sai')
+    mode.add_argument('--gate', metavar='FRAMEWORK',
+                      help='avalia os relatórios de --reports e falha se o contrato não passou')
+    mode.add_argument('--publication-plan', metavar='FRAMEWORK',
+                      help='resolve the publication target to its required functional contract')
+    mode.add_argument('--publication-gate', metavar='FRAMEWORK',
+                      help='authorize publication of the current target OCI and its exact pair')
+    mode.add_argument('--plan', metavar='JSON',
+                      help='imprime o plano de contratos para um lote de frameworks')
     parser.add_argument('--requested', metavar='JSON', default=None,
-                        help='lote de frameworks do run, usado por --gate e --plan')
+                        help='lote de frameworks do run; obrigatório para autorização de publicação')
     parser.add_argument('--artifact-metadata', help='complete run artifact API pages')
     parser.add_argument('--job-metadata', help='complete run job API pages (filter=all)')
     parser.add_argument('--run-id', default=os.environ.get('GITHUB_RUN_ID'))
@@ -508,6 +586,27 @@ def main():
         planned, skipped = plan(json.loads(args.plan))
         print(json.dumps({'planned': planned, 'skipped': skipped}, indent=2))
         return 0
+    if args.publication_plan or args.publication_gate:
+        if args.requested is None:
+            parser.error('--requested is required for publication authorization')
+        framework = args.publication_plan or args.publication_gate
+        try:
+            requested = json.loads(args.requested)
+            if args.publication_plan:
+                result = publication_contract(framework, requested)
+            else:
+                result = publication_gate(
+                    args.reports, framework, requested, args.layout, args.counterpart_layout,
+                    args.artifact_metadata, args.job_metadata, args.run_id, args.run_attempt,
+                    args.repository, args.revision, args.download_result)
+        except (OSError, ValueError, TypeError) as error:
+            result = {'publication_framework': framework, 'passed': False, 'error': str(error)}
+        if args.gate_output:
+            Path(args.gate_output).write_text(json.dumps(result, indent=2) + '\n')
+        print(json.dumps(result, indent=2))
+        if args.publication_gate:
+            return int(result.get('passed') is not True)
+        return int(result.get('required') is not True)
     if args.gate:
         requested = json.loads(args.requested) if args.requested else [args.gate]
         planned, skipped = plan(requested)
