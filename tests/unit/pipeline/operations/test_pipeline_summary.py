@@ -85,6 +85,22 @@ class RowTests(unittest.TestCase):
 
 
 class CollectTests(unittest.TestCase):
+    def test_nested_promotion_evidence_links_to_the_matching_batch_attempt(self):
+        links = summary.artifact_links(
+            ['promotion-go1-26-dev-2', 'promotion-scans-go1-26-2'],
+            'owner/repo', '42', {'promotion-batch-2': 7, 'promotion-scans-batch-2': 8,
+                                 'promotion-batch-1': 9})
+        self.assertIn('[promotion-go1-26-dev-2]', links)
+        self.assertIn('/artifacts/7', links)
+        self.assertIn('/artifacts/8', links)
+        self.assertNotIn('/artifacts/9', links)
+
+    def test_legacy_direct_promotion_artifact_keeps_its_own_link(self):
+        links = summary.artifact_links(['promotion-go1-26-2'], 'owner/repo', '42',
+                                       {'promotion-go1-26-2': 7, 'promotion-batch-2': 8})
+        self.assertIn('/artifacts/7', links)
+        self.assertNotIn('/artifacts/8', links)
+
     def test_framework_without_any_evidence_still_has_a_row(self):
         with tempfile.TemporaryDirectory() as directory:
             collected = summary.collect(directory, ['nodejs22', 'nodejs24'])

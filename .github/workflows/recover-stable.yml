@@ -21,7 +21,7 @@
 # Restaurar a imagem base não reconstrói nem reverte automaticamente
 # aplicações consumidoras — isso é responsabilidade do runbook de cada
 # pipeline de deploy downstream, fora do escopo deste repositório.
-name: Recover stable
+name: Factory Distroless - Recover stable
 
 on:
   workflow_dispatch:
@@ -49,11 +49,10 @@ jobs:
     name: Recover ${{ inputs.framework }} to ${{ inputs.digest }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Mesmo grupo de promote-stable.yml para este framework: a recuperação
-    # e um ciclo de promoção concorrente nunca podem mover "stable" ao
-    # mesmo tempo — um espera o outro, serializado pelo GitHub Actions.
+    # Mesmo lock por role/região da promoção: recovery espera o lote ativo
+    # terminar antes de mover stable; cancel-in-progress permanece false.
     concurrency:
-      group: promote-stable-${{ vars.AWS_ROLE_ARN }}-${{ vars.AWS_REGION }}-${{ inputs.framework }}
+      group: stable-mutation-${{ vars.AWS_ROLE_ARN }}-${{ vars.AWS_REGION }}
       cancel-in-progress: false
     steps:
       # M16: sem credencial Git persistida — nenhum passo daqui faz push.

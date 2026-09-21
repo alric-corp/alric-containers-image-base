@@ -3,9 +3,10 @@
 
 Mede, com dados reais da API do GitHub (nada sintético):
 
-- idade da tag `stable` por framework — quando o ponteiro foi movido pela
-  última vez, lido do passo `Promote to stable` do job de promoção, que
-  distingue "promoveu" de "rodou e pulou por não ter candidato";
+- proxy de movimentação de `stable` por framework — job de lote aprovado
+  mais evidência da tentativa exata com read-back confirmado; o histórico
+  anterior usa o passo `Promote to stable` por framework. Nenhum deles é
+  consulta do estado atual do ECR;
 - última publicação bem-sucedida por framework, pelo job de publicação;
 - execução esperada x real do cron: as ocorrências que o cron deveria ter
   gerado na janela, quais viraram run e quais não — a ausência de run é o
@@ -30,11 +31,16 @@ o canal é a falha deste job e a tabela no resumo do run.
 """
 import argparse
 from datetime import datetime, timedelta, timezone
+import io
 import json
 from pathlib import Path
+import re
 import statistics
 import subprocess
 import sys
+import tempfile
+import threading
+import zipfile
 
 import yaml
 
@@ -42,6 +48,154 @@ ROOT = Path(__file__).resolve().parents[3]
 PUBLISH_JOB = 'Build & push {framework}'
 PROMOTE_JOB = 'Promote {framework}'
 PROMOTE_STEP = 'Promote to stable'
+BATCH_PROMOTE_JOB = 'Authorize and promote stable candidates'
+BATCH_ARCHIVE_LIMIT = 8 * 1024 * 1024
+DIGEST = re.compile(r'sha256:[0-9a-f]{64}')
+
+
+def batch_promotion_evidence(fetch, fetch_archive, repository, run):
+    """Read only the exact attempt's small outcome artifact, never scan ZIPs.
+
+    This is operational evidence, not an alternative release verifier. No
+    archive entry is extracted or executed. Missing/expired/ambiguous evidence
+    is a visible data gap; a successful aggregate job never implies promotion.
+    """
+    attempt = run.get('run_attempt')
+    if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
+        raise ValueError('run sem tentativa válida para evidência de promoção')
+    listing = fetch(f'repos/{repository}/actions/runs/{run["id"]}/artifacts?per_page=100')
+    if not isinstance(listing, dict) or not isinstance(listing.get('artifacts'), list):
+        raise ValueError('inventário de artifacts ausente')
+    artifacts = listing['artifacts']
+    if not all(isinstance(item, dict) for item in artifacts):
+        raise ValueError('inventário de artifacts inválido')
+    if listing.get('total_count') != len(artifacts):
+        raise ValueError('inventário de artifacts incompleto')
+    matches = [item for item in artifacts
+               if item.get('name') == f'promotion-batch-{attempt}']
+    if len(matches) != 1 or matches[0].get('expired') is not False:
+        raise ValueError('artifact de promoção ausente, ambíguo ou expirado')
+    artifact = matches[0]
+    size = artifact.get('size_in_bytes')
+    if not isinstance(size, int) or not 0 < size <= BATCH_ARCHIVE_LIMIT:
+        raise ValueError('artifact de promoção fora do limite de tamanho')
+    identifier = artifact.get('id')
+    if not isinstance(identifier, int) or identifier < 1:
+        raise ValueError('identificador de artifact inválido')
+    raw = fetch_archive(f'repos/{repository}/actions/artifacts/{identifier}/zip')
+    if not isinstance(raw, bytes) or len(raw) > BATCH_ARCHIVE_LIMIT:
+        raise ValueError('download do artifact ausente ou grande demais')
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            names = archive.namelist()
+            if len(names) != len(set(names)):
+                raise ValueError('artifact contém entradas duplicadas')
+
+            def document(path):
+                info = archive.getinfo(path)
+                if info.file_size > 1024 * 1024:
+                    raise ValueError('evidência excede limite de tamanho')
+                value = json.loads(archive.read(info))
+                if not isinstance(value, dict):
+                    raise ValueError('evidência não é objeto JSON')
+                return value
+
+            batch = document('promotion-batch.json')
+            frameworks, units = batch.get('frameworks'), batch.get('units')
+            if batch.get('schema_version') != 1 or not isinstance(frameworks, list) \
+                    or not frameworks or not all(isinstance(name, str) and
+                        re.fullmatch(r'[a-z0-9][a-z0-9-]*', name) for name in frameworks) \
+                    or len(set(frameworks)) != len(frameworks) \
+                    or not isinstance(units, list) or not all(isinstance(unit, list)
+                        and len(unit) in (1, 2) for unit in units):
+                raise ValueError('plano de promoção inválido')
+            flattened = [name for unit in units for name in unit]
+            if not all(isinstance(name, str) for name in flattened) \
+                    or sorted(flattened) != sorted(frameworks):
+                raise ValueError('unidades de promoção incompletas/ambíguas')
+            evidence = {name: document(f'promotion-{name}-{attempt}/promotion-evidence.json')
+                        for name in frameworks}
+    except (KeyError, json.JSONDecodeError, UnicodeError, zipfile.BadZipFile,
+            RuntimeError, NotImplementedError) as error:
+        raise ValueError('artifact de promoção inválido: ' + str(error)) from error
+    # This local marker is produced only after validating explicit unit state;
+    # an old artifact cannot inject it to bypass the failed-job restriction.
+    for item in evidence.values():
+        item.pop('_health_unit_complete', None)
+    outcomes = None
+    if 'unit_results' in batch:
+        results = batch['unit_results']
+        if not isinstance(results, list) or len(results) != len(units) \
+                or batch.get('prewrite_barrier_complete') is not True:
+            raise ValueError('resultados por unidade ou barreira pré-escrita ausentes')
+        outcomes = {}
+        for result in results:
+            if not isinstance(result, dict) or result.get('frameworks') not in units \
+                    or result.get('status') not in ('PENDING', 'AUTHORIZED', 'FAILED', 'SKIPPED') \
+                    or not isinstance(result.get('phase'), str) \
+                    or not isinstance(result.get('errors'), list) \
+                    or type(result.get('prewrite_authorized')) is not bool \
+                    or type(result.get('promoted')) is not bool:
+                raise ValueError('resultado por unidade inválido')
+            key = tuple(result['frameworks'])
+            if key in outcomes:
+                raise ValueError('resultados por unidade ambíguos')
+            outcomes[key] = result
+        if set(outcomes) != {tuple(unit) for unit in units}:
+            raise ValueError('resultados por unidade incompletos')
+
+    for unit in units:
+        outcome = outcomes[tuple(unit)] if outcomes is not None else None
+        if outcome is not None:
+            for name in unit:
+                item = evidence[name]
+                if item.get('unit_frameworks') != unit \
+                        or item.get('unit_status') != outcome['status'] \
+                        or item.get('unit_prewrite_authorized') is not outcome['prewrite_authorized'] \
+                        or item.get('promoted') is not outcome['promoted']:
+                    raise ValueError('evidência não corresponde ao resultado da unidade')
+            if outcome['status'] == 'SKIPPED':
+                if outcome['phase'] != 'complete' or outcome['promoted'] \
+                        or outcome['prewrite_authorized'] or outcome['errors'] \
+                        or any(evidence[name].get('skipped') is not True
+                               or evidence[name].get('write_status') != 'not_run'
+                               or evidence[name].get('read_back_status') != 'not_run'
+                               for name in unit):
+                    raise ValueError('skip da unidade não é limpo')
+                for name in unit:
+                    evidence[name]['_health_unit_complete'] = True
+        promoted = [name for name in unit if evidence[name].get('promoted') is True]
+        if not promoted:
+            continue
+        authorized = batch.get('prewrite_authorized') is True if outcome is None else (
+            outcome['status'] == 'AUTHORIZED' and outcome['phase'] == 'complete'
+            and outcome['prewrite_authorized'] and outcome['promoted'] and not outcome['errors'])
+        if len(promoted) != len(unit) or not authorized:
+            raise ValueError('promoção parcial ou sem autorização prévia no artifact')
+        for name in unit:
+            item = evidence[name]
+            digest = item.get('candidate_digest')
+            if outcome is not None and (
+                    item.get('trust_verified') is not True or item.get('scan_passed') is not True
+                    or item.get('write_status') != 'completed' or item.get('skipped') is not False
+                    or item.get('digest') != digest):
+                raise ValueError('gates da unidade promovida incompletos')
+            if not isinstance(digest, str) or not DIGEST.fullmatch(digest) \
+                    or item.get('read_back_status') != 'confirmed' \
+                    or item.get('stable_digest_observed') != digest:
+                raise ValueError('read-back de promoção não confirma o candidato')
+        if len(unit) == 2:
+            bindings = [evidence[name].get('pair_authorization') for name in unit]
+            binding = bindings[0]
+            if not isinstance(binding, dict) or binding != bindings[1] \
+                    or binding.get('status') != 'PAIR_BOUND' \
+                    or binding.get('runtime_digest') != evidence[unit[0]]['candidate_digest'] \
+                    or binding.get('dev_digest') != evidence[unit[1]]['candidate_digest']:
+                raise ValueError('autorização do par divergente no artifact')
+        if outcome is not None:
+            for name in unit:
+                evidence[name]['_health_unit_complete'] = True
+    return evidence
 
 
 def moment(timestamp):
@@ -190,7 +344,8 @@ def queue_health(runs):
     return distribution(delays)
 
 
-def framework_health(jobs_for, runs, frameworks, now, max_queries=40):
+def framework_health(jobs_for, runs, frameworks, now, max_queries=40,
+                     promotion_evidence_for=None):
     """Última publicação e última promoção efetiva de cada framework."""
     state = {framework: {} for framework in frameworks}
 
@@ -198,7 +353,7 @@ def framework_health(jobs_for, runs, frameworks, now, max_queries=40):
         return all('last_publication' in entry and 'last_promotion' in entry
                    for entry in state.values())
 
-    queries, truncated = 0, False
+    queries, truncated, evidence_gaps = 0, False, []
     for run in sorted(runs, key=lambda run: moment(run['created_at']), reverse=True):
         # Only these main events can publish or promote. PRs and dispatches
         # on other branches cannot contribute evidence and must not consume
@@ -213,7 +368,34 @@ def framework_health(jobs_for, runs, frameworks, now, max_queries=40):
             break
         jobs = jobs_for(run['id'])
         queries += 1
+        batch_jobs = [job for job in jobs if
+                      (job.get('name') or '').split(' / ')[-1] == BATCH_PROMOTE_JOB]
+        batch_job, batch_evidence = None, {}
+        if len(batch_jobs) == 1 and batch_jobs[0].get('conclusion') in ('success', 'failure') \
+                and batch_jobs[0].get('completed_at'):
+            batch_job = batch_jobs[0]
+            try:
+                if promotion_evidence_for is None:
+                    raise ValueError('leitor de evidência de promoção indisponível')
+                batch_evidence = promotion_evidence_for(run)
+            except (ValueError, OSError, subprocess.SubprocessError) as error:
+                evidence_gaps.append({'run_id': run['id'], 'reason': str(error)})
         for framework, entry in state.items():
+            evidence = batch_evidence.get(framework)
+            # A failed aggregate run can contain confirmed independent units.
+            # Historical artifacts without unit state retain success-job-only
+            # semantics; no failed/partial unit gets freshness from job status.
+            accepted = evidence is not None and batch_job and (
+                evidence.get('_health_unit_complete') is True
+                or (batch_job.get('conclusion') == 'success'
+                    and 'unit_status' not in evidence))
+            if accepted:
+                if 'last_promotion_checked' not in entry:
+                    entry['last_promotion_checked'] = batch_job.get('completed_at')
+                if evidence.get('promoted') is True and 'last_promotion' not in entry:
+                    entry['last_promotion'] = batch_job.get('completed_at')
+                    entry['promotion_run'] = run['id']
+                    entry['promotion_source'] = 'confirmed_batch_evidence'
             for job in jobs:
                 name = job.get('name') or ''
                 # Workflow reutilizável prefixa o nome do job chamador; o
@@ -240,6 +422,7 @@ def framework_health(jobs_for, runs, frameworks, now, max_queries=40):
         entry['stable_age_hours'] = age_hours(entry.get('last_promotion'), now)
         entry['promotion_checked_age_hours'] = age_hours(entry.get('last_promotion_checked'), now)
     return {'frameworks': state, 'job_queries': queries, 'truncated': truncated,
+            'promotion_evidence_gaps': evidence_gaps,
             'note': 'sem dado na janela não significa "nunca": ver truncated e a janela'}
 
 
@@ -290,6 +473,8 @@ def evaluate(metrics, policy, now):
         add('alert', 'job_queries_truncated', metrics['workflow'],
             f"busca de jobs parou em {metrics['frameworks']['job_queries']} run(s): aumente "
             '--max-job-queries ou reduza a janela para medir sem lacuna')
+    for gap in metrics['frameworks'].get('promotion_evidence_gaps') or []:
+        add('unknown', 'promotion_evidence', str(gap['run_id']), gap['reason'])
 
     for schedule in metrics['schedules']:
         limit = declared_schedules(policy)[schedule['cron']]['gap_alert_hours']
@@ -345,7 +530,7 @@ def workflow_created_at(fetch, repository, workflow_path):
     return None
 
 
-def collect(fetch, repository, policy, now, max_queries=40):
+def collect(fetch, repository, policy, now, max_queries=40, fetch_archive=None):
     window_days = policy['thresholds']['window_days']
     start = now - timedelta(days=window_days)
     schedules = declared_schedules(policy)
@@ -401,7 +586,10 @@ def collect(fetch, repository, policy, now, max_queries=40):
                       for cron in crons],
         'unattributed_scheduled_runs': unattributed,
         'queue': queue_health(window_runs),
-        'frameworks': framework_health(jobs_for, window_runs, frameworks, now, max_queries),
+        'frameworks': framework_health(
+            jobs_for, window_runs, frameworks, now, max_queries,
+            promotion_evidence_for=(lambda run: batch_promotion_evidence(
+                fetch, fetch_archive, repository, run)) if fetch_archive else None),
     }
 
 
@@ -506,6 +694,35 @@ def gh_json(path):
         return None
 
 
+def gh_archive(path):
+    """Bounded read-only artifact download; never extract archive entries."""
+    with tempfile.TemporaryFile() as output:
+        process = subprocess.Popen(['gh', 'api', path], stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL)
+        deadline = threading.Timer(120, process.kill)
+        deadline.start()
+        try:
+            size = 0
+            while True:
+                chunk = process.stdout.read(65536)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > BATCH_ARCHIVE_LIMIT:
+                    raise ValueError('download de promoção excede 8 MiB')
+                output.write(chunk)
+            if process.wait():
+                raise ValueError('download de promoção falhou ou excedeu timeout')
+            output.seek(0)
+            return output.read()
+        finally:
+            deadline.cancel()
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+            process.stdout.close()
+
+
 def workflow_files():
     # Retention of artifacts the shared workflow uploads is that library's own
     # policy, verified by its own CI (see alric-containers-reusable-workflows);
@@ -572,7 +789,8 @@ def main():
     if not args.repository:
         raise SystemExit('--repository é obrigatório no modo report')
     now = datetime.now(timezone.utc)
-    metrics = collect(gh_json, args.repository, policy, now, max_queries=args.max_job_queries)
+    metrics = collect(gh_json, args.repository, policy, now,
+                      max_queries=args.max_job_queries, fetch_archive=gh_archive)
     alerts = evaluate(metrics, policy, now)
     metrics['alerts'] = alerts
     markdown = render(metrics, alerts)

@@ -7,21 +7,19 @@ apontem para o mesmo release aprovado -- não apenas para dois builds que,
 cada um por conta própria, passaram na janela de soak. A tag de build
 (`ddmmaa-hhmm-r<run_id>-a<attempt>`) já carrega essa identidade: este módulo
 só extrai e compara o sufixo `r<run_id>-a<attempt>` das duas evidências de
-promoção (`reports/promotion-evidence.json` de cada matrix leg de
-`promote-stable.yml`), e falha fechado se ele não existir ou não bater.
+promoção (`promotion-<framework>-<attempt>/promotion-evidence.json` do
+batch de `promote-stable.yml`), e falha fechado se ele não existir ou não bater.
 
-Isto é verificação pós-seleção, não pré-seleção: `find_promotion_candidate.py`
-continua escolhendo cada candidato de forma independente, por repositório.
-Este módulo não corrige um par divergente nem impede a escrita de `stable`
-que a matrix já fez em paralelo -- ele registra e falha alto quando os dois
-resultados não correspondem ao mesmo run, para que a divergência seja
-investigada (e, se necessário, corrigida via `recover-stable.yml`) em vez de
-passar despercebida.
+`promotion_batch.py` invokes this binding check after candidate selection and
+BEFORE any stable write. The independent post-write verifier repeats it and
+additionally requires both writes and digest read-backs to be confirmed.
 """
 import argparse
 import json
 import re
 import sys
+
+from scripts.pipeline.release.find_promotion_candidate import is_build_tag
 
 
 RUN_SUFFIX = re.compile(r'-r([1-9][0-9]*)-a([1-9][0-9]*)$')
@@ -38,6 +36,7 @@ def run_identity(tag):
     require(match is not None,
             f"tag {tag!r} não contém identificador de run (formato "
             "ddmmaa-hhmm-r<run_id>-a<attempt>) -- binding não verificável")
+    require(is_build_tag(tag), 'tag de build inválida -- binding não verificável')
     return {'run_id': match[1], 'attempt': match[2]}
 
 

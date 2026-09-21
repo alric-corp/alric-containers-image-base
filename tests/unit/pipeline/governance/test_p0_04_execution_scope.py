@@ -80,7 +80,11 @@ class ScheduleSeparationTests(unittest.TestCase):
 
     def test_workflow_yml_has_only_the_daily_build_schedule(self):
         crons = [entry['cron'] for entry in self.workflow_triggers['schedule']]
-        self.assertEqual(crons, ['0 3 * * *'])
+        self.assertEqual(crons, ['23 3 * * *'])
+        policy = json.loads((ROOT / 'policies/operations/health.json').read_text())
+        self.assertEqual(policy['schedules'][crons[0]]['gap_alert_hours'], 30)
+        self.assertEqual(policy['schedules'][crons[0]]['workflow'], '.github/workflows/workflow.yml')
+        self.assertIn(crons[0], self.workflow['jobs']['build-base-images']['if'])
 
     def test_promote_stable_job_is_absent_from_workflow_yml(self):
         self.assertNotIn('promote-stable', self.workflow['jobs'])
@@ -116,8 +120,12 @@ class ScheduleSeparationTests(unittest.TestCase):
     def test_promote_job_reads_the_resolved_defaults_not_raw_inputs(self):
         promote = self.promotion['jobs']['promote']
         self.assertIn('resolve-defaults', promote['needs'])
-        self.assertEqual(promote['strategy']['matrix']['framework'],
-                         '${{ fromJSON(needs.resolve-defaults.outputs.frameworks) }}')
+        self.assertNotIn('strategy', promote)
+        execution = next(step for step in promote['steps'] if step.get('id') == 'candidate')
+        self.assertEqual(execution['env']['FRAMEWORKS'],
+                         '${{ needs.resolve-defaults.outputs.frameworks }}')
+        self.assertEqual(execution['env']['SOAK_HOURS'],
+                         '${{ needs.resolve-defaults.outputs.soak-hours }}')
 
     def test_promotion_only_changes_do_not_trigger_a_full_build(self):
         for event in ('push', 'pull_request'):
@@ -134,9 +142,7 @@ class ScheduleSeparationTests(unittest.TestCase):
                     .replace('${{ inputs.aws-role-arn || vars.AWS_ROLE_ARN }}',
                             '${{ vars.AWS_ROLE_ARN }}')
                     .replace('${{ inputs.aws-region || vars.AWS_REGION }}',
-                            '${{ vars.AWS_REGION }}')
-                    .replace('${{ matrix.framework }}', '${{ FRAMEWORK }}')
-                    .replace('${{ inputs.framework }}', '${{ FRAMEWORK }}'))
+                            '${{ vars.AWS_REGION }}'))
 
         self.assertEqual(normalize(promote_group), normalize(recover_group))
         self.assertFalse(self.promotion['jobs']['promote']['concurrency']['cancel-in-progress'])

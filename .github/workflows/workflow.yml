@@ -1,4 +1,4 @@
-name: Build & publish base images
+name: Factory Distroless - Build & publish
 
 on:
   # Allow-list (em vez de paths-ignore): só dispara pra mudanças que
@@ -40,7 +40,7 @@ on:
       - 'tests/runtime/**'
       - 'Makefile'
   schedule:
-    - cron: "0 3 * * *"   # build diário: 00:00 America/Sao_Paulo (03:00 UTC)
+    - cron: "23 3 * * *"   # build diário: 00:23 America/Sao_Paulo (03:23 UTC; fora do início da hora)
   workflow_dispatch:
     # P0-04: o primeiro E2E corporativo tem seleção fixa e auditável.
     # A capacidade FULL continua disponível nos workflows reutilizáveis;
@@ -103,7 +103,13 @@ jobs:
       frameworks: '["dotnet10", "dotnet10-dev", "go1-25", "go1-25-dev", "go1-26", "go1-26-dev", "java21", "java21-dev", "java25", "java25-dev", "nodejs22", "nodejs22-dev", "nodejs24", "nodejs24-dev", "python3-13", "python3-14"]'
 
   build-base-images:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * *')
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.schedule == '23 3 * * *')
+    # Hold one repository-wide slot across validation, contracts, publication
+    # and signing/attestation in the reusable call. PR validation is separate.
+    # Keep an active publisher running; GitHub may replace older pending jobs.
+    concurrency:
+      group: factory-build-publish-${{ github.repository }}
+      cancel-in-progress: false
     permissions:
       contents: read
       actions: read

@@ -255,9 +255,15 @@ def artifact_links(names, repository, run_id, ids):
         return '—'
     links = []
     for name in names:
-        if ids and name in ids and repository and run_id:
+        artifact = name
+        if ids and name not in ids:
+            kind, _ = artifact_name(name)
+            attempt = ATTEMPT.search(name)
+            if kind in ('promotion', 'promotion-scans') and attempt:
+                artifact = f'{kind}-batch-{attempt.group(1)}'
+        if ids and artifact in ids and repository and run_id:
             links.append(f'[{name}](https://github.com/{repository}/actions/runs/{run_id}'
-                         f'/artifacts/{ids[name]})')
+                         f'/artifacts/{ids[artifact]})')
         else:
             links.append(f'`{name}`')
     return '<br>'.join(links)

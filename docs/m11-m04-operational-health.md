@@ -33,6 +33,19 @@ evidências que os jobs já preservam como artifacts e escreve uma tabela no
 resultado do scan, CVEs sem correção, contrato funcional, publicação,
 promoção, motivo e links diretos para os artifacts de evidência.
 
+A promoção preserva os diretórios por framework dentro de dois bundles:
+`promotion-batch-<attempt>` (outcomes e snapshots ECR anteriores) e
+`promotion-scans-batch-<attempt>` (scans e versões das ferramentas), por 30
+dias. O download com merge mantém esses diretórios para os consumidores;
+os links do resumo apontam para o bundle da tentativa correspondente.
+O documento `promotion-batch.json` mantém `unit_results` com frameworks,
+status (`PENDING`, `AUTHORIZED`, `FAILED` ou `SKIPPED`), fase,
+`prewrite_authorized`, `promoted` e erros. `AUTHORIZED` só indica promoção
+concluída quando acompanhado de `promoted=true` e das confirmações por
+framework. `prewrite_barrier_complete` registra o término da avaliação de
+todas as unidades antes das escritas. Falha de uma unidade mantém os
+indicadores agregados false; não apaga o outcome de outra unidade confirmada.
+
 Três distinções que a tabela mantém separadas porque exigem ações
 diferentes:
 
@@ -66,10 +79,19 @@ não execução ou expiração; nenhuma delas é PASS.
 05:40 UTC, e `workflow_dispatch`, somente main). Consulta APIs GitHub com
 `contents: read` / `actions: read`, sem AWS. Não consulta o ECR. Mede:
 
-- **proxy de movimentação de `stable` por framework** — `stable_age_hours`
-  usa o `completed_at` do job `Promote <framework>` cujo passo `Promote to
-  stable` teve sucesso. Não exige sucesso do job inteiro nem consulta o
-  read-back posterior. Não é idade atual da tag ou prova de `promoted=true`.
+- **proxy de movimentação de `stable` por framework** — no fluxo atual,
+  `stable_age_hours` lê o artifact `promotion-batch-<attempt>` da tentativa
+  exata do job `Authorize and promote stable candidates`, concluído com
+  sucesso ou falha. Cada unidade exige autorização prévia, trust, scan,
+  escrita concluída, `promoted=true`, read-back `confirmed` e digest observado
+  igual ao candidato. Um par compilado exige ambos os membros e binding
+  coerente; um framework interpretado é uma unidade individual. Uma unidade
+  confirmada continua válida quando uma unidade independente falha:
+  a conclusão agregada não apaga o sucesso individual nem aprova o lote
+  inteiro. Skip, escrita parcial ou read-back falho não renovam a idade da
+  unidade afetada. Usa `completed_at` do job, sem consultar o ECR atual. Para
+  runs históricos, preserva o proxy anterior: passo `Promote to stable`
+  bem-sucedido em `Promote <framework>`, sem garantia de read-back final.
 - **última publicação bem-sucedida por framework** — pelo job de publicação
   daquele framework, não pela conclusão agregada do run (que fica vermelha
   por causa de um framework e não diz nada sobre os outros).
@@ -98,6 +120,16 @@ ou jobs. A atribuição de schedules também consulta jobs. Erro HTTP/JSON em
 erro de API de falta real de histórico. Conferir cobertura antes de interpretar
 “nenhum alerta”. Esses limites não foram alterados nesta entrega.
 
+Para os novos jobs de promoção, o coletor lê adicionalmente o inventário de
+artifacts do run e exige listagem completa (até 100), um único bundle não
+expirado da tentativa exata e JSON por framework. Download somente leitura
+com `actions: read`, sem novo IAM, limitado a 8 MiB/120s; cada documento tem
+limite de 1 MiB. O ZIP é lido como dados, nunca extraído ou executado. Scans
+grandes ficam no bundle separado e não são baixados pelo health. Evidência
+ausente, inválida, ambígua ou expirada aparece em `promotion_evidence_gaps`
+e alerta `unknown`; não atualiza a idade e não autoriza uma release. Uma
+promoção mais antiga confirmada continua visível com sua idade original.
+
 O mesmo workflow executa [`pin_inventory check`](../scripts/pipeline/governance/pin_inventory.py): além dos pins de ferramentas,
 compara a signing key Wolfi remota com o pin local. Divergência e endpoint
 indisponível falham health após preservar evidência; não atualizam a chave e
@@ -114,7 +146,7 @@ cancelamento ou upload com warning pode deixar evidence incompleta.
 
 A atribuição implementada sai de **qual grupo de jobs não ficou skipped**,
 não de adivinhar pelo horário de criação. Desde a separação build/promoção,
-cada cron agendado vive no seu próprio arquivo (`0 3 * * *` em
+cada cron agendado vive no seu próprio arquivo (`23 3 * * *` em
 `workflow.yml`, `17 * * * *` em `promote-stable.yml`, `40 5 * * *` em
 `pipeline-health.yml`), então hoje nenhum arquivo tem dois crons competindo
 pelo mesmo run — o mecanismo de "job não-skipped" continua existindo porque
@@ -130,13 +162,42 @@ um cron. Para cobertura/atraso, o código associa cada criação ao slot nominal
 anterior mais próximo. É uma aproximação: não comprova qual slot gerou um
 run muito atrasado. A lacuna usa `created_at`, não conclusão ou publicação.
 
+O build diário ocorre nominalmente às 03:23 UTC, aproximadamente 00:23 em
+America/Sao_Paulo. O cron permanece UTC. O minuto 23 evita a concentração de
+disparos no início da hora; não transforma o scheduler em garantia de prazo.
+`gap_alert_hours` permanece 30 para build/health e 12 para promoção.
+
 O health compartilha o **mesmo scheduler GitHub** que observa e não mede seu
 próprio cron de 05:40. Uma indisponibilidade compartilhada pode impedir a
 detecção tempestiva. Não existe monitoramento independente. Também não se
-deduz que 05:40 observou um ciclo completo: são 2h40 após o build nominal
-de 03:00, e o soak padrão é 6h. Os horários são configuração, não prazo.
+deduz que 05:40 observou um ciclo completo: são 2h17 após o build nominal
+de 03:23, e o soak padrão é 6h. Os horários são configuração, não prazo.
 O GitHub documenta possibilidade de atrasos e descarte sob carga em
 [schedule](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
+
+O caller candidato usa `factory-build-publish-${github.repository}` e
+`cancel-in-progress: false` até concluir build, contratos, publicação,
+assinatura e attestations. PRs de validação não compartilham esse lock.
+O [modelo de concorrência GitHub](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
+mantém por padrão somente um pendente, substituível por disparo posterior;
+o run ativo permanece. Não é promessa de executar cada trigger nem de ordem
+por dispatch. Ao analisar tempo com `ci_timing`, marque os jobs conhecidos
+como serializados: espera pelo lock não é exclusivamente fila de runner.
+
+Após o merge autorizado e o término do golden path congelado, a promoção
+deve permanecer ACTIVE, governada por `STABLE_PROMOTION_AUTHORIZED`. Este PR
+não reativa o workflow nem muda o valor false. Promoção e recuperação usam
+o mesmo lock `stable-mutation-<role>-<region>` e não cancelam o escritor ativo.
+Esse lock permanece inalterado: prioriza consistência das tags sobre a
+latência de recuperação de emergência. Recovery pode esperar atrás do lote
+de promoção ativo. O timeout de 60 minutos do job de promoção é um limite
+superior configurado de execução, não a espera esperada da recuperação nem
+garantia do tempo total em fila. Em emergência, inspecione o run ativo e sua
+evidência antes de decidir a ação operacional; não contorne o lock.
+Autorização do par e segurança de ambos vêm antes de qualquer tag write;
+as duas escritas ECR continuam sem atomicidade distribuída. Falha parcial
+mantém o par não promovido, evidencia o estado anterior e exige triagem pelo
+runbook de recuperação antes de declarar o par coerente.
 
 ### Snapshot histórico: a cadência nominal não é a cadência real
 

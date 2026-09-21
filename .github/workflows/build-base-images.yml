@@ -1,4 +1,4 @@
-name: Build base images (reusable)
+name: Factory Distroless - Build & publish (reusable)
 
 on:
   workflow_call:

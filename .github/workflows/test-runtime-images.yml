@@ -1,4 +1,4 @@
-name: Runtime contract
+name: Factory Distroless - Runtime contract
 
 on:
   workflow_call:

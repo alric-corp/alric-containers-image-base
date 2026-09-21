@@ -139,7 +139,7 @@ completo; **TO_VALIDATE** = depende do ambiente corporativo para ser provado.
 | Separação lógica Infra / Containers: roles distintas, capability model corporate-like documentado | PROVEN o desenho e a operação; `IAM_ENFORCED_SEPARATION = NO` — a role Containers do LAB ainda pode mais do que o publicador faz (ver [contrato IAM](iam-permission-contract.md)) |
 | No-drift pós-publicação/promoção/recovery (`terraform plan` → `No changes.`) | PROVEN |
 | Permissões destrutivas fora da role permanente; concessão temporária one-off auditada (`drift-remediation/`) | PROVEN |
-| CODEOWNERS + revisão obrigatória de code owner + checks `test`/`lint-workflows` + lints de hardening/pins/retenção/lote | PROVEN no LAB; `enforce_admins` desligado por decisão do sandbox — **TO_VALIDATE** como controle corporativo |
+| CODEOWNERS + revisão obrigatória de code owner + jobs `test`/`lint-workflows` + lints de hardening/pins/retenção/lote | PROVEN no LAB para contexts históricos; nomes exibidos agora `Unit & integration tests` / `Repository & workflow lint` exigem alinhamento dos required checks no merge autorizado. `enforce_admins` desligado por decisão do sandbox — **TO_VALIDATE** como controle corporativo |
 | Health diário, drift Wolfi, resumo por framework, `execution_scope` visível | PROVEN a detecção; destino externo de alerta `null` e SLA — **TO_VALIDATE** |
 | Renovate/Dependabot configurados | DESIGNED; ativação depende do administrador |
 

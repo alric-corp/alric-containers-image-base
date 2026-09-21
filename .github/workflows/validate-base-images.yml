@@ -1,5 +1,5 @@
 # Product entry point. Executors live in the versioned reusable-workflow repository.
-name: Validate base images
+name: Factory Distroless - Validate base images
 on:
   workflow_call:
     outputs:
