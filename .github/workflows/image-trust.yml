@@ -1,4 +1,4 @@
-name: Factory Distroless - Image trust
+name: Distroless - Image trust
 on:
   workflow_call:
     inputs:

@@ -1,4 +1,4 @@
-name: Factory Distroless - Build & publish (reusable)
+name: Distroless - Build engine
 
 on:
   workflow_call:

@@ -388,7 +388,7 @@ Detalhes e estado anterior estão no histórico Git.
 ## Gate de promoção para stable (canário de soak)
 
 A tag `stable` **não** é publicada no mesmo run que builda a imagem.
-**Factory Distroless - Promote stable** (`promote-stable.yml`) tem cron
+**Distroless - Promote stable** (`promote-stable.yml`) tem cron
 separado a cada hora (minuto 17). O estado operacional desejado após o merge
 autorizado é ACTIVE, com `STABLE_PROMOTION_AUTHORIZED` como kill switch
 permanente, sem default true. Este PR mantém a variável false e não reativa
@@ -452,7 +452,7 @@ A espera nominal após o soak (6h) até a próxima janela de promoção horária
 Se um build promovido apresentar problema depois da promoção (ex.: CVE divulgada após o soak, comportamento inesperado reportado por um consumidor), `recover-stable.yml` restaura `stable` para um digest anterior já aprovado — sem rebuild, sem bypass do gate de segurança:
 
 1. **Escolher o digest de destino.** Precisa ser um build já publicado no repositório (`aws ecr describe-images --repository-name image-base-<framework>`) — nunca um digest arbitrário. Idealmente um build que já foi `stable` antes.
-2. **Disparar o workflow** (Actions → "Factory Distroless - Recover stable" → Run workflow) com `framework`, `digest` (`sha256:...`) e `reason`. O job:
+2. **Disparar o workflow** (Actions → "Distroless - Recover stable" → Run workflow) com `framework`, `digest` (`sha256:...`) e `reason`. O job:
    - confirma que o digest existe no repositório;
    - reverifica plataformas (amd64+arm64), assinatura cosign e provenance GitHub com a **mesma política** de `promote-stable.yml` — um digest antigo que não passe nessa verificação não é restaurado;
    - reescaneia as duas arquiteturas com o banco de CVE atual — uma CVE nova no digest antigo bloqueia a recuperação; correção do gate por exceção exige política explícita, não esse workflow;
