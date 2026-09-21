@@ -55,8 +55,8 @@ Execução com as policies propostas é NOT RUN em todas as linhas.
 | O11 — promoção: List images in repository | describe-images; seletor usa JSON/quarentena locais | `ecr:DescribeImages` |
 | O12 — promoção/recovery: Verify platforms, signature and provenance | Buildx inspect; Cosign verify/referrers/bundle; gh attestation verify oci:// | `ecr:BatchGetImage`, `ecr:GetDownloadUrlForLayer`; provenance também usa API GitHub |
 | O13 — promoção/recovery: Re-scan; Report CVEs without an available fix | Trivy remoto lê manifests/configs/layers por arquitetura | `ecr:BatchGetImage`, `ecr:GetDownloadUrlForLayer` |
-| O14 — promoção: Promote to stable | Buildx imagetools create no mesmo repositório/índice | `ecr:BatchGetImage`, `ecr:PutImage` |
-| O15 — promoção: Confirm stable via independent ECR read-back | verify_stable → describe-images pela tag stable | `ecr:DescribeImages` |
+| O14 — promoção: Authorize candidates and promote stable pairs | promotion_batch autoriza o par e executa Buildx imagetools create no mesmo repositório/índice | `ecr:BatchGetImage`, `ecr:PutImage` |
+| O15 — promoção: read-back de cada membro do par | promotion_batch → verify_stable → describe-images pela tag stable | `ecr:DescribeImages` |
 | O16 — recovery: Confirm target digest; Capture current stable | describe-images por digest/tag | `ecr:DescribeImages` |
 | O17 — recovery: Restore stable | Buildx retag do índice existente no mesmo repositório | `ecr:BatchGetImage`, `ecr:PutImage` |
 | O18 — recovery: Confirm stable via independent read-back | describe-images pela tag, comparação explícita | `ecr:DescribeImages` |

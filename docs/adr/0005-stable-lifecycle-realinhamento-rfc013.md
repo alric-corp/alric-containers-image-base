@@ -70,12 +70,22 @@ de continuar adiando.
    (`STABLE_PROMOTION_AUTHORIZED`) permanece como controle operacional
    permanente, não como uma bandeira temporária a remover depois.
 
-5. **Binding runtime/dev.** Promover `image-base-go1-26:stable` e
-   `image-base-go1-26-dev:stable` de forma coordenada exige que os dois
-   venham do mesmo build run — novo `verify_promotion_pairs.py`, executado
-   depois que a matrix de promoção grava sua evidência, falha alto (sem
-   desfazer a escrita já feita) se os sufixos `r<run_id>-a<attempt>` das
-   duas tags não coincidirem.
+5. **Binding runtime/dev antes da escrita.** Os pares compilados são
+   derivados do catálogo. `promotion_batch.py` resolve ambos os candidatos,
+   exige soak/quarentena e a mesma identidade `r<run_id>-a<attempt>` via
+   `verify_promotion_pair.py`, verifica trust e re-scan de ambos antes de
+   permitir a primeira escrita de `stable`. Lote incompleto ou um membro
+   inelegível bloqueia as escritas. `verify_promotion_pairs.py` repete o
+   binding após as escritas/read-backs, sem substituir a autorização prévia.
+   O controle anterior apenas posterior fica registrado no histórico Git.
+   Framework interpretado mantém sua semântica individual.
+
+   ECR não oferece transação atômica entre duas tags. Falha da segunda
+   escrita ou de qualquer read-back mantém o par com `promoted=false`,
+   preserva os snapshots anteriores e exige triagem/recuperação do par
+   conhecido, sem rebuild. Promoção e recovery compartilham o lock por
+   role/região e não cancelam a execução ativa; escritores externos não
+   participam dessa exclusão.
 
 6. **Lifecycle de 7 dias**, com `stable` protegida por prioridade de regra
    (não por "não bater no padrão da build tag" — uma mesma imagem pode ter

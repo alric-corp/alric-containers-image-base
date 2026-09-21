@@ -15,6 +15,14 @@ def job(name, created, started, completed, steps=(), conclusion='success'):
 
 
 class BreakdownTests(unittest.TestCase):
+    def test_default_required_checks_match_current_ci_display_names(self):
+        the_run = run('2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z')
+        jobs = [job(name, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z',
+                    '2026-01-01T00:00:24Z') for name in
+                ('Unit & integration tests', 'Repository & workflow lint')]
+        result = breakdown(the_run, jobs)
+        self.assertEqual(result['required_checks'], {'seconds': 24, 'missing': []})
+
     def test_queued_and_duration_from_real_timestamps(self):
         the_run = run('2026-01-01T00:00:00Z', '2026-01-01T00:00:20Z')
         jobs = [job('test', '2026-01-01T00:00:00Z', '2026-01-01T00:00:05Z', '2026-01-01T00:00:20Z')]

@@ -206,8 +206,9 @@ pinado, inputs exatos e alinhamento de tooling dos dois chamadores do
 executor compartilhado são conferidos a partir dos arquivos deste
 repositório; a implementação, o contrato interno de inputs/outputs, o hardening e a retenção do
 executor compartilhado são verificados pelo CI do próprio
-`alric-containers-reusable-workflows`, não duplicados aqui. Os required
-checks do CI mantêm os nomes `test` e `lint-workflows`.
+`alric-containers-reusable-workflows`, não duplicados aqui. Os IDs dos jobs
+continuam `test` e `lint-workflows`; seus nomes exibidos são
+`Unit & integration tests` e `Repository & workflow lint`.
 
 ## Como as imagens são compostas
 
@@ -264,8 +265,19 @@ annotations e a publicação dos SBOMs originais por digest.
 O `workflow.yml` separa validação e publicação:
 
 - **PRs:** chamam `validate-base-images.yml`, com `contents: read`, sem OIDC, autenticação AWS ou push.
-- **Push na `main`, execução manual na `main` e schedule diário às 03:00 UTC:** chamam `build-base-images.yml`, que executa a mesma validação antes do job de publicação.
+- **Push na `main`, execução manual na `main` e schedule diário às 03:23 UTC:** chamam `build-base-images.yml`, que executa a mesma validação antes do job de publicação. O cron `23 3 * * *` corresponde aproximadamente a 00:23 em America/Sao_Paulo; permanece UTC e evita o início da hora, sem garantia de pontualidade do scheduler.
 - **Promoção:** roda a cada hora, no minuto 17, e seleciona somente candidatos que completaram o soak mínimo de seis horas desde o push.
+
+O caller `build-base-images` usa a concorrência
+`factory-build-publish-${github.repository}` com `cancel-in-progress: false`:
+um run candidato termina validação, contrato, publicação, assinatura e
+attestations antes de outro entrar. A validação de PR continua independente.
+GitHub mantém por padrão um único run pendente nesse grupo; um novo pendente
+pode substituir o anterior, mas não cancela o que está publicando. Isso não
+promete executar todos os disparos nem ordenação por hora de dispatch.
+A [referência de workflows reutilizáveis](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations#supported-keywords-for-jobs-that-call-a-reusable-workflow)
+permite concorrência no caller; os [limites de concorrência](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)
+definem o comportamento dos pendentes.
 
 ```mermaid
 flowchart TD
@@ -282,9 +294,10 @@ flowchart TD
     PUB --> T["Tabela por framework<br/>no resumo do run"]
     H["Schedule horário"] --> P["promote-stable.yml"]
     ECR --> P
-    P --> SOAK["Candidato elegível + re-scan<br/>amd64 + arm64 por digest"]
-    SOAK --> WRITE["stable escrita por referência"]
-    WRITE --> STABLE["ECR read-back confirma índice<br/>promoted=true"]
+    P --> PAIR["Resolver runtime + dev elegíveis<br/>autorizar mesma identidade run/attempt"]
+    PAIR --> SOAK["Trust + re-scan dos dois<br/>amd64 + arm64 por digest"]
+    SOAK --> WRITE["stable runtime e dev por referência<br/>sem transação atômica"]
+    WRITE --> STABLE["ECR read-back confirma ambos<br/>só então par promoted=true"]
 ```
 
 O build do CI usa `apko build` uma única vez por framework para produzir um layout OCI multi-arquitetura. [oci_artifact.py](scripts/pipeline/artifacts/oci_artifact.py) verifica hashes/tamanhos dos blobs, presença de amd64/arm64 e coerência dos configs, preservando o índice original em um layout transportável. [scan_images.py](scripts/pipeline/artifacts/scan_images.py) fornece ao Trivy uma visão com apenas o manifest da arquitetura solicitada e confere a arquitetura no relatório: o teste real mostrou que somente `--platform` não bastava para layouts OCI multi-arquitetura no Trivy 0.72.0.
@@ -310,11 +323,15 @@ QEMU serve ao job melange (comandos no sandbox do pacote) e ao contrato funciona
 
 ## Checks obrigatórios, revisão e endurecimento (M12/M16)
 
-A configuração de revisão da `main` no sandbox, conferida em 13/09/2026, exige:
+A configuração histórica de revisão da `main` no sandbox, conferida em
+13/09/2026, exigia os contexts `test` e `lint-workflows`. Os IDs desses jobs
+permanecem, mas seus contexts exibidos passam a ser os abaixo. A transição de
+required checks precisa acompanhar o merge autorizado sem remover gates;
+este PR não altera branch protection.
 
-- **`test`** — testes unitários de pipeline, contratos entre repositórios e
+- **`Unit & integration tests`** (ID `test`) — testes unitários de pipeline, contratos entre repositórios e
   integração de certificados, sem AWS.
-- **`lint-workflows`** — `actionlint` nos workflows mantidos à mão e checks offline de hardening,
+- **`Repository & workflow lint`** (ID `lint-workflows`) — `actionlint` nos workflows mantidos à mão e checks offline de hardening,
   pins, contratos compartilhados e políticas:
   [lint_workflow_hardening.py](scripts/pipeline/governance/lint_workflow_hardening.py)
   (checkout sem `persist-credentials: false`, expressão `${{ }}` dentro de um
@@ -334,6 +351,13 @@ A configuração de revisão da `main` no sandbox, conferida em 13/09/2026, exig
   [CODEOWNERS](.github/CODEOWNERS) (manifests, workflows, actions,
   automação, testes, políticas de dependência, `melange` e `Makefile`).
   Aprovações são descartadas a cada novo push.
+
+**CI - Repository checks** é um gate rápido em Linux: testes unitários e
+integração offline, sintaxe/hardening de workflows, pins imutáveis e contratos
+do repositório. Não publica imagens, assume roles de publicação, executa
+Terraform apply nem substitui o golden path hospedado. Windows/Git Bash é
+somente uma opção local. O destino corporativo previsto é Linux self-hosted
+efêmero no Kubernetes via Actions Runner Controller (ARC).
 
 `enforce_admins` está **desligado por decisão explícita do sandbox**; não há
 garantia de bloqueio para administradores. Habilitação e aceite no corporativo
@@ -363,20 +387,32 @@ Detalhes e estado anterior estão no histórico Git.
 
 ## Gate de promoção para stable (canário de soak)
 
-A tag `stable` **não** é publicada no mesmo run que builda a imagem. `promote-stable.yml` roda separadamente a cada hora (minuto 17) e só promove um build para `stable` se, decorrida a janela de soak, um **re-scan** do mesmo digest continuar limpo:
+A tag `stable` **não** é publicada no mesmo run que builda a imagem.
+**Factory Distroless - Promote stable** (`promote-stable.yml`) tem cron
+separado a cada hora (minuto 17). O estado operacional desejado após o merge
+autorizado é ACTIVE, com `STABLE_PROMOTION_AUTHORIZED` como kill switch
+permanente, sem default true. Este PR mantém a variável false e não reativa
+o workflow enquanto o golden path corrente estiver congelado.
+
+O fluxo autoriza os candidatos antes de qualquer escrita de `stable`:
 
 1. Lista as imagens do repositório ECR e seleciona o índice OCI/Docker com tag de build válida (`ddmmaa-hhmm`, com sufixo opcional `-r<run_id>-a<tentativa>`) mais recente entre os que já completaram o soak. Descarta o digest já marcado como `stable` e candidatos com data de push anterior ou igual à dele ([find_promotion_candidate.py](scripts/pipeline/release/find_promotion_candidate.py)). Um build recente ainda em soak não impede a seleção de outro elegível.
-2. Inspeciona o índice e exige exatamente `linux/amd64` e `linux/arm64`. Verifica assinatura cosign com identidade exata do workflow `build-base-images.yml@refs/heads/main` e provenance GitHub vinculada ao signer workflow e à source ref `refs/heads/main`. Falhas e evidências ausentes bloqueiam a promoção.
-3. Re-escaneia esse digest com Trivy em `linux/amd64` e `linux/arm64` (`--ignore-unfixed`). Uma falha em qualquer arquitetura bloqueia a promoção. Em seguida, um scan **separado e não-bloqueante** (`report_unfixed_cves.py`, M11) roda sem `--ignore-unfixed`: CVEs sem correção disponível continuam invisíveis pro gate de propósito (bloquear por algo que ninguém pode corrigir ainda não ajuda), mas passam a aparecer em `unfixed-cves-summary.json`, nunca falhando o job. Os relatórios e a referência por digest ficam nos artifacts `promotion-scans-<framework>-<tentativa>` por 30 dias.
-4. Se o re-scan continuar limpo, move a tag com `docker buildx imagetools create --tag <imagem>:stable <imagem>@<digest>` — retagueia o índice multi-arch por referência, sem baixar/re-subir camadas.
-5. Consulta o ECR novamente com `--image-ids imageTag=stable` e exige um único índice com digest exatamente igual ao candidato verificado. Só então registra `promoted=true`. Tag ausente, erro/timeout de consulta, resposta inválida/ambígua ou digest diferente falham fechado ([verify_stable.py](scripts/pipeline/release/verify_stable.py)).
+2. Resolve a relação runtime/`-dev` pelo catálogo. Ambos precisam estar presentes, fora de quarentena, elegíveis após o soak e com build tags do mesmo run/attempt. Lote incompleto, lado ainda em soak e identidades divergentes não permitem a primeira escrita. Framework interpretado mantém sua promoção independente.
+3. Para todos os candidatos autorizados, inspeciona os índices e exige exatamente `linux/amd64` e `linux/arm64`. Verifica assinatura cosign com identidade exata do workflow `build-base-images.yml@refs/heads/main` e provenance GitHub vinculada ao signer workflow e à source ref `refs/heads/main`. Re-escaneia ambos os digests com Trivy por arquitetura (`--ignore-unfixed`). Qualquer falha bloqueia as escritas. O relatório separado de CVEs sem correção continua informativo.
+4. Somente depois dos pré-requisitos de ambos, move runtime e depois dev com `docker buildx imagetools create --tag <imagem>:stable <imagem>@<digest>` — retag do índice por referência, sem rebuild/repack.
+5. Lê ambas as tags no ECR e exige exatamente os digests autorizados. Só após os dois read-backs confirmados o par recebe `promoted=true`. Tag ausente, erro/timeout, resposta ambígua ou digest diferente falham fechado; a verificação final do par permanece.
 
-O artifact final `promotion-<framework>-<tentativa>` registra `candidate_digest`,
+O diretório de evidência `promotion-<framework>-<tentativa>` registra `candidate_digest`,
 `stable_digest_observed`, `read_back_status` (`confirmed`, `mismatch`, `failed`
 ou `not_run`) e `promoted` em `promotion-evidence.json`. O campo `digest`
 continua identificando o candidato; `stable_digest` preserva a observação
 anterior à escrita. Falha de read-back não desfaz automaticamente uma tag já
 movida: consulte o estado e siga o runbook de recuperação se necessário.
+As duas escritas ECR não são uma transação atômica. Se a primeira funcionar
+e a segunda falhar, o par falha, mantém `promoted=false` e preserva a
+evidência do estado anterior e de cada escrita. O operador deve restaurar o
+par anterior conhecido pelo workflow de recuperação, sujeito aos seus gates;
+não reconstruir nem apagar a evidência para esconder uma escrita parcial.
 O read-back confirma o estado naquele instante; escritores externos podem
 alterá-lo depois. Aceite hospedado P1-01: **PASS**, observado em `go1-26` e
 `go1-26-dev` no run `34768459323`, commit `e3ed682`, com read-back confirmado
@@ -384,7 +420,7 @@ e igualdade dos digests.
 
 Isso é um canário de **tempo/CVE**, não um canário de tráfego real contra aplicações consumidoras — não há apps de referência nesta POC pra validar contra. Validar contra consumidores reais (deploy canário, smoke test de aplicação) é responsabilidade de cada pipeline de deploy downstream. O gate reavalia vulnerabilidades conhecidas no momento do scan, nas severidades configuradas e com correção disponível; ele não garante ausência de vulnerabilidades durante toda a janela de soak.
 
-A seleção inicial usa metadados ECR; o gate posterior valida plataformas, assinatura e provenance por digest. O verificador espera que o workflow assinante esteja no mesmo repositório GitHub informado ao script; chamadas externas precisam alinhar explicitamente essa política à localização do workflow assinante. A seleção e a atualização de `stable` são serializadas por role/região/framework dentro do mesmo repositório GitHub, tanto no dispatch direto quanto no workflow reusável; atualizações externas não participam desse controle. Os testes dos scripts rodam em PRs/pushes que alterem os scripts e antes da autenticação AWS na promoção. Para executá-los localmente, sem Docker ou AWS:
+A seleção inicial usa metadados ECR; o gate posterior valida plataformas, assinatura e provenance por digest. O verificador espera que o workflow assinante esteja no mesmo repositório GitHub informado ao script; chamadas externas precisam alinhar explicitamente essa política à localização do workflow assinante. Promoção e recovery compartilham `stable-mutation-<role>-<region>` dentro do mesmo repositório GitHub, sem cancelamento de execução ativa. O lock cobre seleção, autorização e escritas, inclusive os dois membros do par; escritores externos não participam. Os testes dos scripts rodam em PRs/pushes que alterem os scripts e antes da autenticação AWS na promoção. Para executá-los localmente, sem Docker ou AWS:
 
 ```bash
 python3 -B -m unittest discover -s tests/unit -t . -p 'test_*.py' -v

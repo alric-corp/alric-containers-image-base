@@ -22,6 +22,8 @@ import statistics
 import subprocess
 import sys
 
+REQUIRED_CHECKS = ('Unit & integration tests', 'Repository & workflow lint')
+
 
 def gh_api(path):
     output = subprocess.run(['gh', 'api', path], check=True, capture_output=True, text=True).stdout
@@ -70,7 +72,7 @@ def required_checks_seconds(run, jobs, required):
     return {'seconds': (max(completions) - _parse(run['created_at'])).total_seconds(), 'missing': []}
 
 
-def breakdown(run, jobs, dependent=(), serialized=(), required=('test', 'lint-workflows')):
+def breakdown(run, jobs, dependent=(), serialized=(), required=REQUIRED_CHECKS):
     dependent, serialized, required = set(dependent), set(serialized), set(required)
     return {
         'run_id': run['id'],
@@ -150,8 +152,9 @@ def main():
                          help='comma-separated job display names known to have `needs`')
     parser.add_argument('--serialized', default='',
                          help='comma-separated job display names known to run in a concurrency group')
-    parser.add_argument('--required', default='test,lint-workflows',
-                         help='comma-separated required-check job display names')
+    parser.add_argument('--required', default=','.join(REQUIRED_CHECKS),
+                         help='comma-separated required-check display names; '
+                              'use test,lint-workflows for historical runs')
     args = parser.parse_args()
     dependent, serialized, required = _csv(args.dependent), _csv(args.serialized), _csv(args.required)
     breakdowns = [fetch_breakdown(args.repo, run_id, dependent, serialized, required)

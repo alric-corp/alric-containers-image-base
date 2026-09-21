@@ -55,37 +55,54 @@ flowchart LR
     operations --> runtime
     runtime --> artifacts
     release --> artifacts
+    release -->|runtime_images: plano canônico de pares| runtime
+    release -->|validate_inputs| catalog
     artifacts --> governance
-    catalog
 ```
 
 `catalog` e `governance` não dependem de outros domínios. `artifacts/build_image`
 consulta somente a verificação offline de `governance/wolfi_trust` antes de
 lock/build, compartilhando o mesmo pin do inventory sem duplicar a policy.
 `operations` pode consultar o plano de runtime e os contratos de governança.
+`release` reutiliza somente `runtime/runtime_images` para resolver os pares
+canônicos e `catalog/validate_inputs` para validar escopo/soak; o teste limita
+essas duas dependências aos módulos nomeados, sem abrir todo o domínio.
 Imports dentro do próprio domínio são permitidos. Nova dependência exige uma
 mudança explícita nesta documentação e no teste de arquitetura.
 
 ## Workflow responsibilities
 
-Cada workflow ativo representa uma capacidade permanente da plataforma. Não
-há workflow de laboratório, experimento ou evidência pontual na árvore: o que
-foi investigado e encerrado vive no histórico Git.
+Cada workflow ativo representa uma capacidade permanente da plataforma.
+`image-trust-scope.yml` mantém separada a regressão hospedada de orquestração
+de trust que já detectou um defeito real; ela não é incorporada ao CI rápido.
 
 | Categoria | Papel | Workflows |
 | --- | --- | --- |
-| CI | Verificação rápida e obrigatória de todo PR e push: testes de domínio e actionlint. Não toca AWS | `ci.yml` |
+| CI | Gate rápido obrigatório em Linux: unit, integração offline, sintaxe/hardening, pins imutáveis e contratos do repositório. Sem publicação, role AWS de publicação, apply ou golden path hospedado | `ci.yml` |
 | Build | Compor, validar e publicar o artifact: build once com Melange/Apko, scan nas duas arquiteturas e contrato funcional antes de qualquer publicação | `workflow.yml` (entrypoint), `build-base-images.yml`, `validate-base-images.yml`, `test-runtime-images.yml` |
-| Security | Gate de confiança da imagem: integração das CAs e do trust store sobre a imagem candidata, sem credencial AWS | `image-trust.yml` |
-| Release | Promover `stable` só depois de soak, verificação de assinatura/provenance e re-scan, com read-back confirmando o digest | `promote-stable.yml` |
+| Security | Gate de confiança da imagem e regressão hospedada de escopo, sem credencial AWS | `image-trust.yml`, `image-trust-scope.yml` |
+| Release | Autorizar runtime/dev antes de qualquer escrita; exigir soak, assinatura/provenance e re-scan de ambos, depois read-back dos dois digests | `promote-stable.yml` |
 | Recovery | Restaurar `stable` para um digest já publicado, com as mesmas verificações e sem bypass | `recover-stable.yml` |
 | Operations | Saúde do pipeline: idade de publicação/`stable`, lacunas de cron e disponibilidade dos pins | `pipeline-health.yml` |
 | Automation | Atualização de dependências por revisão, sem alterar pins fora de PR | `.github/dependabot.yml`, `renovate.json` |
 
-`workflow.yml` é o único entrypoint agendado/por evento; os demais do grupo
-Build são `workflow_call` chamados por ele. `build-base-images.yml` também é
+`workflow.yml` é o entrypoint agendado/por evento do grupo Build; os demais do
+grupo são `workflow_call` chamados por ele. `build-base-images.yml` também é
 a identidade de assinatura verificada na promoção — seu nome de arquivo é
 contrato, não estética.
+
+Os nomes de exibição organizam a UI em `CI - Repository checks`,
+`Factory Distroless - …`, `Infra Terraform - …` e `Ops - Pipeline health`.
+Arquivos e IDs de jobs permanecem estáveis. O caller `build-base-images`
+serializa todo o build/publicação em `factory-build-publish-${github.repository}`,
+com `cancel-in-progress: false`, incluindo validação, contratos, assinatura e
+attestations. PRs de validação ficam fora desse lock. É o controle dos runs
+disparados pelo entrypoint deste repositório, não um lock global para callers
+externos da capacidade reutilizável.
+
+O CI atual executa em Linux. Windows/Git Bash é opcional apenas para testes
+locais. O destino corporativo será Linux self-hosted efêmero em Kubernetes
+via Actions Runner Controller; essa documentação não adiciona runners.
 
 ## Fronteira entre produto e workflows compartilhados
 
@@ -173,8 +190,11 @@ integração e o lint local (hardening, origem/SHA/tooling dos chamadores,
 pins, retenção e lote padrão) e `make lint-workflows` roda actionlint nos
 YAMLs deste repositório. Nenhum dos dois clona ou abre outro repositório: um
 `git clone` deste repositório sozinho basta. O CI usa os mesmos alvos e
-preserva os nomes dos checks `test` e `lint-workflows`; os testes de
-certificados executam uma única vez.
+preserva os IDs `test` e `lint-workflows`, com os nomes exibidos
+`Unit & integration tests` e `Repository & workflow lint`; os testes de
+certificados executam uma única vez. Required check contexts acompanham os
+nomes exibidos e precisam ser alinhados no merge autorizado, sem retirar
+essas exigências.
 
 `CODEOWNERS` cobre os domínios e também arquivos novos pelo dono padrão.
 Os testes verificam que mudanças nos insumos movidos continuam cobertas pelos

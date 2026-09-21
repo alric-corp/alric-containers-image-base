@@ -15,6 +15,12 @@ DEPENDENCIES = {
     'runtime': {'artifacts'}, 'release': {'artifacts'},
     'operations': {'governance', 'runtime'},
 }
+# Promotion reuses the canonical pair model and input validation without
+# opening release to every implementation module in those domains.
+MODULE_DEPENDENCIES = {
+    'release': {'scripts.pipeline.runtime.runtime_images',
+                'scripts.pipeline.catalog.validate_inputs'},
+}
 
 
 class RepositoryLayoutTests(unittest.TestCase):
@@ -65,7 +71,9 @@ class RepositoryLayoutTests(unittest.TestCase):
                     self.assertNotIn(name, module_names, f'{path}: use qualified imports')
                     if name.startswith('scripts.pipeline.'):
                         target = name.split('.')[2]
-                        self.assertIn(target, DEPENDENCIES[domain] | {domain}, path)
+                        self.assertTrue(target in DEPENDENCIES[domain] | {domain}
+                                        or name in MODULE_DEPENDENCIES.get(domain, set()),
+                                        f'{path}: undeclared dependency {name}')
 
     def test_image_pipeline_triggers_cover_migrated_sources(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/workflow.yml').read_text())

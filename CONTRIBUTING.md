@@ -25,6 +25,22 @@ sintéticos e os downloads são substituídos por fixtures; não usa AWS.
 `make lint-workflows` usa actionlint e seu ShellCheck, se disponível. O CI
 executa actionlint em uma imagem fixada por digest.
 
+O workflow **CI - Repository checks** é o gate rápido obrigatório em Linux:
+testes unitários, integração offline, sintaxe/hardening de GitHub Actions,
+governança de dependências imutáveis e contratos do repositório. Não publica
+imagens, assume roles AWS de publicação, aplica Terraform nem executa o
+golden path hospedado. Windows/Git Bash é uma opção para testes locais de
+desenvolvimento; não há CI hospedado Windows. O destino corporativo previsto
+é Linux em runners self-hosted efêmeros no Kubernetes, via Actions Runner
+Controller (ARC).
+
+Os IDs dos jobs continuam `test` e `lint-workflows`; os nomes exibidos são
+`Unit & integration tests` e `Repository & workflow lint`. GitHub usa esses
+nomes exibidos nos check runs: a configuração de required checks deve ser
+alinhada na entrada aprovada em main, mantendo a exigência dos dois gates.
+O analisador `ci_timing` usa os nomes atuais por padrão; para histórico,
+informe `--required test,lint-workflows` explicitamente.
+
 ## Dependência revisada do executor compartilhado
 
 A origem aprovada de `alric-corp/alric-containers-reusable-workflows` fica em
@@ -66,8 +82,9 @@ validados. Eles são executados no pipeline de imagens e não fazem parte do
 - Altere cada regra em seu módulo canônico; adaptadores não recebem lógica.
 - Uma nova dependência entre domínios exige justificar a fronteira e atualizar
   o teste de arquitetura. Não use `sys.path` para contorná-la.
-- Mantenha os nomes dos required checks e a cobertura dos filtros de build ao
-  mover arquivos. Novos testes precisam ser descobertos pelo comando do CI.
+- Preserve os IDs dos jobs e a cobertura dos filtros de build ao mover
+  arquivos. Mudança de nome exibido exige alinhar os required checks sem
+  remover gates. Novos testes precisam ser descobertos pelo comando do CI.
 - Atualize os dois workflows compartilhados juntos, por SHA completo; confira
   também o SHA da action Trivy usado em promoção e recuperação.
 - Políticas e pins passam por PR e revisão dos code owners. Não versione
