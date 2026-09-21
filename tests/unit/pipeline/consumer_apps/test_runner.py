@@ -103,6 +103,21 @@ class ExecutionEvidenceTests(unittest.TestCase):
             self.assertIn('compiler reached source', diagnostic)
             self.assertIn('last diagnostic', diagnostic)
 
+    def test_cached_multiarch_index_inspection_selects_requested_platform(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(runner.Runner, 'command', return_value='[{"Architecture":"arm64","Os":"linux"}]') as command:
+            harness = runner.Runner(Path(directory))
+            candidate = inventory()['candidates']['go1-26']
+            ref = candidate['image_ref'].split('@')[0] + '@' + candidate['platforms']['arm64']
+            harness.inspect('image', ref, 'linux/arm64')
+            self.assertEqual(command.call_args.args, ('docker', 'image', 'inspect', ref))
+            # Single-platform manifest inspection works on Docker API 1.48 too.
+            self.assertNotIn('--platform', command.call_args.args)
+            with self.assertRaises(ValueError):
+                harness.inspect('image', ref, 'linux/amd64')
+            with self.assertRaises(ValueError):
+                harness.inspect('image', inventory()['candidates']['go1-26']['image_ref'])
+
     def test_actual_run_builds_offline_and_starts_hardened_target_platform(self):
         source = inventory(); expected = good_result('nodejs22', 'arm64')
         commands = []
@@ -120,9 +135,10 @@ class ExecutionEvidenceTests(unittest.TestCase):
                 return runner.SHUTDOWN_MARKER
             return ''
         inspections = 0
-        def inspect(_self, kind, name):
+        def inspect(_self, kind, name, platform=None):
             nonlocal inspections
             if kind == 'image':
+                self.assertEqual(platform, 'linux/arm64')
                 return {'Architecture': 'arm64', 'Os': 'linux', 'Config': {'User': '10000'},
                         'RootFS': {'Layers': ['base']}, 'Id': 'sha256:' + 'a' * 64}
             inspections += 1
@@ -142,6 +158,11 @@ class ExecutionEvidenceTests(unittest.TestCase):
         self.assertIn('--load', build); self.assertNotIn('--push', build)
         self.assertIn('BUILD_IMAGE=' + source['candidates']['nodejs22-dev']['image_ref'], build)
         self.assertIn('RUNTIME_IMAGE=' + source['candidates']['nodejs22']['image_ref'], build)
+        pulls = [c for c in commands if c[1] == 'pull']
+        for framework in ('nodejs22', 'nodejs22-dev'):
+            candidate = source['candidates'][framework]
+            manifest_ref = candidate['image_ref'].split('@')[0] + '@' + candidate['platforms']['arm64']
+            self.assertTrue(any(c[-1] == manifest_ref for c in pulls))
         run = next(c for c in commands if c[1] == 'run')
         for option in ('--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges'):
             self.assertIn(option, run)

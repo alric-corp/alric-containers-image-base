@@ -155,10 +155,14 @@ class Runner:
             raise RuntimeError(f'{args[0]} {args[1]} failed ({completed.returncode}): {completed.stderr[-2000:]}')
         return completed.stdout.strip()
 
-    def inspect(self, kind, name):
+    def inspect(self, kind, name, platform=None):
+        if kind == 'image' and platform not in ('linux/amd64', 'linux/arm64'):
+            raise ValueError('image inspection requires the exact target platform')
         documents = json.loads(self.command('docker', kind, 'inspect', name))
         if len(documents) != 1:
             raise ValueError('Docker inspection is ambiguous')
+        if kind == 'image' and documents[0]['Os'] + '/' + documents[0]['Architecture'] != platform:
+            raise ValueError('inspected image platform differs from the execution platform')
         return documents[0]
 
 
@@ -194,11 +198,18 @@ def execute(inventory, framework, architecture, reports):
         result['execution_mode'] = execution_mode(daemon['Architecture'], architecture)
         for candidate in (runtime, dev):
             if candidate:
-                harness.command('docker', 'pull', '--platform', result['platform'], candidate['image_ref'], timeout=600)
-                base = harness.inspect('image', candidate['image_ref'])
+                # Inspect the exact single-platform child from the verified
+                # index. Inspecting a cached multiarch index can silently choose
+                # the daemon's native platform, and --platform on image inspect
+                # requires API 1.49 (newer than the current hosted Docker 28.0).
+                # Dockerfile FROM still uses the source-run index by digest.
+                manifest_ref = candidate['image_ref'].split('@')[0] + '@' + candidate['platforms'][architecture]
+                harness.command('docker', 'pull', '--platform', result['platform'], manifest_ref, timeout=600)
+                base = harness.inspect('image', manifest_ref, result['platform'])
                 if base['Architecture'] != architecture or base['Os'] != 'linux':
                     raise ValueError('pulled candidate platform does not match execution platform')
-        runtime_base = harness.inspect('image', runtime['image_ref'])
+                if candidate is runtime:
+                    runtime_base = base
         project = ROOT / 'tests/consumer-apps' / expected['family']
         build = ['docker', 'buildx', 'build', '--load', '--pull', '--no-cache', '--network', 'none',
                  '--platform', result['platform'], '--provenance=false', '--sbom=false',
@@ -211,7 +222,7 @@ def execute(inventory, framework, architecture, reports):
         harness.command(*build, timeout=1200)
         result['build_seconds'] = round(time.monotonic() - began, 3)
         result['build_passed'] = True
-        derived = harness.inspect('image', image)
+        derived = harness.inspect('image', image, result['platform'])
         base_layers = runtime_base['RootFS']['Layers']
         if (not base_layers or derived['RootFS']['Layers'][:len(base_layers)] != base_layers
                 or derived['Config']['User'] != runtime_base['Config']['User']
