@@ -118,15 +118,68 @@ def batch_promotion_evidence(fetch, fetch_archive, repository, run):
     except (KeyError, json.JSONDecodeError, UnicodeError, zipfile.BadZipFile,
             RuntimeError, NotImplementedError) as error:
         raise ValueError('artifact de promoção inválido: ' + str(error)) from error
+    # This local marker is produced only after validating explicit unit state;
+    # an old artifact cannot inject it to bypass the failed-job restriction.
+    for item in evidence.values():
+        item.pop('_health_unit_complete', None)
+    outcomes = None
+    if 'unit_results' in batch:
+        results = batch['unit_results']
+        if not isinstance(results, list) or len(results) != len(units) \
+                or batch.get('prewrite_barrier_complete') is not True:
+            raise ValueError('resultados por unidade ou barreira pré-escrita ausentes')
+        outcomes = {}
+        for result in results:
+            if not isinstance(result, dict) or result.get('frameworks') not in units \
+                    or result.get('status') not in ('PENDING', 'AUTHORIZED', 'FAILED', 'SKIPPED') \
+                    or not isinstance(result.get('phase'), str) \
+                    or not isinstance(result.get('errors'), list) \
+                    or type(result.get('prewrite_authorized')) is not bool \
+                    or type(result.get('promoted')) is not bool:
+                raise ValueError('resultado por unidade inválido')
+            key = tuple(result['frameworks'])
+            if key in outcomes:
+                raise ValueError('resultados por unidade ambíguos')
+            outcomes[key] = result
+        if set(outcomes) != {tuple(unit) for unit in units}:
+            raise ValueError('resultados por unidade incompletos')
+
     for unit in units:
+        outcome = outcomes[tuple(unit)] if outcomes is not None else None
+        if outcome is not None:
+            for name in unit:
+                item = evidence[name]
+                if item.get('unit_frameworks') != unit \
+                        or item.get('unit_status') != outcome['status'] \
+                        or item.get('unit_prewrite_authorized') is not outcome['prewrite_authorized'] \
+                        or item.get('promoted') is not outcome['promoted']:
+                    raise ValueError('evidência não corresponde ao resultado da unidade')
+            if outcome['status'] == 'SKIPPED':
+                if outcome['phase'] != 'complete' or outcome['promoted'] \
+                        or outcome['prewrite_authorized'] or outcome['errors'] \
+                        or any(evidence[name].get('skipped') is not True
+                               or evidence[name].get('write_status') != 'not_run'
+                               or evidence[name].get('read_back_status') != 'not_run'
+                               for name in unit):
+                    raise ValueError('skip da unidade não é limpo')
+                for name in unit:
+                    evidence[name]['_health_unit_complete'] = True
         promoted = [name for name in unit if evidence[name].get('promoted') is True]
         if not promoted:
             continue
-        if len(promoted) != len(unit) or batch.get('prewrite_authorized') is not True:
+        authorized = batch.get('prewrite_authorized') is True if outcome is None else (
+            outcome['status'] == 'AUTHORIZED' and outcome['phase'] == 'complete'
+            and outcome['prewrite_authorized'] and outcome['promoted'] and not outcome['errors'])
+        if len(promoted) != len(unit) or not authorized:
             raise ValueError('promoção parcial ou sem autorização prévia no artifact')
         for name in unit:
             item = evidence[name]
             digest = item.get('candidate_digest')
+            if outcome is not None and (
+                    item.get('trust_verified') is not True or item.get('scan_passed') is not True
+                    or item.get('write_status') != 'completed' or item.get('skipped') is not False
+                    or item.get('digest') != digest):
+                raise ValueError('gates da unidade promovida incompletos')
             if not isinstance(digest, str) or not DIGEST.fullmatch(digest) \
                     or item.get('read_back_status') != 'confirmed' \
                     or item.get('stable_digest_observed') != digest:
@@ -139,6 +192,9 @@ def batch_promotion_evidence(fetch, fetch_archive, repository, run):
                     or binding.get('runtime_digest') != evidence[unit[0]]['candidate_digest'] \
                     or binding.get('dev_digest') != evidence[unit[1]]['candidate_digest']:
                 raise ValueError('autorização do par divergente no artifact')
+        if outcome is not None:
+            for name in unit:
+                evidence[name]['_health_unit_complete'] = True
     return evidence
 
 
@@ -315,7 +371,8 @@ def framework_health(jobs_for, runs, frameworks, now, max_queries=40,
         batch_jobs = [job for job in jobs if
                       (job.get('name') or '').split(' / ')[-1] == BATCH_PROMOTE_JOB]
         batch_job, batch_evidence = None, {}
-        if len(batch_jobs) == 1 and batch_jobs[0].get('conclusion') == 'success':
+        if len(batch_jobs) == 1 and batch_jobs[0].get('conclusion') in ('success', 'failure') \
+                and batch_jobs[0].get('completed_at'):
             batch_job = batch_jobs[0]
             try:
                 if promotion_evidence_for is None:
@@ -325,7 +382,14 @@ def framework_health(jobs_for, runs, frameworks, now, max_queries=40,
                 evidence_gaps.append({'run_id': run['id'], 'reason': str(error)})
         for framework, entry in state.items():
             evidence = batch_evidence.get(framework)
-            if evidence is not None and batch_job:
+            # A failed aggregate run can contain confirmed independent units.
+            # Historical artifacts without unit state retain success-job-only
+            # semantics; no failed/partial unit gets freshness from job status.
+            accepted = evidence is not None and batch_job and (
+                evidence.get('_health_unit_complete') is True
+                or (batch_job.get('conclusion') == 'success'
+                    and 'unit_status' not in evidence))
+            if accepted:
                 if 'last_promotion_checked' not in entry:
                     entry['last_promotion_checked'] = batch_job.get('completed_at')
                 if evidence.get('promoted') is True and 'last_promotion' not in entry:

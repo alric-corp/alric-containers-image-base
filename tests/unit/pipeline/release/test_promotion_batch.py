@@ -13,6 +13,7 @@ import yaml
 
 from scripts.pipeline.artifacts.oci_artifact import INDEX
 from scripts.pipeline.release import promotion_batch as batch
+from scripts.pipeline.release import verify_promotion_pairs as pair_safety_net
 from scripts.pipeline.release.verify_promotion_pairs import verify_completed_pair
 
 
@@ -36,11 +37,14 @@ def image(digest, tag=TAG, age=8, stable=False):
 class BatchAuthorizationTests(unittest.TestCase):
     def execute(self, requested=None, inventories=None, quarantine=None,
                 trust_failure=None, scan_failure=None, write_failure=None,
-                readback_mismatch=None, inventory_error=None):
+                readback_mismatch=None, inventory_error=None, selection_error=None,
+                verify_safety_net=False, cli=False, write_failure_committed=False):
         requested = requested or PAIR
         inventories = inventories if inventories is not None else {
             PAIR[0]: [image(RUNTIME)], PAIR[1]: [image(DEV)]}
         events, stable = [], {}
+        real_select, real_pair = batch.select_candidate, batch.verify_pair
+        inventory_names = {}
         for name, entries in inventories.items():
             prior = [entry['imageDigest'] for entry in entries if 'stable' in entry['imageTags']]
             if prior:
@@ -54,7 +58,21 @@ class BatchAuthorizationTests(unittest.TestCase):
             events.append(('inventory', name))
             if inventory_error == name:
                 raise ValueError('ambiguous inventory')
-            return {'imageDetails': inventories.get(name, [])}
+            details = inventories.get(name, [])
+            inventory_names[id(details)] = name
+            return {'imageDetails': details}
+
+        def select(details, *args, **kwargs):
+            name = inventory_names[id(details)]
+            events.append(('select', name))
+            if selection_error == name:
+                raise ValueError('candidate selection rejected')
+            return real_select(details, *args, **kwargs)
+
+        def authorize(*members):
+            if all(member['write_status'] == 'not_run' for member in members):
+                events.append(('authorize', members[0]['repository'].removeprefix('image-base-')))
+            return real_pair(*members)
 
         def trust(ref, repository, reports):
             name = framework(ref)
@@ -73,6 +91,8 @@ class BatchAuthorizationTests(unittest.TestCase):
             name = framework(ref)
             events.append(('write', name))
             if write_failure == name:
+                if write_failure_committed:
+                    stable[name] = digest
                 raise subprocess.CalledProcessError(1, ['docker'])
             stable[name] = digest
 
@@ -91,18 +111,37 @@ class BatchAuthorizationTests(unittest.TestCase):
             policy = Path(tmp) / 'quarantine.json'
             policy.write_text(json.dumps(quarantine or {}))
             with patch.object(batch, 'load_details', side_effect=inventory), \
+                    patch.object(batch, 'select_candidate', side_effect=select), \
+                    patch.object(batch, 'verify_pair', side_effect=authorize), \
                     patch.object(batch, 'verify_promotion', side_effect=trust), \
                     patch.object(batch, 'scan_images', side_effect=scan), \
                     patch.object(batch, 'write_stable', side_effect=write), \
                     patch.object(batch, 'report_unfixed_cves') as info, \
                     patch('scripts.pipeline.release.verify_stable.subprocess.run', side_effect=read):
                 failure = None
+                cli_code = None
                 try:
-                    batch.promote_batch(requested, REGISTRY, SOURCE, 6, 1, reports, policy, NOW)
+                    if cli:
+                        with patch.object(batch, 'datetime', wraps=datetime) as clock, \
+                                redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as stderr:
+                            clock.now.return_value = NOW
+                            cli_code = batch.main([json.dumps(requested), '--registry', REGISTRY,
+                                                   '--repository', SOURCE, '--attempt', '1',
+                                                   '--reports', str(reports), '--quarantine', str(policy)])
+                            failure = stderr.getvalue() if cli_code else None
+                    else:
+                        batch.promote_batch(requested, REGISTRY, SOURCE, 6, 1, reports, policy, NOW)
                 except batch.ERRORS as error:
                     failure = str(error)
             documents = {str(path.relative_to(reports)): json.loads(path.read_text())
                          for path in reports.rglob('*.json')}
+            if cli:
+                documents['cli_exit_code'] = cli_code
+            if verify_safety_net:
+                with patch('sys.argv', ['verify_promotion_pairs', json.dumps(requested),
+                                        str(reports), '1']), \
+                        redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    documents['safety_net_exit_code'] = pair_safety_net.main()
             evidence = {name: documents.get(f'promotion-{name}-1/promotion-evidence.json')
                         for name in requested}
             return failure, events, evidence, documents, info.call_count
@@ -204,6 +243,133 @@ class BatchAuthorizationTests(unittest.TestCase):
 
     def test_complete_initial_inventory_required(self):
         self.assert_no_writes(self.execute(inventory_error=PAIR[1]))
+
+    def mixed(self, **kwargs):
+        inventories = {PAIR[0]: [image(RUNTIME)], PAIR[1]: [image(DEV)],
+                       'python3-13': [image(OLD, '210926-0300-r456-a1')]}
+        inventories.update(kwargs.pop('inventories', {}))
+        return self.execute(requested=PAIR + ['python3-13'], inventories=inventories, **kwargs)
+
+    def assert_isolated_failure(self, result):
+        failure, events, evidence, documents, _ = result
+        self.assertTrue(failure)
+        self.assertTrue(evidence['python3-13']['promoted'])
+        self.assertNotIn('error', evidence['python3-13'])
+        self.assertTrue(all(not evidence[name]['promoted'] for name in PAIR))
+        self.assertTrue(all(evidence[name].get('error') for name in PAIR))
+        summary = documents['promotion-batch.json']
+        states = {tuple(unit['frameworks']): unit for unit in summary['unit_results']}
+        self.assertEqual(states[tuple(PAIR)]['status'], 'FAILED')
+        self.assertEqual(states[('python3-13',)]['status'], 'AUTHORIZED')
+        self.assertTrue(states[('python3-13',)]['promoted'])
+        self.assertFalse(summary['promoted'])
+        self.assertEqual(summary['failed_units'], [PAIR])
+        self.assertEqual(summary['authorized_units'], [['python3-13']])
+        self.assertTrue(summary['prewrite_barrier_complete'])
+        self.assertFalse(summary['prewrite_authorized'])
+        # Every unit reaches a final pre-write decision before any mutation.
+        first_write = next(index for index, event in enumerate(events) if event[0] == 'write')
+        self.assertTrue(all(index < first_write for index, (action, _) in enumerate(events)
+                            if action in ('inventory', 'select', 'authorize', 'trust', 'scan')))
+
+    def test_mismatched_pair_does_not_block_valid_interpreted_unit(self):
+        result = self.mixed(inventories={PAIR[1]: [image(DEV, '210926-0300-r999-a1')]})
+        self.assert_isolated_failure(result)
+        self.assertEqual([name for action, name in result[1] if action == 'write'], ['python3-13'])
+
+    def test_cli_exits_nonzero_after_valid_unit_writes_when_other_unit_failed(self):
+        result = self.mixed(trust_failure=PAIR[0], cli=True)
+        self.assert_isolated_failure(result)
+        self.assertEqual(result[3]['cli_exit_code'], 1)
+
+    def test_valid_pair_and_legitimate_interpreted_skip_pass_final_safety_net(self):
+        failure, _, evidence, documents, _ = self.mixed(
+            inventories={'python3-13': []}, verify_safety_net=True)
+        self.assertIsNone(failure)
+        self.assertTrue(all(evidence[name]['promoted'] for name in PAIR))
+        self.assertTrue(evidence['python3-13']['skipped'])
+        self.assertNotIn('error', evidence['python3-13'])
+        self.assertEqual(documents['promotion-batch.json']['skipped_units'], [['python3-13']])
+        self.assertTrue(documents['promotion-batch.json']['promoted'])
+        self.assertEqual(documents['safety_net_exit_code'], 0)
+
+    def test_inventory_or_selection_failure_is_unit_scoped(self):
+        for stage in ('inventory_error', 'selection_error'):
+            for name in PAIR:
+                with self.subTest(stage=stage, name=name):
+                    self.assert_isolated_failure(self.mixed(**{stage: name}))
+
+    def test_trust_failure_is_unit_scoped(self):
+        for name in PAIR:
+            with self.subTest(name=name):
+                self.assert_isolated_failure(self.mixed(trust_failure=name))
+
+    def test_scan_failure_is_unit_scoped(self):
+        for name in PAIR:
+            with self.subTest(name=name):
+                self.assert_isolated_failure(self.mixed(scan_failure=name))
+
+    def test_partial_pair_write_does_not_block_unrelated_unit(self):
+        for name in PAIR:
+            with self.subTest(name=name):
+                result = self.mixed(write_failure=name)
+                self.assert_isolated_failure(result)
+                for member in PAIR:
+                    self.assertIn(('readback', member), result[1])
+                if name == PAIR[1]:
+                    self.assertEqual(result[2][PAIR[0]]['write_status'], 'completed')
+                    self.assertEqual(result[2][PAIR[0]]['stable_digest_observed'], RUNTIME)
+
+    def test_pair_readback_failure_does_not_block_unrelated_unit(self):
+        for name in PAIR:
+            with self.subTest(name=name):
+                self.assert_isolated_failure(self.mixed(readback_mismatch=name))
+
+    def test_failed_write_with_matching_readbacks_still_cannot_mark_pair_promoted(self):
+        result = self.mixed(write_failure=PAIR[1], write_failure_committed=True)
+        self.assert_isolated_failure(result)
+        self.assertTrue(all(result[2][name]['read_back_status'] == 'confirmed' for name in PAIR))
+
+    def test_failed_later_unit_does_not_invalidate_already_promoted_pair(self):
+        result = self.mixed(write_failure='python3-13')
+        failure, _, evidence, documents, _ = result
+        self.assertTrue(failure)
+        self.assertTrue(all(evidence[name]['promoted'] for name in PAIR))
+        self.assertTrue(all('error' not in evidence[name] for name in PAIR))
+        self.assertEqual(verify_completed_pair(evidence[PAIR[0]], evidence[PAIR[1]])['status'], 'PAIR_BOUND')
+        self.assertFalse(documents['promotion-batch.json']['promoted'])
+
+    def test_failed_successful_and_skipped_units_keep_disjoint_evidence(self):
+        requested = PAIR + ['python3-13', 'nodejs24', 'java21', 'java21-dev']
+        for stage in ('inventory_error', 'selection_error', 'trust_failure', 'scan_failure',
+                      'write_failure', 'readback_mismatch'):
+            with self.subTest(stage=stage):
+                result = self.execute(requested=requested, inventories={
+                    PAIR[0]: [image(RUNTIME)], PAIR[1]: [image(DEV)],
+                    'python3-13': [image(OLD)]}, **{stage: PAIR[1]})
+                self.assert_isolated_failure(result)
+                evidence, summary = result[2], result[3]['promotion-batch.json']
+                for name in ('nodejs24', 'java21', 'java21-dev'):
+                    self.assertTrue(evidence[name]['skipped'])
+                    self.assertNotIn('error', evidence[name])
+                    self.assertEqual(evidence[name]['write_status'], 'not_run')
+                self.assertEqual(verify_completed_pair(evidence['java21'], evidence['java21-dev'])['status'],
+                                 'PAIR_SKIPPED')
+                self.assertEqual(summary['skipped_units'], [['nodejs24'], ['java21', 'java21-dev']])
+
+    def test_global_barrier_orders_all_selections_pairs_trust_and_scans_before_writes(self):
+        requested = PAIR + ['java21', 'java21-dev', 'python3-13']
+        inventories = {name: [image(RUNTIME if not name.endswith('-dev') else DEV)]
+                       for name in requested}
+        failure, events, evidence, _, _ = self.execute(requested=requested, inventories=inventories)
+        self.assertIsNone(failure)
+        self.assertTrue(all(entry['promoted'] for entry in evidence.values()))
+        positions = {action: [index for index, event in enumerate(events) if event[0] == action]
+                     for action in ('inventory', 'select', 'authorize', 'trust', 'scan', 'write')}
+        self.assertLess(max(positions['inventory'] + positions['select']), min(positions['authorize']))
+        self.assertLess(max(positions['authorize']), min(positions['trust']))
+        self.assertLess(max(positions['trust']), min(positions['scan']))
+        self.assertLess(max(positions['scan']), min(positions['write']))
 
 
 class UnprivilegedPlanTests(unittest.TestCase):

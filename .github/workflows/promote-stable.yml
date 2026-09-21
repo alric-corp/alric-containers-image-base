@@ -139,8 +139,9 @@ jobs:
       - name: Record promotion tool versions
         run: python3 -B -m scripts.pipeline.operations.tool_versions promotion reports/tool-versions.json
 
-      # The helper selects the complete batch, authorizes compiled pairs, then
-      # verifies trust and scans EVERY selected digest before its first write.
+      # The helper evaluates every unit through selection, pair authorization,
+      # trust and scan phases before the first write. Failed units cannot write;
+      # independently authorized units proceed after that global barrier.
       # One in-memory execution owns authorization; stored JSON is evidence only.
       # ECR has no cross-repository transaction: a partial write fails loudly,
       # records both outcomes and preserves the initial inventories for recovery.

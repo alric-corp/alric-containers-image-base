@@ -1,9 +1,10 @@
-"""Authorize a complete stable promotion batch before the first tag write.
+"""Authorize independent promotion units behind a global pre-write barrier.
 
 Selection, trust verification and blocking scans share one process: saved JSON
 is audit evidence, never an authorization token for a later mutation phase.
 ECR cannot atomically write two tags. A failed write/read-back leaves the whole
 pair unpromoted in the evidence, including the original ECR state for recovery.
+A failed compiled pair or interpreted singleton does not block unrelated units.
 """
 import argparse
 from datetime import datetime, timezone
@@ -106,79 +107,161 @@ def promote_batch(frameworks, registry, repository, soak_hours, attempt, reports
         'read_back_status': 'not_run', 'write_status': 'not_run',
         'reason': 'candidate not yet evaluated',
     } for name in ordered}
+    unit_results = [{'frameworks': unit, 'status': 'PENDING', 'phase': 'inventory',
+                     'prewrite_authorized': False, 'promoted': False, 'errors': []}
+                    for unit in units]
+    owner = {name: unit for unit in unit_results for name in unit['frameworks']}
     batch = {'schema_version': 1, 'frameworks': frameworks, 'units': units,
              'evaluated_at': now.isoformat(), 'authorized_pairs': [],
+             'unit_results': unit_results, 'authorized_units': [],
+             'failed_units': [], 'skipped_units': [],
+             'prewrite_barrier_complete': False,
              'prewrite_authorized': False, 'promoted': False}
     eligible = []
 
+    def fail(unit, phase, error, framework=None):
+        # Failure belongs to the atomic authorization unit, not the whole
+        # batch. A compiled pair shares the failure; unrelated units do not.
+        unit['status'] = 'FAILED'
+        unit['phase'] = phase
+        unit['promoted'] = False
+        unit['errors'].append({'phase': phase, 'framework': framework, 'message': str(error)})
+        message = '; '.join(item['message'] for item in unit['errors'])
+        for name in unit['frameworks']:
+            evidence[name]['error'] = message
+            evidence[name]['promoted'] = False
+
     def save():
+        batch['authorized_units'] = [unit['frameworks'] for unit in unit_results
+                                     if unit['status'] == 'AUTHORIZED']
+        batch['failed_units'] = [unit['frameworks'] for unit in unit_results
+                                if unit['status'] == 'FAILED']
+        batch['skipped_units'] = [unit['frameworks'] for unit in unit_results
+                                 if unit['status'] == 'SKIPPED']
+        # These are batch summaries, never the authority to mutate an
+        # individual unit. Mixed success/failure remains a failed batch.
+        batch['prewrite_authorized'] = bool(
+            batch['prewrite_barrier_complete'] and batch['authorized_units']
+            and not batch['failed_units'])
+        batch['promoted'] = bool(
+            batch['authorized_units'] and not batch['failed_units']
+            and all(unit['promoted'] for unit in unit_results
+                    if unit['status'] == 'AUTHORIZED'))
         for name, entry in evidence.items():
+            unit = owner[name]
+            entry.update(unit_frameworks=unit['frameworks'], unit_status=unit['status'],
+                         unit_prewrite_authorized=unit['prewrite_authorized'])
             write_evidence(paths[name], entry)
         write_evidence(reports / 'promotion-batch.json', batch)
 
     save()
     try:
-        # Take every repository's initial snapshot before selecting or writing.
+        # Global inventory phase: snapshot all repositories before selection.
+        # A failed inventory disqualifies its unit while preserving other units.
         inventories = {}
         for name in ordered:
-            document = load_details(evidence[name]['repository'])
-            write_evidence(paths[name].parent / 'ecr-before.json', document)
-            inventories[name] = document['imageDetails']
-        for name in ordered:
-            entry = evidence[name]
-            details = inventories[name]
-            quarantined = load_quarantined_digests(str(quarantine), entry['repository'])
-            selected = select_candidate(details, soak_hours, now, quarantined)
-            entry.update(stable_state(details, now))
-            if selected is None:
-                entry.update(skipped=True, reason=skip_reason(details, soak_hours, now, quarantined))
-                continue
-            pushed_at, tag, digest = selected
-            image = f"{registry}/{entry['repository']}"
-            require_digest_reference(f'{image}@{digest}')
-            if not is_build_tag(tag):
-                raise ValueError('candidate must have a valid immutable build tag')
-            entry.update(image=image, tag=tag, digest=digest, candidate_digest=digest,
-                         candidate_pushed_at=pushed_at.isoformat(), reason='eligible candidate')
-            eligible.append(name)
+            try:
+                document = load_details(evidence[name]['repository'])
+                write_evidence(paths[name].parent / 'ecr-before.json', document)
+                inventories[name] = document['imageDetails']
+            except ERRORS as error:
+                fail(owner[name], 'inventory', error, name)
         save()
 
-        # Missing, soaking or quarantined members cannot leave a writable half-pair.
-        for unit in units:
-            members = [evidence[name] for name in unit]
+        # Global selection phase. Original ECR timestamps, quarantine policy
+        # and candidate ordering remain authoritative within each repository.
+        for unit in unit_results:
+            if unit['status'] == 'FAILED':
+                continue
+            unit['phase'] = 'selection'
+            for name in unit['frameworks']:
+                entry = evidence[name]
+                try:
+                    details = inventories[name]
+                    quarantined = load_quarantined_digests(str(quarantine), entry['repository'])
+                    selected = select_candidate(details, soak_hours, now, quarantined)
+                    entry.update(stable_state(details, now))
+                    if selected is None:
+                        entry.update(skipped=True, reason=skip_reason(details, soak_hours, now, quarantined))
+                        continue
+                    pushed_at, tag, digest = selected
+                    image = f"{registry}/{entry['repository']}"
+                    require_digest_reference(f'{image}@{digest}')
+                    if not is_build_tag(tag):
+                        raise ValueError('candidate must have a valid immutable build tag')
+                    entry.update(image=image, tag=tag, digest=digest, candidate_digest=digest,
+                                 candidate_pushed_at=pushed_at.isoformat(), reason='eligible candidate')
+                    eligible.append(name)
+                except ERRORS as error:
+                    fail(unit, 'selection', error, name)
+                    break
+        save()
+
+        # Global pair authorization phase: incomplete eligible pairs cannot
+        # leave a writable half-pair, but do not suppress unrelated runtimes.
+        for unit in unit_results:
+            if unit['status'] == 'FAILED':
+                continue
+            unit['phase'] = 'pair_authorization'
+            members = [evidence[name] for name in unit['frameworks']]
             if all(member['skipped'] for member in members):
+                unit.update(status='SKIPPED', phase='complete')
                 continue
-            if any(member['skipped'] for member in members):
-                raise ValueError(f'complete eligible pair required before stable writes: {unit}')
-            if len(unit) == 2:
-                binding = verify_pair(*members)
-                batch['authorized_pairs'].append(binding)
-                for member in members:
-                    member['pair_authorization'] = binding
+            try:
+                if any(member['skipped'] for member in members):
+                    raise ValueError('complete eligible pair required before stable writes: '
+                                     + str(unit['frameworks']))
+                if len(members) == 2:
+                    binding = verify_pair(*members)
+                    batch['authorized_pairs'].append(binding)
+                    for member in members:
+                        member['pair_authorization'] = binding
+            except ERRORS as error:
+                fail(unit, 'pair_authorization', error)
         save()
 
-        # Existing verifiers and scanner policy remain authoritative for every
-        # selected digest. No write occurs if either member fails either gate.
-        for name in eligible:
-            entry = evidence[name]
-            verify_promotion(f"{entry['image']}@{entry['digest']}", repository, scans[name])
-            entry['trust_verified'] = True
+        # All trust evaluations finish before the scan phase; all scans finish
+        # before the first mutation. Failure stays local to its compiled pair
+        # or interpreted singleton. No persisted boolean grants authorization.
+        for unit in unit_results:
+            if unit['status'] != 'PENDING':
+                continue
+            unit['phase'] = 'trust'
+            for name in unit['frameworks']:
+                entry = evidence[name]
+                try:
+                    verify_promotion(f"{entry['image']}@{entry['digest']}", repository, scans[name])
+                    entry['trust_verified'] = True
+                except ERRORS as error:
+                    fail(unit, 'trust', error, name)
+                    break
             save()
-        for name in eligible:
-            entry = evidence[name]
-            if scan_images('remote', f"{entry['image']}@{entry['digest']}", scans[name]) != 0:
-                raise ValueError(f'blocking promotion scan failed for {name}')
-            entry['scan_passed'] = True
+        for unit in unit_results:
+            if unit['status'] != 'PENDING':
+                continue
+            unit['phase'] = 'scan'
+            for name in unit['frameworks']:
+                entry = evidence[name]
+                try:
+                    if scan_images('remote', f"{entry['image']}@{entry['digest']}", scans[name]) != 0:
+                        raise ValueError(f'blocking promotion scan failed for {name}')
+                    entry['scan_passed'] = True
+                except ERRORS as error:
+                    fail(unit, 'scan', error, name)
+                    break
+            if unit['status'] != 'FAILED':
+                unit.update(status='AUTHORIZED', phase='prewrite_authorized', prewrite_authorized=True)
             save()
-        batch['prewrite_authorized'] = True
+        batch['prewrite_barrier_complete'] = True
         save()
 
-        for unit in units:
-            if all(evidence[name]['skipped'] for name in unit):
+        for unit in unit_results:
+            if unit['status'] != 'AUTHORIZED':
                 continue
-            failures = []
             # Canonical runtime then dev order, under the shared stable lock.
-            for name in unit:
+            # A failed write stops this pair's remaining writes, not later units.
+            unit['phase'] = 'write'
+            for name in unit['frameworks']:
                 entry = evidence[name]
                 entry['write_status'] = 'started'
                 save()
@@ -187,37 +270,60 @@ def promote_batch(frameworks, registry, repository, soak_hours, attempt, reports
                     entry['write_status'] = 'completed'
                 except ERRORS as error:
                     entry.update(write_status='failed', write_error=str(error))
-                    failures.append(f'{name} write: {error}')
+                    fail(unit, 'write', error, name)
                     break
                 finally:
                     save()
             # Observe BOTH tags even after a failed second write. Observations
             # cannot turn a partially written pair into a successful promotion.
-            for name in unit:
+            if unit['status'] != 'FAILED':
+                unit['phase'] = 'readback'
+            for name in unit['frameworks']:
                 entry = evidence[name]
                 try:
                     verify_stable(entry['image'], entry['digest'], paths[name])
                 except ERRORS as error:
-                    failures.append(f'{name} read-back: {error}')
+                    fail(unit, 'readback', error, name)
                 finally:
-                    evidence[name] = json.loads(paths[name].read_text())
-            if len(unit) == 2:
-                verify_pair(*(evidence[name] for name in unit))
-            for name in unit:
-                evidence[name] = record_outcome(evidence[name], not failures)
+                    try:
+                        refreshed = json.loads(paths[name].read_text())
+                        if not isinstance(refreshed, dict):
+                            raise ValueError('stable read-back evidence must be an object')
+                        evidence[name] = refreshed
+                    except ERRORS as error:
+                        fail(unit, 'readback', error, name)
+            if len(unit['frameworks']) == 2:
+                try:
+                    verify_pair(*(evidence[name] for name in unit['frameworks']))
+                except ERRORS as error:
+                    fail(unit, 'final_pair', error)
+            for name in unit['frameworks']:
+                evidence[name] = record_outcome(evidence[name], unit['status'] != 'FAILED')
+            if unit['status'] != 'FAILED':
+                if all(evidence[name]['promoted'] for name in unit['frameworks']):
+                    unit.update(phase='complete', promoted=True)
+                else:
+                    fail(unit, 'readback', 'every unit member must confirm its stable digest')
             save()
-            if failures:
-                raise ValueError('; '.join(failures))
-        batch['promoted'] = bool(eligible) and all(evidence[name]['promoted'] for name in eligible)
+
+        # Preserve successful unrelated outcomes, then fail the overall run so
+        # a rejected or partially mutated unit cannot disappear from reporting.
+        if batch['failed_units']:
+            batch['error'] = '; '.join(
+                f"{','.join(unit['frameworks'])}: "
+                + '; '.join(error['message'] for error in unit['errors'])
+                for unit in unit_results if unit['status'] == 'FAILED')
+            raise ValueError(batch['error'])
         return batch
-    except ERRORS as error:
-        batch['error'] = str(error)
-        for name in ordered:
-            if not evidence[name]['promoted']:
-                evidence[name]['error'] = str(error)
-                evidence[name] = record_outcome(evidence[name], False, evidence[name]['skipped'])
-        raise
     finally:
+        # Error fields are scoped to the failed unit, including both members
+        # of a partial pair. A successful unrelated unit is never overwritten.
+        for unit in unit_results:
+            if unit['status'] == 'FAILED':
+                message = '; '.join(error['message'] for error in unit['errors'])
+                for name in unit['frameworks']:
+                    evidence[name]['error'] = message
+                    evidence[name] = record_outcome(evidence[name], False, evidence[name]['skipped'])
         save()
         # Informational CVEs retain visibility even after a blocking failure.
         # They never confer authorization and never hide the blocking result.

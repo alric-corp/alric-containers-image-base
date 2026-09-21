@@ -32,6 +32,43 @@ def documents():
     return result
 
 
+def mixed_documents():
+    """A confirmed Go pair, a partially written Java pair, and a clean skip."""
+    docs = documents()
+    units = [PAIR, ['java21', 'java21-dev'], ['python3-13']]
+    outcomes = [
+        {'frameworks': PAIR, 'status': 'AUTHORIZED', 'phase': 'complete',
+         'prewrite_authorized': True, 'promoted': True, 'errors': []},
+        {'frameworks': units[1], 'status': 'FAILED', 'phase': 'write',
+         'prewrite_authorized': True, 'promoted': False,
+         'errors': [{'phase': 'write', 'framework': 'java21-dev', 'message': 'write failed'}]},
+        {'frameworks': units[2], 'status': 'SKIPPED', 'phase': 'complete',
+         'prewrite_authorized': False, 'promoted': False, 'errors': []},
+    ]
+    docs['promotion-batch.json'].update(
+        frameworks=[name for unit in units for name in unit], units=units,
+        unit_results=outcomes, prewrite_barrier_complete=True,
+        prewrite_authorized=False, promoted=False)
+    for outcome in outcomes:
+        for name in outcome['frameworks']:
+            item = docs.setdefault(f'promotion-{name}-2/promotion-evidence.json', {})
+            item.update(unit_frameworks=outcome['frameworks'], unit_status=outcome['status'],
+                        unit_prewrite_authorized=outcome['prewrite_authorized'],
+                        promoted=outcome['promoted'], skipped=outcome['status'] == 'SKIPPED')
+            if outcome['status'] == 'AUTHORIZED':
+                item.update(digest=item['candidate_digest'], trust_verified=True, scan_passed=True,
+                            write_status='completed')
+            elif outcome['status'] == 'FAILED':
+                digest = 'sha256:' + ('c' if name == 'java21' else 'd') * 64
+                item.update(candidate_digest=digest, digest=digest, trust_verified=True,
+                            scan_passed=True, write_status='completed' if name == 'java21' else 'failed',
+                            read_back_status='confirmed' if name == 'java21' else 'mismatch',
+                            stable_digest_observed=digest if name == 'java21' else None)
+            else:
+                item.update(write_status='not_run', read_back_status='not_run')
+    return docs
+
+
 def archive(documents):
     output = io.BytesIO()
     with zipfile.ZipFile(output, 'w') as zipped:
@@ -133,6 +170,82 @@ class BatchArtifactTests(unittest.TestCase):
                                             'owner/repo', RUN)
         fetch_archive.assert_not_called()
 
+    def health_from_zip(self, docs, conclusion='failure'):
+        frameworks = docs['promotion-batch.json']['frameworks']
+        job = {'name': health.BATCH_PROMOTE_JOB, 'conclusion': conclusion,
+               'completed_at': '2026-09-21T10:00:00Z'}
+        return health.framework_health(
+            lambda _: [job], [RUN], frameworks, NOW,
+            promotion_evidence_for=lambda run: self.evidence(docs, run))
+
+    def test_failed_mixed_batch_retains_only_confirmed_and_clean_skipped_units(self):
+        result = self.health_from_zip(mixed_documents())
+        self.assertEqual(result['promotion_evidence_gaps'], [])
+        for name in PAIR:
+            self.assertEqual(result['frameworks'][name]['stable_age_hours'], 2)
+            self.assertEqual(result['frameworks'][name]['promotion_checked_age_hours'], 2)
+        for name in ('java21', 'java21-dev'):
+            self.assertIsNone(result['frameworks'][name]['stable_age_hours'])
+            self.assertIsNone(result['frameworks'][name]['promotion_checked_age_hours'])
+        self.assertIsNone(result['frameworks']['python3-13']['stable_age_hours'])
+        self.assertEqual(result['frameworks']['python3-13']['promotion_checked_age_hours'], 2)
+
+    def test_missing_or_false_global_barrier_cannot_authorize_explicit_unit(self):
+        for missing in (True, False):
+            docs = mixed_documents()
+            if missing:
+                del docs['promotion-batch.json']['prewrite_barrier_complete']
+            else:
+                docs['promotion-batch.json']['prewrite_barrier_complete'] = False
+            with self.subTest(missing=missing):
+                result = self.health_from_zip(docs)
+                self.assertTrue(result['promotion_evidence_gaps'])
+                self.assertTrue(all(item['stable_age_hours'] is None
+                                    for item in result['frameworks'].values()))
+
+    def test_misleading_unit_result_cannot_override_member_evidence(self):
+        for field, value in (('frameworks', ['go1-26']), ('status', 'FAILED'),
+                             ('phase', 'write'), ('prewrite_authorized', False),
+                             ('promoted', False), ('errors', ['unexpected error'])):
+            with self.subTest(field=field):
+                docs = mixed_documents()
+                docs['promotion-batch.json']['unit_results'][0][field] = value
+                with self.assertRaises(ValueError):
+                    self.evidence(docs)
+
+    def test_explicit_promoted_unit_requires_each_security_and_write_gate(self):
+        for field, value in (('trust_verified', False), ('scan_passed', False),
+                             ('write_status', 'failed'), ('digest', 'sha256:' + 'e' * 64),
+                             ('unit_frameworks', ['go1-26-dev']), ('unit_status', 'FAILED'),
+                             ('unit_prewrite_authorized', False)):
+            with self.subTest(field=field):
+                docs = mixed_documents()
+                docs['promotion-go1-26-dev-2/promotion-evidence.json'][field] = value
+                with self.assertRaises(ValueError):
+                    self.evidence(docs)
+
+    def test_duplicate_or_missing_unit_results_are_rejected(self):
+        for mode in ('duplicate', 'missing'):
+            docs = mixed_documents()
+            outcomes = docs['promotion-batch.json']['unit_results']
+            if mode == 'duplicate':
+                outcomes[1] = copy.deepcopy(outcomes[0])
+            else:
+                outcomes.pop()
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                self.evidence(docs)
+
+    def test_legacy_zip_requires_success_job_and_cannot_inject_completion_marker(self):
+        docs = documents()
+        for name in PAIR:
+            docs[f'promotion-{name}-2/promotion-evidence.json']['_health_unit_complete'] = True
+        failed = self.health_from_zip(docs)
+        self.assertTrue(all(item['stable_age_hours'] is None
+                            for item in failed['frameworks'].values()))
+        successful = self.health_from_zip(docs, conclusion='success')
+        self.assertTrue(all(item['stable_age_hours'] == 2
+                            for item in successful['frameworks'].values()))
+
 
 class BatchFreshnessTests(unittest.TestCase):
     def collect(self, evidence, conclusion='success'):
@@ -152,9 +265,9 @@ class BatchFreshnessTests(unittest.TestCase):
             self.assertEqual(item['stable_age_hours'], 2)
             self.assertEqual(item['promotion_source'], 'confirmed_batch_evidence')
 
-    def test_failed_job_cannot_authorize_even_if_artifact_claims_pass(self):
+    def test_failed_job_requires_explicit_unit_completion_even_if_artifact_claims_pass(self):
         result, reader = self.collect({name: {'promoted': True} for name in PAIR}, 'failure')
-        reader.assert_not_called()
+        reader.assert_called_once_with(RUN)
         self.assertTrue(all(item['stable_age_hours'] is None
                             for item in result['frameworks'].values()))
 
