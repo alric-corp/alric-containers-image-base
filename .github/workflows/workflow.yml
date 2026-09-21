@@ -104,6 +104,12 @@ jobs:
 
   build-base-images:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * *')
+    # Hold one repository-wide slot across validation, contracts, publication
+    # and signing/attestation in the reusable call. PR validation is separate.
+    # Keep an active publisher running; GitHub may replace older pending jobs.
+    concurrency:
+      group: factory-build-publish-${{ github.repository }}
+      cancel-in-progress: false
     permissions:
       contents: read
       actions: read
