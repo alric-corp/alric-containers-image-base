@@ -1,4 +1,4 @@
-name: Promote stable
+name: Factory Distroless - Promote stable
 
 # Gate de promoção da tag "stable": em vez de mover "stable" no mesmo run
 # que publica a imagem, este workflow roda depois de uma janela de soak

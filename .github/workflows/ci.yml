@@ -5,7 +5,7 @@
 # rápido: segundos, não os minutos de melange/apko/Trivy do pipeline
 # principal) e um PR só de documentação recebe resultado definido
 # (sucesso) em vez de check obrigatório travado.
-name: CI
+name: CI - Repository checks
 
 on:
   pull_request: {}

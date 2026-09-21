@@ -1,4 +1,4 @@
-name: Infra PR (plan only)
+name: Infra Terraform - PR plan
 
 on:
   pull_request:

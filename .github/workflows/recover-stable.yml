@@ -21,7 +21,7 @@
 # Restaurar a imagem base não reconstrói nem reverte automaticamente
 # aplicações consumidoras — isso é responsabilidade do runbook de cada
 # pipeline de deploy downstream, fora do escopo deste repositório.
-name: Recover stable
+name: Factory Distroless - Recover stable
 
 on:
   workflow_dispatch:

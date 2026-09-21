@@ -1,4 +1,4 @@
-name: Build & publish base images
+name: Factory Distroless - Build & publish
 
 on:
   # Allow-list (em vez de paths-ignore): só dispara pra mudanças que
