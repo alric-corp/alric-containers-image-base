@@ -92,7 +92,10 @@ a identidade de assinatura verificada na promoção — seu nome de arquivo é
 contrato, não estética.
 
 Os nomes de exibição organizam a UI em `CI - Repository checks`,
-`Factory Distroless - …`, `Infra Terraform - …` e `Ops - Pipeline health`.
+`Distroless - …`, `Infra - …` e `Ops - Pipeline health`.
+`Distroless - Build & publish` identifica o entrypoint `workflow.yml`;
+`Distroless - Build engine` identifica a implementação reutilizável
+`build-base-images.yml`.
 Arquivos e IDs de jobs permanecem estáveis. O caller `build-base-images`
 serializa todo o build/publicação em `factory-build-publish-${github.repository}`,
 com `cancel-in-progress: false`, incluindo validação, contratos, assinatura e

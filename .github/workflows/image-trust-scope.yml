@@ -1,4 +1,4 @@
-name: Factory Distroless - Image trust regression
+name: Distroless - Image trust regression
 
 on:
   pull_request:
