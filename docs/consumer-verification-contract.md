@@ -248,9 +248,12 @@ ausência de CVEs ou licença de distribuição aprovada.
   Evidence ausente, inválida ou conflitante não aprova publicação.
 - **Cobertura funcional:** 11 contratos diretos, seis interpretados e cinco
   compilados, conforme lote/plano. Os cinco -dev compilados são exercitados
-  no contrato do runtime, mas sua publicação não exige gate funcional próprio.
-  Runtime compilado solicitado sem seu par no mesmo lote recebe skip explícito
-  `not_required`; isso não é contrato PASS. Assinatura não preenche essa lacuna.
+  no único contrato do respectivo runtime. Publicar qualquer membro exige
+  esse contrato aprovado, do mesmo run e revisão, vinculado aos índices e
+  manifests de ambas as plataformas dos dois candidatos atuais. Par
+  incompleto ou evidência ausente, falha ou incompatível bloqueia publicação.
+  O `not_required`/`passed:null` do planejamento/gate genérico descreve
+  cobertura; não autoriza publicação. Assinatura não substitui o contrato.
 - **Wolfi (P1-03):** chave local versionada + SHA pin + rotação humana + drift
   detect-only. Apko pode acrescentar chaves por repository discovery/JWKS;
   não há trust anchor exclusiva. Ver [risco e rotação](wolfi-signing-key.md).

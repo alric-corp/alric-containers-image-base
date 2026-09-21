@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -341,20 +342,73 @@ class PublicationWiringTests(unittest.TestCase):
         self.assertEqual(download['run-id'], '${{ github.run_id }}')
         self.assertEqual(download['repository'], '${{ github.repository }}')
         self.assertIn('github-token', download)
-        self.assertEqual(download['pattern'], 'runtime-${{ matrix.framework }}-[0-9]*')
+        self.assertEqual(download['pattern'],
+                         'runtime-${{ steps.contract-plan.outputs.contract_framework }}-[0-9]*')
         self.assertFalse(download['merge-multiple'])
         self.assertEqual(download['digest-mismatch'], 'error')
         commands = '\n'.join(step.get('run', '') for step in steps)
         self.assertIn('jobs?filter=all&per_page=100', commands)
         self.assertIn('--paginate --slurp', commands)
-        self.assertIn('--dev-layout runtime-dev.oci', commands)
+        self.assertIn('--publication-gate "$FRAMEWORK"', commands)
+        self.assertIn('--counterpart-layout runtime-counterpart.oci', commands)
+        self.assertNotIn('--gate "$FRAMEWORK"', commands)
         for rebuild in ('apko build', 'melange build', 'oci_artifact prepare', 'docker build'):
             self.assertNotIn(rebuild, commands)
         gate = next(index for index, step in enumerate(steps)
-                    if step['name'] == 'Require the functional contract of this framework')
+                    if step['name'] == 'Authorize publication with the current functional contract')
         publish = next(index for index, step in enumerate(steps)
                        if step['name'] == 'Publish validated OCI artifact (multi-arch)')
         self.assertLess(gate, publish)
+
+        # Aggregate failures must not suppress unrelated candidates. Each leg
+        # fails closed at its own unprivileged authorization boundary instead.
+        self.assertIn('always()', workflow['jobs']['build-push']['if'])
+        self.assertNotIn('needs.runtime-contract.result', workflow['jobs']['build-push']['if'])
+        self.assertNotIn('continue-on-error', steps[gate])
+        self.assertNotIn('if', steps[gate])
+        for index, step in enumerate(steps):
+            if any(name in step.get('uses', '') for name in
+                   ('aws-actions/configure-aws-credentials', 'aws-actions/amazon-ecr-login',
+                    'sigstore/cosign-installer')):
+                self.assertLess(gate, index)
+            if 'cosign ' in step.get('run', ''):
+                self.assertLess(gate, index)
+
+    def test_publication_planner_downloads_the_opposite_member_of_the_same_run(self):
+        workflow = yaml.safe_load((runtime.ROOT / '.github/workflows/build-base-images.yml').read_text())
+        steps = workflow['jobs']['build-push']['steps']
+        planner = next(step for step in steps if step.get('id') == 'contract-plan')
+        self.assertIn('runtime_images.publication_contract(', planner['run'])
+        script = planner['run'].split("<<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
+        counterpart = next(step for step in steps
+                           if step['name'] == 'Download current validated counterpart for pair digest binding')
+        self.assertEqual(counterpart['if'], "steps.contract-plan.outputs.counterpart_framework != ''")
+        download = counterpart['with']
+        self.assertEqual(download['name'],
+                         'validated-oci-${{ steps.contract-plan.outputs.counterpart_framework }}')
+        self.assertEqual(download['path'], 'runtime-counterpart.oci')
+        self.assertEqual(download['repository'], '${{ github.repository }}')
+        self.assertEqual(download['run-id'], '${{ github.run_id }}')
+        self.assertEqual(download['digest-mismatch'], 'error')
+        self.assertIn('github-token', download)
+        for target, other, role in [('go1-26', 'go1-26-dev', 'runtime'),
+                                     ('go1-26-dev', 'go1-26', 'dev'),
+                                     ('python3-13', '', 'runtime')]:
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as temporary:
+                output = Path(temporary) / 'outputs'
+                environment = dict(os.environ, FRAMEWORK=target,
+                                   FRAMEWORKS=json.dumps(['go1-26', 'go1-26-dev', 'python3-13']),
+                                   GITHUB_OUTPUT=str(output))
+                result = subprocess.run([sys.executable, '-B', '-c', script],
+                                        cwd=runtime.ROOT, env=environment,
+                                        capture_output=True, text=True, timeout=15)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                values = dict(line.split('=', 1) for line in output.read_text().splitlines())
+                self.assertEqual(values['required'], 'true')
+                self.assertEqual(values['contract_framework'],
+                                 'python3-13' if target == 'python3-13' else 'go1-26')
+                self.assertEqual(values['counterpart_framework'], other)
+                self.assertEqual(values['target_role'], role)
 
 
 if __name__ == '__main__':

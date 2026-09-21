@@ -7,7 +7,7 @@ contrato, com o **mesmo contrato de ambiente e a mesma saída**:
 | Tipo | Frameworks | Como executa |
 | --- | --- | --- |
 | interpretado | Node 22/24 (e `-dev`), Python 3.13/3.14 | o probe roda com o interpretador da própria imagem candidata, montado somente para leitura |
-| compilado | `go1-26`, `java21`, `dotnet10` | o projeto mínimo de [`projects/`](projects) é construído por um Dockerfile multi-stage real: variante `-dev` no estágio de build, variante de runtime no estágio final |
+| compilado | `go1-25`, `go1-26`, `java21`, `java25`, `dotnet10` | o projeto mínimo de [`projects/`](projects) é construído por um Dockerfile multi-stage real: variante `-dev` no estágio de build, variante de runtime no estágio final |
 
 ```sh
 # interpretado
@@ -18,8 +18,18 @@ python3 -B -m scripts.pipeline.runtime.runtime_images /caminho/go1-26.oci go1-26
   --dev-layout /caminho/go1-26-dev.oci --reports /tmp/reports
 
 python3 -B -m scripts.pipeline.runtime.runtime_images --plan '["go1-26","go1-26-dev"]'  # o que roda no lote
-python3 -B -m scripts.pipeline.runtime.runtime_images --gate go1-26 --requested '["go1-26","go1-26-dev"]' \
-  --reports /tmp/reports                                                        # o gate de publicação
+# Resolução de autorização; não executa nem aprova o contrato
+python3 -B -m scripts.pipeline.runtime.runtime_images --publication-plan go1-26-dev \
+  --requested '["go1-26","go1-26-dev"]'
+
+# Autorizar o candidato -dev pelo contrato do runtime, com os dois OCIs atuais
+python3 -B -m scripts.pipeline.runtime.runtime_images /caminho/go1-26-dev.oci \
+  --publication-gate go1-26-dev --counterpart-layout /caminho/go1-26.oci \
+  --requested '["go1-26","go1-26-dev"]' --reports /tmp/runtime-gate \
+  --artifact-metadata /tmp/runtime-artifacts.json --job-metadata /tmp/runtime-jobs.json \
+  --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+  --repository "$GITHUB_REPOSITORY" --revision "$GITHUB_SHA" \
+  --download-result success --gate-output /tmp/runtime-gate-result.json
 ```
 
 Cada diretório deve conter o layout completo e `validated-index.json`, como
@@ -117,22 +127,46 @@ dois relatórios com falha, sem reutilizar sucesso antigo.
 ## Gate de publicação (integração com M13)
 
 `test-runtime-images.yml` roda dentro de `build-base-images.yml`, entre a
-validação e a publicação, e **a publicação de cada framework exige o contrato
-do próprio framework aprovado nas duas plataformas**. Aprovação de build/scan
-não substitui execução funcional.
+validação e a publicação. Aprovação de build/scan não substitui execução
+funcional. O planejamento de execução (`runtime_images.plan`/`--plan`) e a
+autorização de publicação (`publication_contract`/`--publication-gate`) são
+decisões distintas, implementadas em
+[`runtime_images.py`](../../scripts/pipeline/runtime/runtime_images.py).
 
-A cobertura é decidida em código versionado
-([`runtime_images.plan`](../../scripts/pipeline/runtime/runtime_images.py)), não pela
-ausência de um artifact:
+Um framework interpretado usa seu próprio contrato. Para cada par compilado,
+há **um contrato com a identidade do runtime**, que testa os dois candidatos.
+O `-dev` não ganha um contrato independente: tanto sua publicação quanto a do
+runtime exigem a mesma evidência aprovada nas duas plataformas.
 
-- framework com contrato: evidência ausente é **falha**, não aprovação;
-- framework sem contrato (`*-dev` compiladas, cobertas como estágio de build
-  do par; histórico: `dotnet8`, sem variante `-dev`, antes de ser removido do
-  catálogo em 17/09/2026):
-  publica com o motivo registrado no log e na tabela do run;
-- contrato compilado cujo par `-dev` não está no mesmo lote (um
-  `workflow_dispatch` só com `go1-26`, por exemplo): não roda, e o motivo
-  aparece — o estágio de build precisa ser o artifact candidato.
+| Candidato a publicar | Contrato exigido | Layout de runtime no gate | Layout de dev no gate |
+| --- | --- | --- | --- |
+| `go1-26` | `go1-26` | candidato `image.oci` | counterpart `go1-26-dev` |
+| `go1-26-dev` | `go1-26` | counterpart `go1-26` | candidato `image.oci` |
+
+O resolver deriva essas relações do modelo de runtime e do catálogo, também
+para as demais versões de Go, Java e .NET. O publicador baixa o counterpart
+validado do mesmo run e os artifacts `runtime-<contract_framework>-<attempt>`,
+sem mesclar diretórios de evidências. O gate recebe os layouts na ordem
+canônica runtime/dev, independentemente do membro publicado, e exige:
+
+- digests exatos dos índices **e** manifests amd64/arm64 dos dois candidatos;
+- mesmo run, repositório e revisão, com inventários completos de artifacts
+  e jobs produtores;
+- evidência aprovada da tentativa válida, sem fallback após falha mais recente
+  do produtor. Reuso de tentativa anterior só vale para os mesmos artifacts.
+
+Evidência ausente, falha, ambígua ou incompatível bloqueia **ambos** os membros.
+Solicitar apenas o runtime ou apenas seu `-dev` também bloqueia publicação.
+O planejamento ainda pode registrar o contrato incompleto como não executado,
+e o `--gate` genérico pode retornar `not_required` com `passed:null` para
+cobertura gradual; esse resultado não autoriza publicação. O publicador usa
+exclusivamente `--publication-gate` e preserva a decisão em
+`runtime-gate-result.json`, identificando o alvo, o contrato e o par validado.
+
+Essa autorização ocorre antes da autenticação AWS e da publicação. O
+`if: always()` permanece no job para que falhas de outros frameworks não
+suprimam a checagem individual: cada candidato exige seu artifact validado e
+seu contrato aplicável.
 
 PRs continuam rodando só validação e scan: contrato funcional roda no caminho
 que publica (push/schedule/dispatch na `main`). O dispatch manual do workflow

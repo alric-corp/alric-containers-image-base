@@ -151,11 +151,10 @@ jobs:
           echo "::error::Nenhum artifact validado para ${FRAMEWORK} — validação falhou ou não rodou (ver job 'validate'). Publicação abortada para este framework." >&2
           exit 1
 
-      # M08/M10: o contrato funcional deste framework precisa ter passado nas
-      # duas plataformas. Evidência ausente é falha, não aprovação — e um
-      # framework sem contrato (cobertura gradual) recebe a mensagem do
-      # motivo, decidido pelo mesmo código versionado que montou a matriz.
-      - name: Resolve publication contract and its validated build variant
+      # Planejar execução não autoriza publicação: uma variante compilada
+      # -dev não tem contrato independente, mas ambos os membros exigem o
+      # mesmo contrato do par e os dois digests atuais. Par incompleto falha.
+      - name: Resolve publication contract and its validated counterpart
         id: contract-plan
         env:
           FRAMEWORK: ${{ matrix.framework }}
@@ -166,20 +165,21 @@ jobs:
           import os
           from scripts.pipeline.runtime import runtime_images
           framework = os.environ['FRAMEWORK']
-          planned, _ = runtime_images.plan(json.loads(os.environ['FRAMEWORKS']))
-          required = framework in planned
-          dev = (runtime_images.project(framework)[1]
-                 if required and runtime_images.supported(framework) == 'compiled' else '')
+          plan = runtime_images.publication_contract(
+              framework, json.loads(os.environ['FRAMEWORKS']))
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write(f'required={str(required).lower()}\ndev={dev}\n')
+              for key, value in plan.items():
+                  value = str(value).lower() if isinstance(value, bool) else value
+                  output.write(f'{key}={value}\n')
           PY
 
-      - name: Download current validated build variant for digest binding
-        if: steps.contract-plan.outputs.dev != ''
+      - name: Download current validated counterpart for pair digest binding
+        if: steps.contract-plan.outputs.counterpart_framework != ''
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: validated-oci-${{ steps.contract-plan.outputs.dev }}
-          path: runtime-dev.oci
+          name: validated-oci-${{ steps.contract-plan.outputs.counterpart_framework }}
+          path: runtime-counterpart.oci
+          digest-mismatch: error
           repository: ${{ github.repository }}
           run-id: ${{ github.run_id }}
           github-token: ${{ github.token }}
@@ -204,7 +204,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          pattern: runtime-${{ matrix.framework }}-[0-9]*
+          pattern: runtime-${{ steps.contract-plan.outputs.contract_framework }}-[0-9]*
           path: runtime-gate
           merge-multiple: false
           digest-mismatch: error
@@ -212,14 +212,17 @@ jobs:
           run-id: ${{ github.run_id }}
           github-token: ${{ github.token }}
 
-      - name: Require the functional contract of this framework
+      # O gate ordena os layouts como runtime + dev mesmo quando image.oci
+      # é o alvo -dev. Cada leg autoriza seu candidato pelo mesmo par testado,
+      # sem acoplar publicação ao resultado agregado dos outros frameworks.
+      - name: Authorize publication with the current functional contract
         env:
           FRAMEWORK: ${{ matrix.framework }}
           FRAMEWORKS: ${{ inputs.frameworks }}
           CONTRACT_DOWNLOAD: ${{ steps.contract.outcome }}
         run: |
-          python3 -B -m scripts.pipeline.runtime.runtime_images image.oci --gate "$FRAMEWORK" \
-            --requested "$FRAMEWORKS" --reports runtime-gate --dev-layout runtime-dev.oci \
+          python3 -B -m scripts.pipeline.runtime.runtime_images image.oci --publication-gate "$FRAMEWORK" \
+            --requested "$FRAMEWORKS" --reports runtime-gate --counterpart-layout runtime-counterpart.oci \
             --artifact-metadata runtime-artifacts.json --job-metadata runtime-jobs.json \
             --download-result "$CONTRACT_DOWNLOAD" --gate-output runtime-gate-result.json
 
