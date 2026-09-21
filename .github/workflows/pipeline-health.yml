@@ -18,7 +18,8 @@ name: Ops - Pipeline health
 
 on:
   schedule:
-    # 05:40 UTC: depois do build diário (03:00 UTC) e de pelo menos duas
+    # 05:40 UTC: 2h17 após o slot diário (03:23 UTC), antes do soak de 6h;
+    # permite observar o scheduler e pelo menos duas
     # janelas da promoção horária, para medir o ciclo completo do dia.
     - cron: "40 5 * * *"
   workflow_dispatch:

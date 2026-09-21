@@ -80,7 +80,11 @@ class ScheduleSeparationTests(unittest.TestCase):
 
     def test_workflow_yml_has_only_the_daily_build_schedule(self):
         crons = [entry['cron'] for entry in self.workflow_triggers['schedule']]
-        self.assertEqual(crons, ['0 3 * * *'])
+        self.assertEqual(crons, ['23 3 * * *'])
+        policy = json.loads((ROOT / 'policies/operations/health.json').read_text())
+        self.assertEqual(policy['schedules'][crons[0]]['gap_alert_hours'], 30)
+        self.assertEqual(policy['schedules'][crons[0]]['workflow'], '.github/workflows/workflow.yml')
+        self.assertIn(crons[0], self.workflow['jobs']['build-base-images']['if'])
 
     def test_promote_stable_job_is_absent_from_workflow_yml(self):
         self.assertNotIn('promote-stable', self.workflow['jobs'])
