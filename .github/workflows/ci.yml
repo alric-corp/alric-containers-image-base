@@ -1,10 +1,11 @@
-# Gate rápido e obrigatório (M12): testes Python + actionlint em toda
-# mudança, sem filtro de path. Um required check com filtro de path
-# nunca dispara pra PR fora do escopo do filtro, e fica "pendente" pra
-# sempre em vez de aprovar — por isso este workflow roda sempre (é
-# rápido: segundos, não os minutos de melange/apko/Trivy do pipeline
-# principal) e um PR só de documentação recebe resultado definido
-# (sucesso) em vez de check obrigatório travado.
+# Fast mandatory repository gate on Linux: unit tests, offline integration
+# tests, GitHub Actions syntax, workflow hardening, immutable dependency/pin
+# governance, and repository contracts. No image publication, AWS publication
+# role assumption, Terraform apply, or hosted production golden path runs here.
+# Windows/Git Bash is optional local developer testing, not hosted CI.
+# Corporate execution target: ephemeral Linux self-hosted runners on Kubernetes
+# managed by Actions Runner Controller (ARC). Current jobs use hosted Linux.
+# Run on every PR without path filters so mandatory checks always report.
 name: CI - Repository checks
 
 on:
@@ -27,6 +28,7 @@ concurrency:
 
 jobs:
   test:
+    name: Unit & integration tests
     runs-on: ubuntu-latest
     # Observado: ~24s num run real (M14).
     timeout-minutes: 5
@@ -42,6 +44,7 @@ jobs:
         run: make test-integration
 
   lint-workflows:
+    name: Repository & workflow lint
     runs-on: ubuntu-latest
     # Observado: ~5s num run real (M14).
     timeout-minutes: 5
