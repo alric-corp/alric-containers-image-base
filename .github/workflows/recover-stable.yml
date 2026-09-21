@@ -49,11 +49,12 @@ jobs:
     name: Recover ${{ inputs.framework }} to ${{ inputs.digest }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Mesmo grupo de promote-stable.yml para este framework: a recuperação
+    # Same destination-wide stable lock as promotion: recovery cannot interleave.
+    # A recuperação
     # e um ciclo de promoção concorrente nunca podem mover "stable" ao
     # mesmo tempo — um espera o outro, serializado pelo GitHub Actions.
     concurrency:
-      group: promote-stable-${{ vars.AWS_ROLE_ARN }}-${{ vars.AWS_REGION }}-${{ inputs.framework }}
+      group: stable-mutation-${{ vars.AWS_ROLE_ARN }}-${{ vars.AWS_REGION }}
       cancel-in-progress: false
     steps:
       # M16: sem credencial Git persistida — nenhum passo daqui faz push.

@@ -120,8 +120,12 @@ class ScheduleSeparationTests(unittest.TestCase):
     def test_promote_job_reads_the_resolved_defaults_not_raw_inputs(self):
         promote = self.promotion['jobs']['promote']
         self.assertIn('resolve-defaults', promote['needs'])
-        self.assertEqual(promote['strategy']['matrix']['framework'],
-                         '${{ fromJSON(needs.resolve-defaults.outputs.frameworks) }}')
+        self.assertNotIn('strategy', promote)
+        execution = next(step for step in promote['steps'] if step.get('id') == 'candidate')
+        self.assertEqual(execution['env']['FRAMEWORKS'],
+                         '${{ needs.resolve-defaults.outputs.frameworks }}')
+        self.assertEqual(execution['env']['SOAK_HOURS'],
+                         '${{ needs.resolve-defaults.outputs.soak-hours }}')
 
     def test_promotion_only_changes_do_not_trigger_a_full_build(self):
         for event in ('push', 'pull_request'):

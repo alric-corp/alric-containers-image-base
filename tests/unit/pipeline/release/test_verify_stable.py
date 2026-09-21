@@ -12,8 +12,9 @@ from unittest.mock import patch
 
 import yaml
 
-from tests.helpers.subprocess_env import bash_command, python3_test_environment, windows_native_stub
+from tests.helpers.subprocess_env import bash_command, windows_native_stub
 from scripts.pipeline.artifacts.oci_artifact import INDEX, MANIFEST
+from scripts.pipeline.release.promotion_batch import record_outcome as promotion_outcome
 from scripts.pipeline.release.verify_publication import verify_publication
 from scripts.pipeline.release.verify_stable import main
 
@@ -48,15 +49,9 @@ def registry_response(**overrides):
 
 
 def record_outcome(directory, promoted, skipped='false'):
-    recorder = next(step for step in promotion_steps() if step['name'] == 'Record promotion outcome')
-    base_env = {**os.environ, 'PROMOTED': promoted, 'SKIPPED': skipped,
-                'REASON': 'candidato elegível'}
-    with python3_test_environment(base_env) as env:
-        result = subprocess.run(bash_command('-c', recorder['run']), cwd=directory,
-                                env=env, capture_output=True, text=True)
-    if result.returncode:
-        raise AssertionError(result.stderr)
-    return json.loads((Path(directory) / 'reports/promotion-evidence.json').read_text())
+    path = Path(directory) / 'reports/promotion-evidence.json'
+    evidence = json.loads(path.read_text()) if path.exists() else {}
+    return promotion_outcome(evidence, promoted == 'true', skipped == 'true')
 
 
 class StableReadBackTests(unittest.TestCase):
@@ -230,26 +225,30 @@ class PromotionOutcomeTests(unittest.TestCase):
                 self.assertIsNone(evidence['candidate_digest'])
                 self.assertIsNone(evidence['stable_digest_observed'])
 
-    def test_workflow_requires_verification_scan_write_then_readback_before_outcome(self):
+    def test_workflow_uses_batch_authorization_and_preserves_outcomes_after_failure(self):
         steps = promotion_steps()
         by_name = {step['name']: i for i, step in enumerate(steps)}
         sequence = [by_name[name] for name in (
-            'Find promotion candidate (soak window)', 'Verify candidate platforms, signature and provenance',
-            'Re-scan both architectures before promotion', 'Promote to stable',
-            'Confirm stable via independent ECR read-back', 'Record promotion outcome', 'Preserve promotion outcome')]
+            'Validate workflow inputs before privileged operations',
+            'Configure AWS credentials (OIDC)', 'Login to Amazon ECR',
+            'Install cosign', 'Install Trivy',
+            'Authorize candidates and promote stable pairs', 'Preserve promotion outcome')]
         self.assertEqual(sequence, sorted(sequence))
-        readback = steps[sequence[4]]
-        self.assertEqual(readback['id'], 'readback')
-        self.assertEqual(readback['if'], "steps.candidate.outputs.skip == 'false'")
-        self.assertNotIn('continue-on-error', readback)
-        self.assertIn('scripts.pipeline.release.verify_stable "$IMAGE" "$DIGEST"', readback['run'])
-        self.assertEqual(readback['env'], {
-            'IMAGE': '${{ steps.candidate.outputs.image }}', 'DIGEST': '${{ steps.candidate.outputs.digest }}'})
-        recorder = steps[sequence[5]]
-        self.assertEqual(recorder['env']['PROMOTED'],
-                         "${{ steps.promote.outcome == 'success' && steps.readback.outcome == 'success' }}")
-        self.assertEqual(recorder['if'], '${{ !cancelled() }}')
-        self.assertEqual(steps[sequence[6]]['if'], '${{ !cancelled() }}')
+        self.assertIn('--plan', steps[sequence[0]]['run'])
+        executor = steps[sequence[5]]
+        self.assertNotIn('continue-on-error', executor)
+        self.assertNotIn('if', executor)
+        self.assertIn('scripts.pipeline.release.promotion_batch "$FRAMEWORKS"', executor['run'])
+        self.assertNotIn('--plan', executor['run'])
+        # The batch helper owns security checks, writes and read-back in one
+        # process. YAML cannot start a separate write before it authorizes.
+        for step in steps:
+            self.assertNotIn('imagetools create', step.get('run', ''))
+            self.assertNotIn('ecr put-image', step.get('run', ''))
+        outcome = steps[sequence[6]]
+        self.assertEqual(outcome['if'], '${{ !cancelled() }}')
+        self.assertIn('reports/promotion-*/promotion-evidence.json', outcome['with']['path'])
+        self.assertIn('reports/promotion-*/ecr-before.json', outcome['with']['path'])
 
 
 class RecoveryReadBackRegressionTests(unittest.TestCase):

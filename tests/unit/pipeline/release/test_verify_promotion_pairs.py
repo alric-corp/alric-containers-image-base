@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from scripts.pipeline.release.verify_promotion_pairs import discover_pairs, main
+from scripts.pipeline.release.verify_promotion_pairs import discover_pairs, main, verify_completed_pair
 
 
 def write_evidence(root, framework, attempt, tag, digest, skipped=False):
@@ -14,7 +14,10 @@ def write_evidence(root, framework, attempt, tag, digest, skipped=False):
     directory.mkdir(parents=True)
     (directory / 'promotion-evidence.json').write_text(json.dumps({
         'repository': f'image-base-{framework}', 'tag': tag,
-        'candidate_digest': digest, 'skipped': skipped,
+        'candidate_digest': digest, 'digest': digest, 'skipped': skipped,
+        'promoted': not skipped, 'write_status': 'not_run' if skipped else 'completed',
+        'read_back_status': 'not_run' if skipped else 'confirmed',
+        'stable_digest_observed': None if skipped else digest,
     }))
 
 
@@ -23,13 +26,18 @@ class DiscoverPairsTests(unittest.TestCase):
         self.assertEqual(discover_pairs(['go1-26', 'go1-26-dev']), ['go1-26'])
 
     def test_no_pair_when_dev_not_requested(self):
-        self.assertEqual(discover_pairs(['go1-26']), [])
+        with self.assertRaises(ValueError):
+            discover_pairs(['go1-26'])
 
     def test_dev_only_framework_is_not_its_own_pair(self):
-        self.assertEqual(discover_pairs(['go1-26-dev']), [])
+        with self.assertRaises(ValueError):
+            discover_pairs(['go1-26-dev'])
 
     def test_framework_without_dev_variant_has_no_pair(self):
         self.assertEqual(discover_pairs(['python3-13']), [])
+
+    def test_interpreted_runtime_and_dev_remain_independent(self):
+        self.assertEqual(discover_pairs(['nodejs22', 'nodejs22-dev']), [])
 
     def test_multiple_pairs_discovered(self):
         self.assertEqual(discover_pairs(['go1-26', 'go1-26-dev', 'java21', 'java21-dev']),
@@ -51,7 +59,22 @@ class MainIntegrationTests(unittest.TestCase):
 
     def test_no_pairs_requested_passes_trivially(self):
         with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(self.run_main(['python3-13'], tmp, 1), 0)
+            output = Path(tmp) / 'reports/promotion-pair-binding.json'
+            self.assertEqual(self.run_main(['python3-13'], tmp, 1, output), 0)
+            self.assertEqual(json.loads(output.read_text()), {'pairs': []})
+
+    def test_whole_pair_skip_requires_no_mutation_and_no_error(self):
+        evidence = {'skipped': True, 'promoted': False, 'candidate_digest': None,
+                    'write_status': 'not_run'}
+        self.assertEqual(verify_completed_pair(evidence, evidence)['status'], 'PAIR_SKIPPED')
+        with self.assertRaises(ValueError):
+            verify_completed_pair(evidence, dict(evidence, error='inventory failed'))
+
+    def test_interpreted_runtime_and_dev_different_builds_do_not_need_binding(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write_evidence(tmp, 'nodejs22', 1, '160926-0242-r111-a1', 'sha256:' + 'a' * 64)
+            write_evidence(tmp, 'nodejs22-dev', 1, '160926-0300-r222-a2', 'sha256:' + 'b' * 64)
+            self.assertEqual(self.run_main(['nodejs22', 'nodejs22-dev'], tmp, 1), 0)
 
     def test_matching_pair_passes(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -31,16 +31,15 @@ on:
         default: 6
   schedule:
     - cron: "17 * * * *"  # promoção horária; soak mínimo contado desde o push
-  # Dispatch manual para testar o gate de promoção sem esperar as 6h reais de
-  # soak (ex.: soak-hours=0 contra um build que acabou de ser publicado).
+  # Manual dispatch uses the same minimum six-hour production soak.
   workflow_dispatch:
     inputs:
       frameworks:
-        description: 'JSON array de frameworks a avaliar (ex.: ["go1-26"])'
+        description: 'JSON array completo (ex.: ["go1-26","go1-26-dev"])'
         type: string
-        default: '["go1-26"]'
+        default: '["go1-26","go1-26-dev"]'
       soak-hours:
-        description: "Horas mínimas de soak (use 0 para testar contra um build recém-publicado)"
+        description: "Horas mínimas de soak (mínimo de produção: 6)"
         type: number
         default: 6
 
@@ -74,7 +73,7 @@ jobs:
           echo "soak-hours=${SOAK_HOURS:-6}" >> "$GITHUB_OUTPUT"
 
   promote:
-    name: Promote ${{ matrix.framework }}
+    name: Authorize and promote stable candidates
     needs: [resolve-defaults]
     # RFC-013/ADR-0005: stable restaurado como referência oficial de consumo.
     # O kill switch abaixo continua existindo por design -- não é um relaxamento
@@ -95,17 +94,14 @@ jobs:
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
       vars.STABLE_PROMOTION_AUTHORIZED == 'true'
     runs-on: ubuntu-latest
-    # Observado: 11-40s num run real contra o ECR de verdade (M14). Margem
-    # cobre o re-scan Trivy e variância de rede nas chamadas AWS/ECR.
-    timeout-minutes: 10
-    # Mesmo grupo em dispatch direto e workflow_call: seleção e push serializados.
+    # One process checks every requested candidate before any stable mutation.
+    # Allow both architecture scans for future larger requested batches.
+    timeout-minutes: 60
+    # Destination-wide lock also used by recovery: no recovery can interleave
+    # the runtime/dev writes or change the previous-state snapshot.
     concurrency:
-      group: promote-stable-${{ inputs.aws-role-arn || vars.AWS_ROLE_ARN }}-${{ inputs.aws-region || vars.AWS_REGION }}-${{ matrix.framework }}
+      group: stable-mutation-${{ inputs.aws-role-arn || vars.AWS_ROLE_ARN }}-${{ inputs.aws-region || vars.AWS_REGION }}
       cancel-in-progress: false
-    strategy:
-      fail-fast: false
-      matrix:
-        framework: ${{ fromJSON(needs.resolve-defaults.outputs.frameworks) }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -116,7 +112,10 @@ jobs:
         env:
           FRAMEWORKS: ${{ needs.resolve-defaults.outputs.frameworks }}
           SOAK_HOURS: ${{ needs.resolve-defaults.outputs.soak-hours }}
-        run: python3 -B -m scripts.pipeline.catalog.validate_inputs
+        run: |
+          python3 -B -m scripts.pipeline.catalog.validate_inputs
+          python3 -B -m scripts.pipeline.release.promotion_batch "$FRAMEWORKS" \
+            --soak-hours "$SOAK_HOURS" --plan
 
       # inputs.aws-region/aws-role-arn só existem no workflow_call; no
       # schedule direto (produção) e no workflow_dispatch direto (usado pra
@@ -131,161 +130,59 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
 
-      - name: List images in repository
-        env:
-          FRAMEWORK: ${{ matrix.framework }}
-        run: |
-          set -eu
-          aws ecr describe-images --repository-name "image-base-${FRAMEWORK}" --output json > images.json
-
-      - name: Find promotion candidate (soak window)
-        id: candidate
-        env:
-          FRAMEWORK: ${{ matrix.framework }}
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          SOAK_HOURS: ${{ needs.resolve-defaults.outputs.soak-hours }}
-        run: |
-          python3 -B -m scripts.pipeline.release.find_promotion_candidate \
-            images.json "$SOAK_HOURS" "$REGISTRY" "image-base-${FRAMEWORK}" \
-            policies/release/promotion-quarantine.json \
-            --evidence reports/promotion-evidence.json
-
-      # Re-scan por digest, já com o banco de CVE do Trivy atualizado em
-      # relação ao momento do build original — é aqui que uma CVE divulgada
-      # durante a janela de soak barra a promoção.
       - name: Install cosign
-        if: steps.candidate.outputs.skip == 'false'
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
-      - name: Verify candidate platforms, signature and provenance
-        if: steps.candidate.outputs.skip == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          IMAGE_REF: ${{ steps.candidate.outputs.image }}@${{ steps.candidate.outputs.digest }}
-        run: python3 -B -m scripts.pipeline.release.verify_promotion "$IMAGE_REF" "$GITHUB_REPOSITORY"
-
       - name: Install Trivy
-        if: steps.candidate.outputs.skip == 'false'
         uses: alric-corp/alric-containers-reusable-workflows/actions/setup-trivy@eea2d2f4c4102ded74204e4131c1417f444ae3fc # governed Trivy setup
 
       - name: Record promotion tool versions
-        if: steps.candidate.outputs.skip == 'false'
         run: python3 -B -m scripts.pipeline.operations.tool_versions promotion reports/tool-versions.json
 
-      - name: Re-scan both architectures before promotion
-        if: steps.candidate.outputs.skip == 'false'
+      # The helper selects the complete batch, authorizes compiled pairs, then
+      # verifies trust and scans EVERY selected digest before its first write.
+      # One in-memory execution owns authorization; stored JSON is evidence only.
+      # ECR has no cross-repository transaction: a partial write fails loudly,
+      # records both outcomes and preserves the initial inventories for recovery.
+      - name: Authorize candidates and promote stable pairs
+        id: candidate
         env:
-          IMAGE_REF: ${{ steps.candidate.outputs.image }}@${{ steps.candidate.outputs.digest }}
-        run: python3 -B -m scripts.pipeline.artifacts.scan_images remote "$IMAGE_REF"
-
-      # M11: mesma visibilidade não-bloqueante do build — nunca falha o
-      # job, roda mesmo se o re-scan acima já bloqueou a promoção.
-      # M12: `if: <condição>` sem always()/failure()/cancelled() herda
-      # implicitamente `success()` do GitHub Actions — sem o `!cancelled()`
-      # aqui, este passo era pulado quando o re-scan falhava, ao contrário
-      # do que o comentário acima sempre afirmou. Confirmado empiricamente
-      # num runner real antes da correção (PR #43, descartável): o mesmo
-      # padrão sem o guard ficou `skipped` depois de um passo anterior
-      # falhar; com o guard, rodou.
-      - name: Report CVEs without an available fix (informational)
-        if: ${{ !cancelled() && steps.candidate.outputs.skip == 'false' }}
-        env:
-          IMAGE_REF: ${{ steps.candidate.outputs.image }}@${{ steps.candidate.outputs.digest }}
-        run: python3 -B -m scripts.pipeline.release.report_unfixed_cves remote "$IMAGE_REF"
+          FRAMEWORKS: ${{ needs.resolve-defaults.outputs.frameworks }}
+          SOAK_HOURS: ${{ needs.resolve-defaults.outputs.soak-hours }}
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -B -m scripts.pipeline.release.promotion_batch "$FRAMEWORKS" \
+            --soak-hours "$SOAK_HOURS" --registry "$REGISTRY" \
+            --repository "$GITHUB_REPOSITORY" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --quarantine policies/release/promotion-quarantine.json --reports reports
 
       - name: Preserve promotion scan evidence
-        if: ${{ !cancelled() && steps.candidate.outputs.skip == 'false' }}
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: promotion-scans-${{ matrix.framework }}-${{ github.run_attempt }}
-          path: reports/
+          name: promotion-scans-batch-${{ github.run_attempt }}
+          path: |
+            reports/promotion-scans-*/
+            reports/tool-versions.json
           retention-days: 30
           if-no-files-found: warn
-
-      # docker buildx imagetools create retagueia o índice multi-arch por
-      # referência (sem baixar/re-subir camadas), preservando o manifest
-      # list amd64+arm64 tal como foi publicado.
-      - name: Promote to stable
-        id: promote
-        if: steps.candidate.outputs.skip == 'false'
-        env:
-          IMAGE: ${{ steps.candidate.outputs.image }}
-          DIGEST: ${{ steps.candidate.outputs.digest }}
-          TAG: ${{ steps.candidate.outputs.tag }}
-        run: |
-          set -eu
-          docker buildx imagetools create --tag "${IMAGE}:stable" "${IMAGE}@${DIGEST}"
-          echo "tag escrita ${IMAGE}:${TAG} -> ${IMAGE}:stable; aguardando read-back"
-
-      - name: Confirm stable via independent ECR read-back
-        id: readback
-        if: steps.candidate.outputs.skip == 'false'
-        env:
-          IMAGE: ${{ steps.candidate.outputs.image }}
-          DIGEST: ${{ steps.candidate.outputs.digest }}
-        run: |
-          python3 -B -m scripts.pipeline.release.verify_stable "$IMAGE" "$DIGEST" \
-            --evidence reports/promotion-evidence.json
-
-      # M11/M04: a evidência registra o que aconteceu de fato — promoveu, ou
-      # pulou e por quê, com a idade real do stable medida pelo push no ECR.
-      # `promoted` exige escrita e read-back do mesmo índice confirmados; este
-      # passo roda mesmo quando a promoção falhou, para preservar o resultado.
-      - name: Record promotion outcome
-        if: ${{ !cancelled() }}
-        env:
-          PROMOTED: ${{ steps.promote.outcome == 'success' && steps.readback.outcome == 'success' }}
-          SKIPPED: ${{ steps.candidate.outputs.skip }}
-          REASON: ${{ steps.candidate.outputs.reason }}
-        run: |
-          set -eu
-          python3 -B - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-          path = Path('reports/promotion-evidence.json')
-          # Sem o arquivo, a seleção do candidato não chegou a rodar (falha de
-          # AWS/ECR, por exemplo): isso é diferente de "pulou por não ter
-          # candidato" e a tabela do run precisa distinguir os dois.
-          evaluated = path.is_file()
-          evidence = json.loads(path.read_text()) if evaluated else {}
-          evidence.setdefault('candidate_digest', evidence.get('digest'))
-          evidence.setdefault('stable_digest_observed', None)
-          evidence.setdefault('read_back_status', 'not_run')
-          evidence['skipped'] = os.environ['SKIPPED'] == 'true'
-          evidence['promoted'] = (os.environ['PROMOTED'] == 'true'
-                                  and not evidence['skipped']
-                                  and evidence['read_back_status'] == 'confirmed'
-                                  and bool(evidence['candidate_digest'])
-                                  and evidence['candidate_digest'] == evidence.get('digest')
-                                  and evidence['stable_digest_observed'] == evidence['candidate_digest'])
-          if not evaluated:
-              evidence['reason'] = 'gate de promoção não chegou a avaliar candidato (ver log)'
-          elif not evidence['promoted'] and not evidence['skipped']:
-              evidence['reason'] = ('candidato elegível, promoção não concluída: '
-                                    + (evidence.get('read_back_error') or os.environ['REASON']
-                                       or evidence.get('reason') or 'ver log'))
-          path.parent.mkdir(parents=True, exist_ok=True)
-          path.write_text(json.dumps(evidence, indent=2) + '\n')
-          print(json.dumps(evidence, indent=2))
-          PY
 
       - name: Preserve promotion outcome
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: promotion-${{ matrix.framework }}-${{ github.run_attempt }}
-          path: reports/promotion-evidence.json
+          name: promotion-batch-${{ github.run_attempt }}
+          path: |
+            reports/promotion-*/promotion-evidence.json
+            reports/promotion-*/ecr-before.json
+            reports/promotion-batch.json
           retention-days: 30
           if-no-files-found: warn
 
-  # RFC-013/ADR-0005: promover runtime e -dev de forma coordenada exige que
-  # os dois venham do mesmo release aprovado -- cada leg da matrix acima
-  # seleciona seu candidato de forma independente, então esta verificação
-  # roda depois, sobre a evidência já escrita, e falha alto (sem desfazer
-  # nada) se runtime e -dev não corresponderem ao mesmo run/attempt. Um
-  # framework sem par -dev pedido no mesmo run (ex.: python3-13) não tem o
-  # que verificar aqui -- não é falha.
+  # Independent post-write check complements the mandatory pre-write pair
+  # authorization. It rejects partial write/read-back outcomes and accepts a
+  # legitimate whole-pair skip when neither member has an eligible candidate.
   verify-pair:
     name: Verify runtime/dev promotion pair binding
     needs: [promote, resolve-defaults]
@@ -305,7 +202,11 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: evidence
-          pattern: 'promotion-*'
+          pattern: 'promotion-*-${{ github.run_attempt }}'
+          merge-multiple: true
+          digest-mismatch: error
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
           github-token: ${{ github.token }}
 
       - name: Verify runtime/dev pair binding
@@ -348,7 +249,11 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: evidence
-          pattern: 'promotion-*'
+          pattern: 'promotion-*-${{ github.run_attempt }}'
+          merge-multiple: true
+          digest-mismatch: error
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
           github-token: ${{ github.token }}
 
       - name: List artifacts of this run
