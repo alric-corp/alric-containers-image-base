@@ -1,0 +1,32 @@
+name: Distroless - Catalog certification
+
+# Deliberate full-catalog candidate publication. Scheduled production keeps
+# its own reference profile; this entrypoint accepts no scope overrides.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build-base-images:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    # Share the normal publisher's slot through build, gates and attestations.
+    # An active candidate-producing run must never be cancelled by another.
+    concurrency:
+      group: factory-build-publish-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    uses: ./.github/workflows/build-base-images.yml
+    with:
+      aws-region: ${{ vars.AWS_REGION }}
+      aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
+      frameworks: >-
+        ["dotnet10", "dotnet10-dev", "go1-25", "go1-25-dev",
+        "go1-26", "go1-26-dev", "java21", "java21-dev", "java25", "java25-dev",
+        "nodejs22", "nodejs22-dev", "nodejs24", "nodejs24-dev", "python3-13", "python3-14"]

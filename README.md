@@ -268,6 +268,12 @@ O `workflow.yml` separa validação e publicação:
 - **Push na `main`, execução manual na `main` e schedule diário às 03:23 UTC:** chamam `build-base-images.yml`, que executa a mesma validação antes do job de publicação. O cron `23 3 * * *` corresponde aproximadamente a 00:23 em America/Sao_Paulo; permanece UTC e evita o início da hora, sem garantia de pontualidade do scheduler.
 - **Promoção:** roda a cada hora, no minuto 17, e seleciona somente candidatos que completaram o soak mínimo de seis horas desde o push.
 
+**Distroless - Catalog certification** oferece um dispatch manual na `main`
+com os 16 frameworks fixos, usando o mesmo engine e lock do publicador.
+Não amplia o perfil agendado Go 1.26 nem promove `stable`. Veja a
+[certificação controlada do catálogo](docs/catalog-certification.md) para
+evidência por digest, read-back ECR e continuação após o soak real.
+
 O caller `build-base-images` usa a concorrência
 `factory-build-publish-${github.repository}` com `cancel-in-progress: false`:
 um run candidato termina validação, contrato, publicação, assinatura e
