@@ -74,8 +74,12 @@ de continuar adiando.
    derivados do catálogo. `promotion_batch.py` resolve ambos os candidatos,
    exige soak/quarentena e a mesma identidade `r<run_id>-a<attempt>` via
    `verify_promotion_pair.py`, verifica trust e re-scan de ambos antes de
-   permitir a primeira escrita de `stable`. Lote incompleto ou um membro
-   inelegível bloqueia as escritas. `verify_promotion_pairs.py` repete o
+   permitir a primeira escrita de `stable`. Par incompleto ou um membro
+   inelegível bloqueia as escritas desse par. A avaliação de todas as unidades
+   termina antes das escritas, mas cada unidade mantém sua autorização:
+   falha de um par não suprime outro par ou framework interpretado aprovado.
+   O lote falha se qualquer unidade falhar e preserva os outcomes individuais.
+   `verify_promotion_pairs.py` repete o
    binding após as escritas/read-backs, sem substituir a autorização prévia.
    O controle anterior apenas posterior fica registrado no histórico Git.
    Framework interpretado mantém sua semântica individual.

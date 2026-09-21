@@ -142,9 +142,7 @@ class ScheduleSeparationTests(unittest.TestCase):
                     .replace('${{ inputs.aws-role-arn || vars.AWS_ROLE_ARN }}',
                             '${{ vars.AWS_ROLE_ARN }}')
                     .replace('${{ inputs.aws-region || vars.AWS_REGION }}',
-                            '${{ vars.AWS_REGION }}')
-                    .replace('${{ matrix.framework }}', '${{ FRAMEWORK }}')
-                    .replace('${{ inputs.framework }}', '${{ FRAMEWORK }}'))
+                            '${{ vars.AWS_REGION }}'))
 
         self.assertEqual(normalize(promote_group), normalize(recover_group))
         self.assertFalse(self.promotion['jobs']['promote']['concurrency']['cancel-in-progress'])

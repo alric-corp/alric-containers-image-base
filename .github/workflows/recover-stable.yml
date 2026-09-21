@@ -49,10 +49,8 @@ jobs:
     name: Recover ${{ inputs.framework }} to ${{ inputs.digest }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Same destination-wide stable lock as promotion: recovery cannot interleave.
-    # A recuperação
-    # e um ciclo de promoção concorrente nunca podem mover "stable" ao
-    # mesmo tempo — um espera o outro, serializado pelo GitHub Actions.
+    # Mesmo lock por role/região da promoção: recovery espera o lote ativo
+    # terminar antes de mover stable; cancel-in-progress permanece false.
     concurrency:
       group: stable-mutation-${{ vars.AWS_ROLE_ARN }}-${{ vars.AWS_REGION }}
       cancel-in-progress: false

@@ -38,6 +38,13 @@ A promoção preserva os diretórios por framework dentro de dois bundles:
 `promotion-scans-batch-<attempt>` (scans e versões das ferramentas), por 30
 dias. O download com merge mantém esses diretórios para os consumidores;
 os links do resumo apontam para o bundle da tentativa correspondente.
+O documento `promotion-batch.json` mantém `unit_results` com frameworks,
+status (`PENDING`, `AUTHORIZED`, `FAILED` ou `SKIPPED`), fase,
+`prewrite_authorized`, `promoted` e erros. `AUTHORIZED` só indica promoção
+concluída quando acompanhado de `promoted=true` e das confirmações por
+framework. `prewrite_barrier_complete` registra o término da avaliação de
+todas as unidades antes das escritas. Falha de uma unidade mantém os
+indicadores agregados false; não apaga o outcome de outra unidade confirmada.
 
 Três distinções que a tabela mantém separadas porque exigem ações
 diferentes:
@@ -73,12 +80,16 @@ não execução ou expiração; nenhuma delas é PASS.
 `contents: read` / `actions: read`, sem AWS. Não consulta o ECR. Mede:
 
 - **proxy de movimentação de `stable` por framework** — no fluxo atual,
-  `stable_age_hours` exige job `Authorize and promote stable candidates`
-  bem-sucedido e o artifact `promotion-batch-<attempt>` da mesma tentativa.
-  Lê `promoted=true`, read-back `confirmed`, digest observado igual ao
-  candidato e autorização coerente de ambos os membros do par. Um job verde
-  que pulou candidatos não renova a idade; job falho ou escrita parcial
-  também não. Usa `completed_at` do job, sem consultar o ECR atual. Para
+  `stable_age_hours` lê o artifact `promotion-batch-<attempt>` da tentativa
+  exata do job `Authorize and promote stable candidates`, concluído com
+  sucesso ou falha. Cada unidade exige autorização prévia, trust, scan,
+  escrita concluída, `promoted=true`, read-back `confirmed` e digest observado
+  igual ao candidato. Um par compilado exige ambos os membros e binding
+  coerente; um framework interpretado é uma unidade individual. Uma unidade
+  confirmada continua válida quando uma unidade independente falha:
+  a conclusão agregada não apaga o sucesso individual nem aprova o lote
+  inteiro. Skip, escrita parcial ou read-back falho não renovam a idade da
+  unidade afetada. Usa `completed_at` do job, sem consultar o ECR atual. Para
   runs históricos, preserva o proxy anterior: passo `Promote to stable`
   bem-sucedido em `Promote <framework>`, sem garantia de read-back final.
 - **última publicação bem-sucedida por framework** — pelo job de publicação
@@ -177,6 +188,12 @@ Após o merge autorizado e o término do golden path congelado, a promoção
 deve permanecer ACTIVE, governada por `STABLE_PROMOTION_AUTHORIZED`. Este PR
 não reativa o workflow nem muda o valor false. Promoção e recuperação usam
 o mesmo lock `stable-mutation-<role>-<region>` e não cancelam o escritor ativo.
+Esse lock permanece inalterado: prioriza consistência das tags sobre a
+latência de recuperação de emergência. Recovery pode esperar atrás do lote
+de promoção ativo. O timeout de 60 minutos do job de promoção é um limite
+superior configurado de execução, não a espera esperada da recuperação nem
+garantia do tempo total em fila. Em emergência, inspecione o run ativo e sua
+evidência antes de decidir a ação operacional; não contorne o lock.
 Autorização do par e segurança de ambos vêm antes de qualquer tag write;
 as duas escritas ECR continuam sem atomicidade distribuída. Falha parcial
 mantém o par não promovido, evidencia o estado anterior e exige triagem pelo

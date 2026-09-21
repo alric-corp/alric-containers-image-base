@@ -52,7 +52,7 @@ Execução com as policies propostas é NOT RUN em todas as linhas.
 | O08 — publicador: Sign published image | Cosign sign, bundle/referrer OCI adicional | Leitura/check e escrita de O06; discovery ListImageReferrers usa `ecr:BatchGetImage` |
 | O09 — publicador: Attest original SPDX SBOMs | publish_sboms → Cosign attest para índice/amd64/arm64, blobs/manifests adicionais | Mesmo conjunto de O08; não é actions/attest-sbom |
 | O10 — publicador: Attest build provenance | attest-build-provenance → attest, push-to-registry | Conjunto OCI de O06; API GitHub/serviços Sigstore separados |
-| O11 — promoção: List images in repository | describe-images; seletor usa JSON/quarentena locais | `ecr:DescribeImages` |
+| O11 — promoção: inventário e seleção de candidatos | promotion_batch.load_details → aws ecr describe-images; seletor usa o inventário JSON e a quarentena local | `ecr:DescribeImages` |
 | O12 — promoção/recovery: Verify platforms, signature and provenance | Buildx inspect; Cosign verify/referrers/bundle; gh attestation verify oci:// | `ecr:BatchGetImage`, `ecr:GetDownloadUrlForLayer`; provenance também usa API GitHub |
 | O13 — promoção/recovery: Re-scan; Report CVEs without an available fix | Trivy remoto lê manifests/configs/layers por arquitetura | `ecr:BatchGetImage`, `ecr:GetDownloadUrlForLayer` |
 | O14 — promoção: Authorize candidates and promote stable pairs | promotion_batch autoriza o par e executa Buildx imagetools create no mesmo repositório/índice | `ecr:BatchGetImage`, `ecr:PutImage` |

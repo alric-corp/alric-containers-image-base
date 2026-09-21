@@ -394,11 +394,14 @@ autorizado é ACTIVE, com `STABLE_PROMOTION_AUTHORIZED` como kill switch
 permanente, sem default true. Este PR mantém a variável false e não reativa
 o workflow enquanto o golden path corrente estiver congelado.
 
-O fluxo autoriza os candidatos antes de qualquer escrita de `stable`:
+O fluxo avalia todas as unidades antes de qualquer escrita de `stable`:
+um par compilado é uma unidade; um framework interpretado é uma unidade
+individual. A autorização pertence à unidade, não à conclusão agregada do
+lote.
 
 1. Lista as imagens do repositório ECR e seleciona o índice OCI/Docker com tag de build válida (`ddmmaa-hhmm`, com sufixo opcional `-r<run_id>-a<tentativa>`) mais recente entre os que já completaram o soak. Descarta o digest já marcado como `stable` e candidatos com data de push anterior ou igual à dele ([find_promotion_candidate.py](scripts/pipeline/release/find_promotion_candidate.py)). Um build recente ainda em soak não impede a seleção de outro elegível.
-2. Resolve a relação runtime/`-dev` pelo catálogo. Ambos precisam estar presentes, fora de quarentena, elegíveis após o soak e com build tags do mesmo run/attempt. Lote incompleto, lado ainda em soak e identidades divergentes não permitem a primeira escrita. Framework interpretado mantém sua promoção independente.
-3. Para todos os candidatos autorizados, inspeciona os índices e exige exatamente `linux/amd64` e `linux/arm64`. Verifica assinatura cosign com identidade exata do workflow `build-base-images.yml@refs/heads/main` e provenance GitHub vinculada ao signer workflow e à source ref `refs/heads/main`. Re-escaneia ambos os digests com Trivy por arquitetura (`--ignore-unfixed`). Qualquer falha bloqueia as escritas. O relatório separado de CVEs sem correção continua informativo.
+2. Resolve a relação runtime/`-dev` pelo catálogo. Ambos precisam estar presentes, fora de quarentena, elegíveis após o soak e com build tags do mesmo run/attempt. Par incompleto, lado ainda em soak e identidades divergentes não permitem a primeira escrita desse par. Framework interpretado mantém sua promoção independente.
+3. Para todos os candidatos elegíveis, inspeciona os índices e exige exatamente `linux/amd64` e `linux/arm64`. Verifica assinatura cosign com identidade exata do workflow `build-base-images.yml@refs/heads/main` e provenance GitHub vinculada ao signer workflow e à source ref `refs/heads/main`. Re-escaneia ambos os digests com Trivy por arquitetura (`--ignore-unfixed`). Qualquer falha bloqueia as escritas da unidade afetada, sem autorizar metade de um par nem suprimir unidades independentes aprovadas. O relatório separado de CVEs sem correção continua informativo. A barreira global de avaliação termina antes de começar as escritas.
 4. Somente depois dos pré-requisitos de ambos, move runtime e depois dev com `docker buildx imagetools create --tag <imagem>:stable <imagem>@<digest>` — retag do índice por referência, sem rebuild/repack.
 5. Lê ambas as tags no ECR e exige exatamente os digests autorizados. Só após os dois read-backs confirmados o par recebe `promoted=true`. Tag ausente, erro/timeout, resposta ambígua ou digest diferente falham fechado; a verificação final do par permanece.
 
@@ -413,6 +416,12 @@ e a segunda falhar, o par falha, mantém `promoted=false` e preserva a
 evidência do estado anterior e de cada escrita. O operador deve restaurar o
 par anterior conhecido pelo workflow de recuperação, sujeito aos seus gates;
 não reconstruir nem apagar a evidência para esconder uma escrita parcial.
+`promotion-batch.json` preserva os resultados por unidade em `unit_results`:
+status, fase, autorização prévia, `promoted` e erros. Uma unidade aprovada
+pode concluir enquanto outra falha; o job e o resultado agregado continuam
+falhos, sem apagar o sucesso comprovado da unidade independente. Skip não
+equivale a promoção. O health e o resumo devem consultar esses outcomes,
+sem tratar a conclusão do job como autorização de cada framework.
 O read-back confirma o estado naquele instante; escritores externos podem
 alterá-lo depois. Aceite hospedado P1-01: **PASS**, observado em `go1-26` e
 `go1-26-dev` no run `34768459323`, commit `e3ed682`, com read-back confirmado
@@ -443,7 +452,7 @@ A espera nominal após o soak (6h) até a próxima janela de promoção horária
 Se um build promovido apresentar problema depois da promoção (ex.: CVE divulgada após o soak, comportamento inesperado reportado por um consumidor), `recover-stable.yml` restaura `stable` para um digest anterior já aprovado — sem rebuild, sem bypass do gate de segurança:
 
 1. **Escolher o digest de destino.** Precisa ser um build já publicado no repositório (`aws ecr describe-images --repository-name image-base-<framework>`) — nunca um digest arbitrário. Idealmente um build que já foi `stable` antes.
-2. **Disparar o workflow** (Actions → "Recover stable to a previous digest" → Run workflow) com `framework`, `digest` (`sha256:...`) e `reason`. O job:
+2. **Disparar o workflow** (Actions → "Factory Distroless - Recover stable" → Run workflow) com `framework`, `digest` (`sha256:...`) e `reason`. O job:
    - confirma que o digest existe no repositório;
    - reverifica plataformas (amd64+arm64), assinatura cosign e provenance GitHub com a **mesma política** de `promote-stable.yml` — um digest antigo que não passe nessa verificação não é restaurado;
    - reescaneia as duas arquiteturas com o banco de CVE atual — uma CVE nova no digest antigo bloqueia a recuperação; correção do gate por exceção exige política explícita, não esse workflow;
@@ -451,7 +460,17 @@ Se um build promovido apresentar problema depois da promoção (ex.: CVE divulga
    - grava um `recovery-evidence.json` (operador = `github.actor`, motivo, digest anterior/novo, run) como artifact.
 3. **Abrir um PR** adicionando o digest retirado a `policies/release/promotion-quarantine.json` (o job imprime o trecho JSON pronto pra colar). Sem isso, o build retirado continua sendo o mais recente por timestamp em `find_promotion_candidate.py`, e o próximo ciclo de promoção o selecionaria de novo — desfazendo a recuperação. A entrada de quarentena some quando um build mais novo e aprovado for promovido de verdade (a partir daí o timestamp de `stable` já avança e a exclusão explícita deixa de ser necessária).
 
-A recuperação e uma promoção concorrente do mesmo framework compartilham o grupo de concorrência de `promote-stable.yml` — nunca correm ao mesmo tempo. Restaurar a imagem base **não** reconstrói nem reverte automaticamente aplicações consumidoras; isso é responsabilidade do runbook de deploy de cada time.
+A recuperação e a promoção compartilham o lock
+`stable-mutation-<role>-<region>`, que permanece inalterado. Ele prioriza
+consistência das tags sobre latência de emergência: recovery pode esperar
+um lote de promoção ativo, inclusive de outros frameworks no mesmo destino.
+O timeout de 60 minutos do job de promoção é um limite superior configurado
+de execução, não o tempo esperado de espera nem um SLA da fila. Em emergência,
+inspecione o run ativo, a fase e as evidências antes da decisão operacional;
+não contorne o lock nem cancele automaticamente um escritor ativo.
+Restaurar a imagem base **não** reconstrói nem reverte automaticamente
+aplicações consumidoras; isso é responsabilidade do runbook de deploy de
+cada time.
 
 ## Verificação: assinatura e build provenance
 
