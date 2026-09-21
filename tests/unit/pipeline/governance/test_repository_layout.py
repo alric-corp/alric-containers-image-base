@@ -7,19 +7,26 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[4]
-PIPELINE_DOMAINS = {'artifacts', 'catalog', 'governance', 'operations', 'release', 'runtime'}
+PIPELINE_DOMAINS = {'artifacts', 'catalog', 'consumer_apps', 'governance', 'operations', 'release', 'runtime'}
 LEGACY_ADAPTERS = {'runtime_images.py', 'validate_inputs.py', 'oci_artifact.py',
                    'scan_images.py', 'tool_versions.py', 'report_unfixed_cves.py'}
 DEPENDENCIES = {
     'artifacts': {'governance'}, 'catalog': set(), 'governance': set(),
     'runtime': {'artifacts'}, 'release': {'artifacts'},
     'operations': {'governance', 'runtime'},
+    'consumer_apps': set(),
 }
 # Promotion reuses the canonical pair model and input validation without
 # opening release to every implementation module in those domains.
 MODULE_DEPENDENCIES = {
     'release': {'scripts.pipeline.runtime.runtime_images',
                 'scripts.pipeline.catalog.validate_inputs'},
+    # Consumers reuse identity/metadata validation and architecture reporting,
+    # never the internal runtime executor or release mutation mechanisms.
+    'consumer_apps': {'scripts.pipeline.artifacts.oci_artifact',
+                      'scripts.pipeline.release.verify_publication',
+                      'scripts.pipeline.runtime',
+                      'scripts.pipeline.runtime.runtime_images'},
 }
 
 
