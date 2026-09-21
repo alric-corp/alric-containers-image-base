@@ -1,0 +1,233 @@
+name: Distroless - App certification
+
+# Downstream applications consume a complete, successful publication run by
+# immutable digest. This workflow never builds or publishes base images.
+on:
+  workflow_dispatch:
+    inputs:
+      source-run-id:
+        description: Successful full-catalog publication run in this repository
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+# Immutable candidates need no publisher/stable lock. Duplicate certifications
+# of the same source wait independently of candidate publication and promotion.
+concurrency:
+  group: app-certification-${{ github.repository }}-${{ inputs.source-run-id }}
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    name: Resolve exact published source candidates
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Validate source run before AWS authentication
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source-run-id }}
+        run: |
+          python3 -B - <<'PY'
+          import os
+          import re
+          if not re.fullmatch(r'[1-9][0-9]*', os.environ['SOURCE_RUN_ID']):
+              raise SystemExit('source-run-id must be a positive integer')
+          PY
+
+      - name: Configure read-only AWS session (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          # A session policy only restricts the existing LAB role; no IAM change.
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[
+              {"Effect":"Allow","Action":["ecr:GetAuthorizationToken"],"Resource":"*"},
+              {"Effect":"Allow","Action":["ecr:DescribeImages","ecr:DescribeRepositories",
+                "ecr:BatchGetImage","ecr:GetDownloadUrlForLayer","ecr:BatchCheckLayerAvailability"],
+                "Resource":"arn:aws:ecr:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:repository/image-base-*"}
+            ]}
+
+      - name: Authenticate registry pulls
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+
+      - name: Require runner Docker Buildx
+        run: docker buildx version
+
+      - name: Resolve source publication evidence and remote ECR identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source-run-id }}
+          REPOSITORY: ${{ github.repository }}
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          python3 -B -m scripts.pipeline.consumer_apps.inventory "$SOURCE_RUN_ID" \
+            --repository "$REPOSITORY" --registry "$REGISTRY" \
+            --output reports/app-certification/candidate-inventory.json
+
+      - name: Preserve source inventory evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: app-certification-inventory-${{ github.run_attempt }}
+          path: reports/app-certification/
+          retention-days: 30
+          if-no-files-found: error
+
+  applications:
+    name: Consumer ${{ matrix.framework }} / ${{ matrix.architecture }}
+    needs: inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [dotnet10, go1-25, go1-26, java21, java25, nodejs22, nodejs24, python3-13, python3-14]
+        architecture: [amd64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download this certification inventory
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: app-certification-inventory-${{ github.run_attempt }}
+          path: reports/app-certification/
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+          merge-multiple: false
+
+      - name: Configure read-only AWS session (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[
+              {"Effect":"Allow","Action":["ecr:GetAuthorizationToken"],"Resource":"*"},
+              {"Effect":"Allow","Action":["ecr:DescribeImages","ecr:DescribeRepositories",
+                "ecr:BatchGetImage","ecr:GetDownloadUrlForLayer","ecr:BatchCheckLayerAvailability"],
+                "Resource":"arn:aws:ecr:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:repository/image-base-*"}
+            ]}
+
+      - name: Authenticate registry pulls
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+
+      - name: Install governed ARM64 emulation
+        if: matrix.architecture == 'arm64'
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+        with:
+          platforms: arm64
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3-68@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+
+      - name: Require runner Docker Buildx
+        run: docker buildx version
+
+      - name: Build and execute the real consumer application
+        env:
+          FRAMEWORK: ${{ matrix.framework }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          python3 -B -m scripts.pipeline.consumer_apps.runner \
+            --inventory reports/app-certification/candidate-inventory.json \
+            --framework "$FRAMEWORK" --architecture "$ARCHITECTURE" \
+            --reports reports/app-certification
+
+      - name: Preserve application result and diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: app-certification-result-${{ matrix.framework }}-${{ matrix.architecture }}-${{ github.run_attempt }}
+          path: |
+            reports/app-certification/${{ matrix.framework }}-${{ matrix.architecture }}.json
+            reports/app-certification/${{ matrix.framework }}-${{ matrix.architecture }}-logs/
+          retention-days: 30
+          if-no-files-found: error
+
+  summary:
+    name: Summarize all consumer executions
+    needs: [inventory, applications]
+    if: always() && needs.inventory.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download this certification inventory
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: app-certification-inventory-${{ github.run_attempt }}
+          path: reports/app-certification/
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+          merge-multiple: false
+
+      - name: Download every available consumer result
+        id: results
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: app-certification-result-*-${{ github.run_attempt }}
+          path: reports/app-certification/results/
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+          merge-multiple: false
+
+      - name: Require all 18 executions and publish the result table
+        if: always()
+        env:
+          DOWNLOAD_OUTCOME: ${{ steps.results.outcome }}
+        run: |
+          python3 -B -m scripts.pipeline.consumer_apps.summary \
+            --inventory reports/app-certification/candidate-inventory.json \
+            --results reports/app-certification/results \
+            --download-result "$DOWNLOAD_OUTCOME" \
+            --json reports/app-certification/summary.json --markdown "$GITHUB_STEP_SUMMARY"
+
+      - name: Reject any result download integrity failure
+        if: always()
+        env:
+          DOWNLOAD_OUTCOME: ${{ steps.results.outcome }}
+        run: test "$DOWNLOAD_OUTCOME" = success
+
+      - name: Preserve certification summary
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: app-certification-summary-${{ github.run_attempt }}
+          path: reports/app-certification/summary.json
+          retention-days: 30
+          if-no-files-found: error

@@ -49,6 +49,7 @@
     "pipeline-summary-": 30,
     "pipeline-health-": 30,
     "image-trust-": 30,
+    "app-certification-": 30,
     "infra-apply-plan-": 1,
     "infra-apply-evidence-": 5,
     "infra-pr-plan-": 5,
