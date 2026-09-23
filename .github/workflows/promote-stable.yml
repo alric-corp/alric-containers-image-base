@@ -134,7 +134,7 @@ jobs:
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: Install Trivy
-        uses: alric-corp/alric-containers-reusable-workflows/actions/setup-trivy@eea2d2f4c4102ded74204e4131c1417f444ae3fc # governed Trivy setup
+        uses: alric-corp/alric-containers-reusable-workflows/actions/setup-trivy@b87bda30545041ddb5d35c345ffc155bbc611dc8 # governed Trivy setup
 
       - name: Record promotion tool versions
         run: python3 -B -m scripts.pipeline.operations.tool_versions promotion reports/tool-versions.json
