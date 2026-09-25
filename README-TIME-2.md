@@ -172,13 +172,3 @@ O desenho corporativo considera **`develop → DEV`, `staging → HOM` e `main �
 A base hardened **não substitui código seguro, gestão de secrets ou permissões/configuração seguras no Kubernetes**. Também não entrega migração automática, deploy das aplicações ou SLA corporativo de correção por si só. Ganhos de CVE, tamanho, pull e adoção devem ser medidos, não presumidos.
 
 > **A entrega é uma base menor, padronizada e verificável, com um processo controlado para construir, testar, publicar e evoluir.**
-
----
-
-### Documentos de apoio
-
-- [RFC-013 — propósito, escopo e evolução da POC](../RFC-013-Image-Base-Completa-com-Mermaid.md).
-- [IMAGE-BASE FLOW — funcionamento e limites da implementação](ALRIC-CONTAINERS-IMAGE-BASE-FLOW.md).
-- [Estratégia de ambientes — evolução DEV/HOM/PROD](FACTORY-DISTROLESS-ENVIRONMENTS.md).
-
-**Base desta síntese:** RFC fornecida para motivação/comparação histórica; FLOW de 21/09/2026, revisão `f44b2edf84538b41bfb96dde68e0aa7ffb192d00`, para fluxo, contagens e evidências. A RFC contém trechos de diferentes momentos; por isso, esta apresentação não usa suas contagens históricas como inventário atual. Os conceitos de slim/distroless/hardened também seguem o trecho de vídeo fornecido, sem incorporar promessas comerciais de fornecedores. Links relativos preparados para este arquivo em `TODO/`.
