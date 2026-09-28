@@ -12,6 +12,11 @@
 O eventual aceite/merge deste documento não representa aprovação corporativa
 de serviços públicos. A decisão externa exige registro explícito de Segurança/AppSec.
 
+Atualização do contrato de branch: signer e source ref DEV passaram a
+`develop`, conforme a [migração](../develop-as-dev.md). A baseline examinada
+e suas evidências permanecem históricas de `main`; essa atualização não
+reescreve certificados nem provenance dos runs antigos.
+
 ## Context
 
 A fábrica publica o OCI validado, assina o **index digest** com Cosign
@@ -86,9 +91,9 @@ separada da confiança AWS por IDs.
 | Owner ID | `178685987` |
 | Visibilidade | `public`, observada em 13/09/2026 |
 | Workflow assinante | `alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml` |
-| Certificate identity Cosign | `https://github.com/alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@refs/heads/main` |
+| Certificate identity Cosign | `https://github.com/alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@refs/heads/develop` |
 | OIDC issuer Cosign | `https://token.actions.githubusercontent.com` |
-| Source ref | `refs/heads/main` |
+| Source ref | `refs/heads/develop` |
 | Registry | `712107929769.dkr.ecr.us-east-1.amazonaws.com` |
 
 `workflow.yml` é chamador; a identidade assinante é o reusable
@@ -202,7 +207,7 @@ os campos certificados dos predicates controláveis pelo workflow.
 Promoção/recovery executam gates de assinatura/provenance, além de re-scan
 e read-back. Não executam gate específico de SBOM attestation. A política
 atual também não exige mesmo run/commit entre signature e provenance nem
-fixa um commit humano aprovado: exige a mesma identidade, main e digest.
+fixa um commit humano aprovado: exige a mesma identidade, develop e digest.
 Consumidores devem conferir a revisão/run da release que aprovaram.
 
 Há ainda um limite do gate atual: ele exige sucesso de `cosign verify` e

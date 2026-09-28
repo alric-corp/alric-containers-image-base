@@ -26,8 +26,15 @@ bootstrap. Normal ECR plans/applies assume the new roles through GitHub OIDC.
 
 Both new trusts use `StringEquals` for `aud`, immutable `repository_id`,
 immutable `repository_owner_id`, and the complete immutable subject. There is
-no generic main-branch Infra assumption and no wildcard repository trust.
-Configure protection rules on `lab-image-base-infra` before executing apply.
+no generic branch Infra assumption and no wildcard repository trust.
+For DEV, configure `lab-image-base-infra` to allow deployments only from
+`develop`, preserving required reviewers, before executing apply. Its subject
+stays `:environment:lab-image-base-infra`; the PR role's `:pull_request` subject
+also stays unchanged. The workflow guards constrain DEV to `develop`.
+The independent product role uses an exact ref-based subject: its external
+trust must switch from `refs/heads/main` to `refs/heads/develop`, without
+accepting both. No remote IAM change is performed by this code migration.
+See [the cutover and old-main retirement requirements](../../docs/develop-as-dev.md).
 AWS documents the supported GitHub ID claims in its
 [OIDC condition-key reference](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html).
 

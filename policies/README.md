@@ -10,7 +10,7 @@ em `scripts/pipeline/` aplicam as regras; os workflows controlam a execução.
 | `operations/ecr-lifecycle.json` | ECR, após preview revisado | Expira somente imagens sem tag após 30 dias; preserva releases com tag |
 | `release/promotion-quarantine.json` | `release/find_promotion_candidate.py` | Digests retirados de stable que não podem ser promovidos novamente |
 | `release/signing-identities.json` | `release/verify_promotion.py` | Nome atual, nomes históricos e IDs imutáveis assinados do repositório e da organização |
-| `aws/github-actions-image-base-trust.json` | IAM, role `github-actions-image-base` | Trust policy OIDC aplicada, restrita ao subject exato da main |
+| `aws/github-actions-image-base-trust.json` | IAM, role `github-actions-image-base` | Trust policy OIDC desejada, restrita ao subject exato de develop; aplicação externa pendente |
 
 Alterações passam por PR e revisão dos donos em `.github/CODEOWNERS`. O lint
 compara a política de retenção com os workflows locais e reutilizáveis reais.
@@ -25,6 +25,9 @@ como caminho relativo `docs/adr/NNNN-titulo.md` na
 Estes arquivos não armazenam credenciais ou estado gerado de execução.
 
 A policy IAM é a configuração desejada; editar o arquivo não a aplica na AWS.
+A migração de branch exige atualizar a trust remota de `main` para `develop`
+sem wildcard nem dupla autorização. Os detalhes e a diferença para os subjects
+Infra estão no [procedimento de cutover](../docs/develop-as-dev.md).
 A migração de nomes de 10/09/2026 registrou aplicação, verificação
 e limites. Nomes históricos só são aceitos para assinaturas/provenance, com
 IDs assinados iguais aos do repositório atual; eles não têm acesso OIDC à role.

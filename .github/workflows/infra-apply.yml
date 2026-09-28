@@ -22,7 +22,7 @@ concurrency:
 jobs:
   plan:
     name: Plan product Infra
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: lab-image-base-infra
@@ -106,7 +106,7 @@ jobs:
   apply:
     name: Apply exact plan and verify zero drift
     needs: plan
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: lab-image-base-infra

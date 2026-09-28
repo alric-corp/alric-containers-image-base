@@ -5,7 +5,7 @@ on:
   # realmente afetam a imagem publicada. paths-ignore com só "**.md" deixava
   # qualquer outro arquivo não-.md disparar o build inteiro sem necessidade.
   push:
-    branches: [main]
+    branches: [develop]
     paths:
       - 'frameworks/**'
       - 'distroless/**'
@@ -103,7 +103,7 @@ jobs:
       frameworks: '["dotnet10", "dotnet10-dev", "go1-25", "go1-25-dev", "go1-26", "go1-26-dev", "java21", "java21-dev", "java25", "java25-dev", "nodejs22", "nodejs22-dev", "nodejs24", "nodejs24-dev", "python3-13", "python3-14"]'
 
   build-base-images:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.schedule == '23 3 * * *')
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.schedule == '23 3 * * *')
     # Hold one repository-wide slot across validation, contracts, publication
     # and signing/attestation in the reusable call. PR validation is separate.
     # Keep an active publisher running; GitHub may replace older pending jobs.

@@ -2,6 +2,7 @@ name: Infra - PR plan
 
 on:
   pull_request:
+    branches: [develop]
     paths:
       - 'infra/**'
       - 'frameworks/**'
@@ -52,7 +53,7 @@ jobs:
   plan:
     name: Infra plan (same-repository PR only)
     needs: checks
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.base_ref == 'develop' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

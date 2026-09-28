@@ -355,11 +355,11 @@ def framework_health(jobs_for, runs, frameworks, now, max_queries=40,
 
     queries, truncated, evidence_gaps = 0, False, []
     for run in sorted(runs, key=lambda run: moment(run['created_at']), reverse=True):
-        # Only these main events can publish or promote. PRs and dispatches
+        # Only these develop events can publish or promote. PRs and dispatches
         # on other branches cannot contribute evidence and must not consume
         # the query budget (the first hosted health run exhausted it on PRs).
         if run.get('event') not in ('push', 'schedule', 'workflow_dispatch') \
-                or run.get('head_branch', 'main') != 'main':
+                or run.get('head_branch') != 'develop':
             continue
         if complete():
             break
@@ -563,6 +563,7 @@ def collect(fetch, repository, policy, now, max_queries=40, fetch_archive=None):
             break
     window_runs = [run for run in runs
                    if moment(run['created_at']) >= effective_start
+                   and run.get('head_branch') == 'develop'
                    and run.get('path') in workflow_paths]
 
     cache = {}

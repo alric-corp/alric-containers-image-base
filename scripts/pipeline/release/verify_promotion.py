@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exige plataformas, assinatura e provenance da main antes da promoção."""
+"""Exige plataformas, assinatura e provenance da develop antes da promoção DEV."""
 import argparse
 import json
 from pathlib import Path
@@ -19,7 +19,7 @@ def verify_repository_identity(provenance, repository, expected):
             'sourceRepositoryIdentifier': expected['repository_id'],
             'sourceRepositoryOwnerIdentifier': expected['owner_id'],
             'sourceRepositoryURI': f'https://github.com/{repository}',
-            'sourceRepositoryRef': 'refs/heads/main',
+            'sourceRepositoryRef': 'refs/heads/develop',
         }
         if any(certificate.get(key) != value for key, value in required.items()):
             raise ValueError('provenance não confirma os IDs e a origem do repositório renomeado')
@@ -53,10 +53,10 @@ def verify_promotion(image, repository, reports=Path("reports")):
         workflow = f"{signer}/.github/workflows/build-base-images.yml"
         commands = {
             "signature": ["cosign", "verify", "--certificate-identity",
-                          f"https://github.com/{workflow}@refs/heads/main",
+                          f"https://github.com/{workflow}@refs/heads/develop",
                           "--certificate-oidc-issuer", "https://token.actions.githubusercontent.com", image],
             "provenance": ["gh", "attestation", "verify", f"oci://{image}", "--repo", signer,
-                           "--signer-workflow", workflow, "--source-ref", "refs/heads/main", "--format", "json"],
+                           "--signer-workflow", workflow, "--source-ref", "refs/heads/develop", "--format", "json"],
         }
         evidence = {}
         try:

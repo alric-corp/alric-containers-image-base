@@ -40,7 +40,7 @@ class CatalogCertificationTests(unittest.TestCase):
         self.assertEqual(self.document['name'], 'Distroless - Catalog certification')
         self.assertEqual(events(self.document), {'workflow_dispatch': {}})
         self.assertEqual(self.job['if'],
-                         "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'")
+                         "github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'")
 
     def test_fixed_batch_is_exact_complete_catalog_without_duplicates(self):
         self.assertEqual(self.requested, FULL)

@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-base-images:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
     # Share the normal publisher's slot through build, gates and attestations.
     # An active candidate-producing run must never be cancelled by another.
     concurrency:

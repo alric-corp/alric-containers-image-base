@@ -106,7 +106,7 @@ jobs:
     # `if: always()` sozinho sem a checagem — a falha de validação de um
     # framework continua visível e sem publicação, só não derruba os outros
     # frameworks do lote.
-    if: always() && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    if: always() && github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     needs: [validate, runtime-contract]
     runs-on: ubuntu-latest
     # Observado: 32-110s por framework num run real de 11 frameworks (M14);

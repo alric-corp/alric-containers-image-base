@@ -43,6 +43,15 @@ exit 9
 
 STUB_COSIGN = '''#!/bin/bash
 set -euo pipefail
+expected_ref="${VERIFY_STUB_SIGNER_REF:-refs/heads/develop}"
+expected_identity="https://github.com/alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@${expected_ref}"
+found_identity=""
+previous=""
+for argument in "$@"; do
+  if [[ "$previous" == "--certificate-identity" ]]; then found_identity="$argument"; fi
+  previous="$argument"
+done
+[[ "$found_identity" == "$expected_identity" ]] || exit 8
 if [[ "$1" == "verify" ]]; then
   exit "${VERIFY_STUB_COSIGN_VERIFY_EXIT:-0}"
 fi
@@ -55,6 +64,14 @@ exit 9
 
 STUB_GH = '''#!/bin/bash
 set -euo pipefail
+expected_ref="${VERIFY_STUB_SIGNER_REF:-refs/heads/develop}"
+found_ref=""
+previous=""
+for argument in "$@"; do
+  if [[ "$previous" == "--source-ref" ]]; then found_ref="$argument"; fi
+  previous="$argument"
+done
+[[ "$found_ref" == "$expected_ref" ]] || exit 8
 if [[ "$1" == "attestation" && "$2" == "verify" ]]; then
   exit "${VERIFY_STUB_GH_EXIT:-0}"
 fi
@@ -125,6 +142,22 @@ class VerifyImageStubbedRunTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('RESULTADO: PASS', result.stdout)
         self.assertIn(GOOD_DIGEST, result.stdout)
+        self.assertIn('@refs/heads/develop', result.stdout)
+        self.assertIn('ref=refs/heads/develop', result.stdout)
+
+    def test_main_signed_artifact_is_not_accepted_by_default(self):
+        result = self._run('go1-26', GOOD_DIGEST, '--account', GOOD_ACCOUNT,
+                           env_overrides={'VERIFY_STUB_SIGNER_REF': 'refs/heads/main'})
+        self.assertEqual(result.returncode, 1)
+        for check in ('assinatura', 'attestation SBOM', 'provenance'):
+            self.assertIn(f'FAIL: {check}', result.stdout)
+
+    def test_historical_verification_requires_explicit_ref_override(self):
+        result = self._run('go1-26', GOOD_DIGEST, '--account', GOOD_ACCOUNT,
+                           '--ref', 'refs/heads/main',
+                           env_overrides={'VERIFY_STUB_SIGNER_REF': 'refs/heads/main'})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('ref=refs/heads/main', result.stdout)
 
     def test_tag_input_resolves_digest_via_ecr(self):
         result = self._run('go1-26', '160926-0054-r1-a1', '--account', GOOD_ACCOUNT)

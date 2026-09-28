@@ -10,7 +10,7 @@
 #
 # O que este script prova, e o que NÃO prova:
 #   - Prova que o digest consumido tem uma assinatura Cosign keyless válida
-#     emitida pela identidade exata do workflow de build na main, uma
+#     emitida pela identidade exata do workflow de build na develop, uma
 #     attestation SBOM SPDX válida sobre esse mesmo digest, e uma provenance
 #     SLSA v1 verificável vinculada ao mesmo subject digest.
 #   - NÃO prova ausência de vulnerabilidades, aprovação humana, ou que o
@@ -30,10 +30,11 @@
 #     --account <aws-account-id> [--region <aws-region>] \
 #     [--repo <owner/repositorio-fonte>] [--ref <branch-do-assinador>]
 #
-# Exemplo (Go 1.26, digest já comprovado em execução real no sandbox):
+# Exemplo histórico (Go 1.26, digest comprovado na main antes da migração):
 #   scripts/verify-image.sh go1-26 \
 #     sha256:6582880f48e9374df03b241c28242c28772086fef50ebcaf87e03662f95916bc \
-#     --account 712107929769 --region us-east-1
+#     --account 712107929769 --region us-east-1 --ref refs/heads/main
+# O override explícito verifica somente o histórico; promoção DEV exige develop.
 #
 # Dependências: aws, docker (login), cosign, gh (autenticado com
 # `read:packages`/attestations públicas do repositório fonte).
@@ -50,7 +51,7 @@ REF="tag-ou-digest-nao-informado"
 AWS_ACCOUNT_ID=""
 AWS_REGION="us-east-1"
 SOURCE_REPO="alric-corp/alric-containers-image-base"
-SIGNER_REF="refs/heads/main"
+SIGNER_REF="refs/heads/develop"
 
 usage() {
   echo "Uso: $0 <framework> <tag-ou-digest> --account <aws-account-id> [--region <aws-region>] [--repo <owner/repositorio>] [--ref <ref-do-assinador>]" >&2

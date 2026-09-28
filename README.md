@@ -262,13 +262,19 @@ annotations e a publicação dos SBOMs originais por digest.
 
 ## Pipeline de CI/CD (GitHub Actions)
 
+O contrato de branches desta revisão é **`develop` = DEV**, `staging` = HOM
+futuro e `main` = PROD futuro. Só DEV está implementado. A default branch
+remota continua `main` até o cutover autorizado; código local não altera
+Settings nem IAM. O [procedimento de migração](docs/develop-as-dev.md)
+separa esse contrato das evidências históricas de runs em `main`.
+
 O `workflow.yml` separa validação e publicação:
 
-- **PRs:** chamam `validate-base-images.yml`, com `contents: read`, sem OIDC, autenticação AWS ou push.
-- **Push na `main`, execução manual na `main` e schedule diário às 03:23 UTC:** chamam `build-base-images.yml`, que executa a mesma validação antes do job de publicação. O cron `23 3 * * *` corresponde aproximadamente a 00:23 em America/Sao_Paulo; permanece UTC e evita o início da hora, sem garantia de pontualidade do scheduler.
+- **PRs para `develop`:** chamam `validate-base-images.yml`, com `contents: read`, sem OIDC, autenticação AWS ou push.
+- **Push na `develop`, execução manual na `develop` e schedule diário às 03:23 UTC:** chamam `build-base-images.yml`, que executa a mesma validação antes do job de publicação. O cron `23 3 * * *` corresponde aproximadamente a 00:23 em America/Sao_Paulo; permanece UTC e evita o início da hora, sem garantia de pontualidade do scheduler. O schedule passa a usar essa definição quando `develop` for a default branch.
 - **Promoção:** roda a cada hora, no minuto 17, e seleciona somente candidatos que completaram o soak mínimo de seis horas desde o push.
 
-**Distroless - Catalog certification** oferece um dispatch manual na `main`
+**Distroless - Catalog certification** oferece um dispatch manual na `develop`
 com os 16 frameworks fixos, usando o mesmo engine e lock do publicador.
 Não amplia o perfil agendado Go 1.26 nem promove `stable`. Veja a
 [certificação controlada do catálogo](docs/catalog-certification.md) para
@@ -288,14 +294,14 @@ definem o comportamento dos pendentes.
 ```mermaid
 flowchart TD
     PR["Pull request"] --> V["validate-base-images.yml<br/>sem AWS / somente leitura"]
-    MAIN["main: push / dispatch / build diário"] --> B["build-base-images.yml"]
+    DEV["develop: push / dispatch / build diário"] --> B["build-base-images.yml"]
     B --> V
     V --> M["Melange: bundle amd64 + arm64"]
     M --> A["Apko: layout OCI por framework"]
     A --> S["Trivy: amd64 + arm64<br/>relatórios JSON e digests OCI"]
     S --> G["Artifact aprovado de cada framework"]
-    G -->|"caminho de publicação na main"| F["Contrato conforme plano + gate comum de trust<br/>amd64 + arm64 sobre o candidato"]
-    F -->|"somente execução autorizada na main"| PUB["Job de publicação<br/>OIDC + cópia OCI + assinatura/provenance + SBOM attestations"]
+    G -->|"caminho de publicação na develop"| F["Contrato conforme plano + gate comum de trust<br/>amd64 + arm64 sobre o candidato"]
+    F -->|"somente execução autorizada na develop"| PUB["Job de publicação<br/>OIDC + cópia OCI + assinatura/provenance + SBOM attestations"]
     PUB --> ECR[("ECR: tag de build")]
     PUB --> T["Tabela por framework<br/>no resumo do run"]
     H["Schedule horário"] --> P["promote-stable.yml"]
@@ -312,9 +318,9 @@ Relatórios JSON e digests dos manifests ficam nos artifacts `build-scans-<frame
 
 O **lote padrão** que `workflow.yml` passa aos dois chamadores (`validate-pr` e build diário/push) é o catálogo `frameworks/*.yaml` menos os frameworks excluídos em `policies/operations/health.json` → `exceptions` — hoje nenhum (`dotnet8`, a única exceção já registrada, foi removido do catálogo em 17/09/2026). Um lint offline no check obrigatório ([default_batch.py](scripts/pipeline/catalog/default_batch.py)) reprova qualquer divergência entre as duas listas e `catálogo − exclusões`; a promoção agendada usa o mesmo perfil fixo em `promote-stable.yml`, conferido separadamente. Um framework excluído continua no catálogo e pode ser buildado por `workflow_dispatch`, com o mesmo gate.
 
-A validação usa matrix com `fail-fast: false`. **A publicação é independente por framework (M13):** cada leg do publicador exige o seu próprio artifact `validated-oci-<framework>` e falha, visível e sem publicar, se a validação daquele framework tiver reprovado — sem derrubar os demais do lote. Uma falha numa dependência comum, como o bundle melange, continua bloqueando todos. O job de publicação tem matrix própria e autenticação AWS restrita à `main`. Para publicar um subconjunto, uma execução manual pode selecionar os frameworks desejados.
+A validação usa matrix com `fail-fast: false`. **A publicação é independente por framework (M13):** cada leg do publicador exige o seu próprio artifact `validated-oci-<framework>` e falha, visível e sem publicar, se a validação daquele framework tiver reprovado — sem derrubar os demais do lote. Uma falha numa dependência comum, como o bundle melange, continua bloqueando todos. O job de publicação tem matrix própria e autenticação AWS restrita à `develop`. Para publicar um subconjunto, uma execução manual pode selecionar os frameworks desejados.
 
-**Identidade do artefato (M02):** o publicador baixa o layout aprovado do mesmo run, verifica novamente sua integridade e usa Skopeo com `copy --all --preserve-digests`. O digest devolvido pela cópia precisa ser igual ao índice validado; não há novo build nem resolução de pacotes nesse job. Após copiar, o publicador lê a tag de volta e confere os bytes do índice e os manifests de ambas as arquiteturas contra a evidência validada. O artifact `publication-<framework>-<tentativa>` preserva essa comparação por 30 dias. A cópia foi comprovada em ECR exclusivo de teste e a leitura de volta em registry local; a integração completa na `main` ainda depende da validação do workflow autenticado.
+**Identidade do artefato (M02):** o publicador baixa o layout aprovado do mesmo run, verifica novamente sua integridade e usa Skopeo com `copy --all --preserve-digests`. O digest devolvido pela cópia precisa ser igual ao índice validado; não há novo build nem resolução de pacotes nesse job. Após copiar, o publicador lê a tag de volta e confere os bytes do índice e os manifests de ambas as arquiteturas contra a evidência validada. O artifact `publication-<framework>-<tentativa>` preserva essa comparação por 30 dias. A cópia foi comprovada em ECR exclusivo de teste e a leitura de volta em registry local; a integração autenticada em `develop` precisa ser validada após o cutover, sem reinterpretar evidências históricas em `main`.
 
 O gate mantém `--ignore-unfixed` e severidades `CRITICAL,HIGH,MEDIUM,LOW`, além do scan de segredos. O scan aprovado representa apenas a política configurada e os dados disponíveis ao Trivy naquele momento. A triagem automática de CVEs permanece pausada; sua futura reativação deverá consumir os relatórios JSON, pois as tabelas em logs deixaram de ser a saída principal.
 
@@ -407,7 +413,7 @@ lote.
 
 1. Lista as imagens do repositório ECR e seleciona o índice OCI/Docker com tag de build válida (`ddmmaa-hhmm`, com sufixo opcional `-r<run_id>-a<tentativa>`) mais recente entre os que já completaram o soak. Descarta o digest já marcado como `stable` e candidatos com data de push anterior ou igual à dele ([find_promotion_candidate.py](scripts/pipeline/release/find_promotion_candidate.py)). Um build recente ainda em soak não impede a seleção de outro elegível.
 2. Resolve a relação runtime/`-dev` pelo catálogo. Ambos precisam estar presentes, fora de quarentena, elegíveis após o soak e com build tags do mesmo run/attempt. Par incompleto, lado ainda em soak e identidades divergentes não permitem a primeira escrita desse par. Framework interpretado mantém sua promoção independente.
-3. Para todos os candidatos elegíveis, inspeciona os índices e exige exatamente `linux/amd64` e `linux/arm64`. Verifica assinatura cosign com identidade exata do workflow `build-base-images.yml@refs/heads/main` e provenance GitHub vinculada ao signer workflow e à source ref `refs/heads/main`. Re-escaneia ambos os digests com Trivy por arquitetura (`--ignore-unfixed`). Qualquer falha bloqueia as escritas da unidade afetada, sem autorizar metade de um par nem suprimir unidades independentes aprovadas. O relatório separado de CVEs sem correção continua informativo. A barreira global de avaliação termina antes de começar as escritas.
+3. Para todos os candidatos elegíveis, inspeciona os índices e exige exatamente `linux/amd64` e `linux/arm64`. Verifica assinatura cosign com identidade exata do workflow `build-base-images.yml@refs/heads/develop` e provenance GitHub vinculada ao signer workflow e à source ref `refs/heads/develop`. Re-escaneia ambos os digests com Trivy por arquitetura (`--ignore-unfixed`). Qualquer falha bloqueia as escritas da unidade afetada, sem autorizar metade de um par nem suprimir unidades independentes aprovadas. O relatório separado de CVEs sem correção continua informativo. A barreira global de avaliação termina antes de começar as escritas.
 4. Somente depois dos pré-requisitos de ambos, move runtime e depois dev com `docker buildx imagetools create --tag <imagem>:stable <imagem>@<digest>` — retag do índice por referência, sem rebuild/repack.
 5. Lê ambas as tags no ECR e exige exatamente os digests autorizados. Só após os dois read-backs confirmados o par recebe `promoted=true`. Tag ausente, erro/timeout, resposta ambígua ou digest diferente falham fechado; a verificação final do par permanece.
 
@@ -458,7 +464,7 @@ A espera nominal após o soak (6h) até a próxima janela de promoção horária
 Se um build promovido apresentar problema depois da promoção (ex.: CVE divulgada após o soak, comportamento inesperado reportado por um consumidor), `recover-stable.yml` restaura `stable` para um digest anterior já aprovado — sem rebuild, sem bypass do gate de segurança:
 
 1. **Escolher o digest de destino.** Precisa ser um build já publicado no repositório (`aws ecr describe-images --repository-name image-base-<framework>`) — nunca um digest arbitrário. Idealmente um build que já foi `stable` antes.
-2. **Disparar o workflow** (Actions → "Distroless - Recover stable" → Run workflow) com `framework`, `digest` (`sha256:...`) e `reason`. O job:
+2. **Disparar o workflow na `develop`** (Actions → "Distroless - Recover stable" → Run workflow) com `framework`, `digest` (`sha256:...`) e `reason`. O job:
    - confirma que o digest existe no repositório;
    - reverifica plataformas (amd64+arm64), assinatura cosign e provenance GitHub com a **mesma política** de `promote-stable.yml` — um digest antigo que não passe nessa verificação não é restaurado;
    - reescaneia as duas arquiteturas com o banco de CVE atual — uma CVE nova no digest antigo bloqueia a recuperação; correção do gate por exceção exige política explícita, não esse workflow;
@@ -517,7 +523,7 @@ O [ADR-0003 — Controles da fábrica em workflows federados](docs/adr/0003-cont
 corporativos a confirmar. O contrato de reuso abaixo permanece técnico;
 não estabelece homologação de scanner ou dispensa de requisitos externos.
 
-Os workflows podem ser chamados diretamente. `validate-base-images.yml` exige apenas `frameworks` e `contents: read`, sem credenciais AWS. Build/publicação e promoção exigem OIDC e restringem os jobs que acessam AWS a eventos de push/schedule/dispatch na `main` do chamador. No uso externo, `actions/checkout` utiliza o repositório chamador, que precisa conter os manifestos e scripts esperados. Exemplo de permissões para build/publicação e promoção:
+Os workflows podem ser chamados diretamente. `validate-base-images.yml` exige apenas `frameworks` e `contents: read`, sem credenciais AWS. Build/publicação e promoção exigem OIDC e restringem os jobs que acessam AWS a eventos autorizados na `develop` do chamador (build: push/schedule/dispatch; promoção: schedule/dispatch). No uso externo, `actions/checkout` utiliza o repositório chamador, que precisa conter os manifestos e scripts esperados. Exemplo de permissões para build/publicação e promoção:
 
 ```yaml
 permissions:
@@ -615,8 +621,10 @@ pelo CI do próprio `alric-containers-reusable-workflows`.
 Esses checks locais não provam publicação no destino nem acesso privado; isso
 é responsabilidade da resolução nativa do `uses:` pelo GitHub Actions do
 destino. Outra origem exige release revisado da chamada interna da
-biblioteca. O caminho hospedado na origem sandbox tem PASS observado no PR
-#62 e na main, sujeito à revisão da reconciliação; migração real e acesso
+biblioteca. O caminho hospedado na origem sandbox tem PASS histórico observado
+no PR #62 e em run histórico na main, sujeito à revisão da reconciliação; migração real e acesso
 privado não foram comprovados.
-A compatibilidade das assinaturas anteriores à renomeação de 10/09/2026 é
-garantida pelo alias histórico em `policies/release/signing-identities.json`.
+A compatibilidade de nome anterior à renomeação de 10/09/2026 é preservada
+pelo alias histórico em `policies/release/signing-identities.json`, sempre com
+IDs assinados iguais. Ela não autoriza a branch antiga: promoção/recovery DEV
+exigem `develop` e rejeitam assinaturas históricas de `main`.

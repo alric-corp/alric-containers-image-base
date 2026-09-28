@@ -14,8 +14,13 @@
 | Criticidade | Alta |
 | Referência | Segurança, Supply Chain e Eficiência Operacional |
 
-Esta RFC descreve o que a plataforma entrega hoje e o que separa esse estado
-de uma liberação para produção. O caminho até aqui — diagnóstico original da
+Esta RFC registra o estado da plataforma na baseline histórica acima e o que
+separava esse estado de uma liberação para produção. As referências a `main`
+como produtora DEV, os runs e seus SHAs são históricos. O contrato de branch
+do código migrado é `develop = DEV`; `main = PROD futuro`, sem ativação de PROD.
+Consulte a [migração para develop](docs/develop-as-dev.md) para os guards atuais
+e as ações externas ainda necessárias; a default branch remota não foi alterada
+por esta implementação. O caminho até aqui — diagnóstico original da
 POC, cada entrega, achados reais e links de PR/run — está preservado no
 histórico Git.
 Implementado significa presente no código identificado; não implica aceite

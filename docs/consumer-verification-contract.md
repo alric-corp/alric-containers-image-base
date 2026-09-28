@@ -1,9 +1,15 @@
 # Consumer Verification Contract
 
 Contrato de consumo da fábrica `alric-corp/alric-containers-image-base`.
-Revisão documental: 13/09/2026, baseline main
+Baseline histórica: 13/09/2026, main
 `e3ed68259f66af41e8054a4c0ac29a54082ddd60`. Este documento descreve o projeto
 no sandbox e os requisitos de adoção corporativa; não declara produção liberada.
+
+O contrato executável desta revisão usa `develop` como DEV. Os SHAs, runs e
+assinaturas anteriores à migração continuam históricos de `main`. A
+[migração](develop-as-dev.md) ainda depende do cutover externo; o verificador
+DEV não aceita automaticamente assinaturas da branch antiga. Não reassine
+um artifact antigo para declarar que ele foi construído em `develop`.
 
 ## Três identidades, três usos
 
@@ -58,9 +64,9 @@ essas verificações automaticamente. Cabe ao time consumidor integrar o gate
 | Repository ID | `1360616627` |
 | Owner ID | `178685987` |
 | Workflow assinante | `alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml` |
-| Certificate identity Cosign | `https://github.com/alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@refs/heads/main` |
+| Certificate identity Cosign | `https://github.com/alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@refs/heads/develop` |
 | OIDC issuer Cosign | `https://token.actions.githubusercontent.com` |
-| Source ref | `refs/heads/main` |
+| Source ref | `refs/heads/develop` |
 
 Fontes canônicas: [signing-identities.json](../policies/release/signing-identities.json),
 [verify_promotion.py](../scripts/pipeline/release/verify_promotion.py) e
@@ -93,7 +99,7 @@ REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 IMAGE_REPOSITORY=image-base-java21
 SOURCE_REPO=alric-corp/alric-containers-image-base
 SIGNER_WORKFLOW="${SOURCE_REPO}/.github/workflows/build-base-images.yml"
-CERT_IDENTITY="https://github.com/${SIGNER_WORKFLOW}@refs/heads/main"
+CERT_IDENTITY="https://github.com/${SIGNER_WORKFLOW}@refs/heads/develop"
 OIDC_ISSUER=https://token.actions.githubusercontent.com
 
 aws ecr get-login-password --region "$AWS_REGION" |
@@ -125,7 +131,7 @@ cosign verify \
 ```
 
 Esse comando vincula a assinatura ao digest, à identidade exata do workflow
-na main e ao issuer esperado. Uma assinatura válida não prova que o pacote
+na develop e ao issuer esperado. Uma assinatura válida não prova que o pacote
 é seguro, que o scan atual passaria ou que houve aprovação humana.
 
 ## Verificar provenance
@@ -134,7 +140,7 @@ na main e ao issuer esperado. Uma assinatura válida não prova que o pacote
 gh attestation verify "oci://${IMAGE_REF}" \
   --repo "$SOURCE_REPO" \
   --signer-workflow "$SIGNER_WORKFLOW" \
-  --source-ref refs/heads/main \
+  --source-ref refs/heads/develop \
   --predicate-type https://slsa.dev/provenance/v1 \
   --format json > provenance.json
 ```
@@ -142,7 +148,7 @@ gh attestation verify "oci://${IMAGE_REF}" \
 O comando autentica a declaração vinculada ao **subject digest** e à identidade
 de build: repository, workflow, commit/ref e execução de origem. Consulte a
 saída verificada e compare o commit/run com a release que sua organização
-aprovou; aceitar main não fixa um commit específico. O matching de
+aprovou; aceitar develop não fixa um commit específico. O matching de
 `--signer-workflow` é o mecanismo da CLI GitHub; não é a comparação literal
 de SAN feita pelo `--certificate-identity` do Cosign.
 
@@ -186,7 +192,9 @@ mesma identidade/digest e IDs certificados de repository/owner. Gera em `reports
 nem verifica SBOM attestations; esses controles não são inferidos do sucesso.
 
 A policy também admite o nome histórico `alric-corp/itau-xj7-containers-image-base`
-somente com os mesmos IDs assinados. Para uma release histórica, use o módulo
+somente com os mesmos IDs assinados e a source ref DEV `develop`. Essa
+compatibilidade de nome não autoriza releases históricas assinadas em `main`.
+Para uma release aprovada com o alias, use o módulo
 e obtenha `signer_repository` da decisão verificada antes de construir a
 identidade de verificação do SBOM. Não amplie regex nem aceite o alias por
 nome apenas. O alias histórico aceito está em
@@ -208,7 +216,7 @@ verificou, incluindo compatibilidade histórica aprovada:
 
 ```bash
 VERIFIED_SIGNER=$(jq -er '.signer_repository' reports/verified-identity.json)
-SBOM_CERT_IDENTITY="https://github.com/${VERIFIED_SIGNER}/.github/workflows/build-base-images.yml@refs/heads/main"
+SBOM_CERT_IDENTITY="https://github.com/${VERIFIED_SIGNER}/.github/workflows/build-base-images.yml@refs/heads/develop"
 cosign verify-attestation \
   --certificate-identity "$SBOM_CERT_IDENTITY" \
   --certificate-oidc-issuer "$OIDC_ISSUER" \

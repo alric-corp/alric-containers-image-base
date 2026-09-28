@@ -169,7 +169,7 @@ suprimam a checagem individual: cada candidato exige seu artifact validado e
 seu contrato aplicável.
 
 PRs continuam rodando só validação e scan: contrato funcional roda no caminho
-que publica (push/schedule/dispatch na `main`). O dispatch manual do workflow
+que publica (push/schedule/dispatch na `develop`). O dispatch manual do workflow
 serve para diagnóstico sobre o artifact de outro run; ele não autoriza
 publicação nenhuma.
 

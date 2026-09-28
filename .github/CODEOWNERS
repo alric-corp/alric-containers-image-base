@@ -1,9 +1,9 @@
-# Ownership ativo (M16). Estas regras só passam a valer depois que este
-# arquivo estiver na main: o GitHub lê o CODEOWNERS da branch base do PR,
-# não o da branch do PR. E só valem porque a proteção correspondente existe
-# de verdade — o time @alric-corp/github_xj7_maintainer recebeu acesso de
-# escrita a este repositório e a branch protection da main exige revisão de
-# code owner. Um CODEOWNERS sem essas duas condições é decorativo: dono sem
+# Ownership (M16). O GitHub lê o CODEOWNERS da branch base do PR,
+# não o da branch do PR. DEV exige este arquivo em develop e proteção
+# dessa branch com revisão obrigatória de code owner. A proteção histórica
+# de main não configura develop automaticamente; o cutover depende de
+# configuração externa autorizada (docs/develop-as-dev.md).
+# Um CODEOWNERS sem essas duas condições é decorativo: dono sem
 # permissão de escrita é ignorado pelo GitHub, e sem revisão obrigatória
 # ninguém precisa aprovar.
 #

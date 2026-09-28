@@ -70,8 +70,8 @@ def validate_source(run, source_run_id, repository):
             and run['repository']['id'] == run['head_repository']['id'],
             'source workflow repository mismatch')
     require(run['path'] == '.github/workflows/catalog-certification.yml'
-            and run['head_branch'] == 'main' and run['event'] == 'workflow_dispatch',
-            'source must be a main catalog-certification workflow_dispatch')
+            and run['head_branch'] == 'develop' and run['event'] == 'workflow_dispatch',
+            'source must be a develop catalog-certification workflow_dispatch')
     require(run['status'] == 'completed' and run['conclusion'] == 'success',
             'source catalog run has not completed successfully')
     require(contract_evidence.number(run['run_attempt']) == 1,
@@ -97,7 +97,7 @@ def source_metadata(run, artifact_pages, job_pages):
         require(framework not in selected, 'ambiguous publication artifact')
         origin = artifact['workflow_run']
         require(origin['id'] == run_id and origin['head_sha'] == revision
-                and origin['head_branch'] == 'main'
+                and origin['head_branch'] == 'develop'
                 and origin['repository_id'] == run['repository']['id']
                 and origin['head_repository_id'] == run['repository']['id'],
                 'publication artifact run/revision/repository mismatch')

@@ -40,7 +40,7 @@ class AppCertificationWorkflowTests(unittest.TestCase):
         self.assertIs(inputs['source-run-id']['required'], True)
         self.assertNotIn('default', inputs['source-run-id'])
         self.assertEqual(self.jobs['inventory']['if'],
-                         "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'")
+                         "github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'")
 
     def test_exact_eighteen_real_execution_legs_keep_failure_isolation(self):
         job = self.jobs['applications']

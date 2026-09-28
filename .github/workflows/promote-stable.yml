@@ -90,7 +90,7 @@ jobs:
     # só depois de confirmar (fresh `aws ecr describe-repositories`) que os
     # dois repositórios já refletem a exclusão de Infra.
     if: |
-      github.ref == 'refs/heads/main' &&
+      github.ref == 'refs/heads/develop' &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
       vars.STABLE_PROMOTION_AUTHORIZED == 'true'
     runs-on: ubuntu-latest

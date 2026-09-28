@@ -47,6 +47,7 @@ permissions:
 jobs:
   recover:
     name: Recover ${{ inputs.framework }} to ${{ inputs.digest }}
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Mesmo lock por role/região da promoção: recovery espera o lote ativo
@@ -113,7 +114,7 @@ jobs:
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       # Mesma política de promote-stable.yml: plataformas amd64+arm64,
-      # assinatura cosign e provenance do workflow de build na main.
+      # assinatura cosign e provenance do workflow de build na develop.
       # Sem bypass — um digest de destino que não passe aqui não é
       # restaurado, ponto.
       - name: Verify target platforms, signature and provenance

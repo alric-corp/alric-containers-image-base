@@ -11,7 +11,7 @@ from scripts.pipeline.operations import operational_health as health
 
 
 PAIR = ['go1-26', 'go1-26-dev']
-RUN = {'id': 42, 'run_attempt': 2, 'event': 'schedule', 'head_branch': 'main',
+RUN = {'id': 42, 'run_attempt': 2, 'event': 'schedule', 'head_branch': 'develop',
        'created_at': '2026-09-21T09:17:00Z'}
 NOW = datetime(2026, 9, 21, 12, tzinfo=timezone.utc)
 

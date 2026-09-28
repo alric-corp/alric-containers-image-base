@@ -4,12 +4,14 @@
 read-only consumer of a successful full-catalog publication. Its required
 `source-run-id` input selects one source run in this repository. It has no
 default source run, framework override, tag override, or digest override.
-An operator may dispatch it on `main` only after this workflow has been
+An operator may dispatch it on `develop` only after this workflow has been
 reviewed and merged. Implementation tests do not dispatch certification.
 
-The first intended source is publication run `35571871638`, attempt `1`,
-revision `3b68b8b4613f91796ce18285263c9c6216a894eb`. This is an operational
-example, not a default or special case in the resolver. The resolver derives
+The original publication example was historical run `35571871638`, attempt `1`,
+revision `3b68b8b4613f91796ce18285263c9c6216a894eb`, on `main` before the branch
+migration. It is not a default or special case in the resolver and is no longer
+an accepted DEV source. Run a new authorized FULL catalog certification on
+`develop` before dispatching App Certification. The resolver derives
 and validates the selected source's identity and fails on incomplete,
 ambiguous, expired, mismatched, or unsuccessful publication evidence.
 
@@ -57,7 +59,9 @@ installation is checked before resolving indexes or building applications.
 
 ## Source identity and consistency
 
-The versioned inventory resolver validates the source GitHub run, attempt,
+The versioned inventory resolver requires this repository's successful
+`catalog-certification.yml` dispatch on `develop`; sources on `main` are rejected.
+It validates the source GitHub run, attempt,
 revision, complete publication artifacts, producer evidence, immutable build
 tags, expected ECR repositories, and remote index/platform digests. All sixteen
 members must resolve unambiguously; missing members never become a smaller

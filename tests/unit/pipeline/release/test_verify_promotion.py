@@ -39,8 +39,10 @@ class VerificationTests(unittest.TestCase):
             signature = run.call_args_list[1].args[0]
             provenance = run.call_args_list[2].args[0]
             self.assertEqual(signature[-1], IMAGE)
-            self.assertIn(f"https://github.com/{REPO}/.github/workflows/build-base-images.yml@refs/heads/main", signature)
-            self.assertIn("refs/heads/main", provenance)
+            self.assertIn(f"https://github.com/{REPO}/.github/workflows/build-base-images.yml@refs/heads/develop", signature)
+            self.assertIn("refs/heads/develop", provenance)
+            self.assertNotIn("--certificate-identity-regexp", signature)
+            self.assertFalse(any("refs/heads/main" in value for value in signature + provenance))
             self.assertIn(f"oci://{IMAGE}", provenance)
             self.assertEqual(len(list(Path(directory).glob("*.json"))), 3)
 
@@ -84,7 +86,7 @@ def provenance(signer):
         'sourceRepositoryIdentifier': IDENTITY['repository_id'],
         'sourceRepositoryOwnerIdentifier': IDENTITY['owner_id'],
         'sourceRepositoryURI': f'https://github.com/{signer}',
-        'sourceRepositoryRef': 'refs/heads/main',
+        'sourceRepositoryRef': 'refs/heads/develop',
     }}}}]
 
 
@@ -104,7 +106,7 @@ class RepositoryRenameTests(unittest.TestCase):
             self.assertFalse(identity['legacy_name'])
             self.assertEqual(run.call_count, 3)
 
-    def test_historical_signature_and_provenance_use_the_same_exact_legacy_identity(self):
+    def test_renamed_repository_signature_and_provenance_use_same_develop_identity(self):
         with tempfile.TemporaryDirectory() as directory, patch(
                 'scripts.pipeline.release.verify_promotion.subprocess.run', side_effect=[
                     success(index()), subprocess.CalledProcessError(1, ['cosign']),
@@ -113,7 +115,7 @@ class RepositoryRenameTests(unittest.TestCase):
             verify_promotion(IMAGE, CURRENT, reports)
             signature = run.call_args_list[2].args[0]
             attestation = run.call_args_list[3].args[0]
-            self.assertIn(f'https://github.com/{LEGACY}/.github/workflows/build-base-images.yml@refs/heads/main', signature)
+            self.assertIn(f'https://github.com/{LEGACY}/.github/workflows/build-base-images.yml@refs/heads/develop', signature)
             self.assertEqual(attestation[attestation.index('--repo') + 1], LEGACY)
             self.assertNotIn('--certificate-identity-regexp', signature)
             self.assertTrue(json.loads((reports / 'verified-identity.json').read_text())['legacy_name'])
@@ -122,11 +124,25 @@ class RepositoryRenameTests(unittest.TestCase):
         for key, value in [('sourceRepositoryIdentifier', '999'),
                            ('sourceRepositoryOwnerIdentifier', '999'),
                            ('sourceRepositoryURI', f'https://github.com/{CURRENT}'),
-                           ('sourceRepositoryRef', 'refs/heads/other')]:
+                           ('sourceRepositoryRef', 'refs/heads/other'),
+                           ('sourceRepositoryRef', 'refs/heads/main')]:
             proof = provenance(LEGACY)
             proof[0]['verificationResult']['signature']['certificate'][key] = value
             with self.subTest(field=key), self.assertRaises(ValueError):
                 verify_repository_identity(proof, LEGACY, IDENTITY)
+
+    def test_main_provenance_cannot_authorize_dev_promotion(self):
+        proof = provenance(CURRENT)
+        proof[0]['verificationResult']['signature']['certificate']['sourceRepositoryRef'] = 'refs/heads/main'
+        with tempfile.TemporaryDirectory() as directory, patch(
+                'scripts.pipeline.release.verify_promotion.subprocess.run', side_effect=[
+                    success(index()), success('[{}]'), success(json.dumps(proof))]) as run:
+            reports = Path(directory)
+            with self.assertRaises(ValueError):
+                verify_promotion(IMAGE, CURRENT, reports)
+            self.assertEqual(run.call_count, 3)
+            for evidence in ('signature', 'provenance', 'verified-identity'):
+                self.assertFalse((reports / f'{evidence}.json').exists())
 
     def test_unverified_predicate_cannot_supply_the_immutable_identity(self):
         proof = [{'verificationResult': {'statement': {'predicate': {

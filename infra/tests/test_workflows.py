@@ -43,13 +43,14 @@ class InfraWorkflowTests(unittest.TestCase):
         cls.pr = load_workflow('infra-pr.yml')
         cls.apply = load_workflow('infra-apply.yml')
 
-    def test_only_pr_and_explicit_main_dispatch_can_run_infra(self):
+    def test_only_develop_pr_and_explicit_develop_dispatch_can_run_infra(self):
         self.assertEqual(set(self.pr['on']), {'pull_request'})
         self.assertEqual(set(self.apply['on']), {'workflow_dispatch'})
+        self.assertEqual(self.pr['on']['pull_request']['branches'], ['develop'])
         self.assertTrue({'infra/**', 'frameworks/**'}.issubset(
             self.pr['on']['pull_request']['paths']))
         for job in self.apply['jobs'].values():
-            self.assertEqual(job['if'], "github.ref == 'refs/heads/main'")
+            self.assertEqual(job['if'], "github.ref == 'refs/heads/develop'")
         self.assertEqual(self.apply['concurrency']['cancel-in-progress'], 'false')
         self.assertNotIn('${{', self.apply['concurrency']['group'])
         self.assertEqual(self.pr['concurrency'], self.apply['concurrency'])
@@ -60,6 +61,7 @@ class InfraWorkflowTests(unittest.TestCase):
         self.assertEqual(checks['permissions'], {'contents': 'read'})
         self.assertEqual(plan['needs'], 'checks')
         self.assertEqual(plan['if'],
+                         "github.base_ref == 'develop' && "
                          'github.event.pull_request.head.repo.full_name == github.repository')
         self.assertNotIn('environment', plan)
         self.assertIn('unittest discover -s infra/tests', shell(checks))

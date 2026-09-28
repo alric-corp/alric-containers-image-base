@@ -4,6 +4,10 @@
 apply, infrastructure recreation, catalog change, build, publication or promotion.
 The completed [greenfield rehearsal](rehearsal-evidence.md) remains the baseline.
 
+This is a historical reconciliation record. References to published `main`
+and the SHAs below remain unchanged; the current DEV branch contract and
+pending external cutover are in [develop-as-dev.md](../docs/develop-as-dev.md).
+
 ## Baseline and ownership
 
 | Repository | Local HEAD at inventory | Published main at inventory | Local status |
