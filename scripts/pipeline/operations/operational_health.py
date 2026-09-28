@@ -561,10 +561,14 @@ def collect(fetch, repository, policy, now, max_queries=40, fetch_archive=None):
         runs += batch
         if not batch or moment(batch[-1]['created_at']) < effective_start:
             break
+    # A população da janela (runs analisados e fila) não filtra branch: um PR
+    # feature/x -> develop tem head_branch feature/x e também espera runner.
+    # A identidade DEV só se exige onde o run vira evidência de operação: os
+    # schedules abaixo e as publicações/promoções em framework_health.
     window_runs = [run for run in runs
                    if moment(run['created_at']) >= effective_start
-                   and run.get('head_branch') == 'develop'
                    and run.get('path') in workflow_paths]
+    dev_runs = [run for run in window_runs if run.get('head_branch') == 'develop']
 
     cache = {}
 
@@ -574,7 +578,7 @@ def collect(fetch, repository, policy, now, max_queries=40, fetch_archive=None):
                              or {}).get('jobs') or []
         return cache[run_id]
 
-    attributed, unattributed = attribute_runs(jobs_for, window_runs, schedules)
+    attributed, unattributed = attribute_runs(jobs_for, dev_runs, schedules)
     return {
         'generated_at': now.isoformat(),
         'window': {'requested_start': start.isoformat(), 'start': effective_start.isoformat(),

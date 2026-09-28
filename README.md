@@ -523,7 +523,9 @@ O [ADR-0003 — Controles da fábrica em workflows federados](docs/adr/0003-cont
 corporativos a confirmar. O contrato de reuso abaixo permanece técnico;
 não estabelece homologação de scanner ou dispensa de requisitos externos.
 
-Os workflows podem ser chamados diretamente. `validate-base-images.yml` exige apenas `frameworks` e `contents: read`, sem credenciais AWS. Build/publicação e promoção exigem OIDC e restringem os jobs que acessam AWS a eventos autorizados na `develop` do chamador (build: push/schedule/dispatch; promoção: schedule/dispatch). No uso externo, `actions/checkout` utiliza o repositório chamador, que precisa conter os manifestos e scripts esperados. Exemplo de permissões para build/publicação e promoção:
+Os workflows podem ser chamados diretamente. `validate-base-images.yml` exige apenas `frameworks` e `contents: read`, sem credenciais AWS. Build/publicação e promoção exigem OIDC e restringem os jobs que acessam AWS a eventos autorizados na `develop` do chamador (build: push/schedule/dispatch; promoção: schedule/dispatch). No uso externo, `actions/checkout` utiliza o repositório chamador, que precisa conter os manifestos e scripts esperados. Exemplo de permissões para build/publicação e promoção.
+
+> **Pin pendente.** O exemplo exige um SHA imutável de `alric-corp/alric-containers-image-base` cujo `build-base-images.yml` e `promote-stable.yml` restrinjam a publicação/promoção a `refs/heads/develop`. Esse SHA ainda não existe: só pode ser o commit aprovado e publicado em `develop`. O pin anterior, `e3ed68259f66af41e8054a4c0ac29a54082ddd60`, é **histórico** — nele os dois workflows exigem `refs/heads/main`, e um chamador em `develop` pularia publicação e promoção. Não use esse SHA, `@develop`, `@main` nem tag móvel; substitua `<SHA-aprovado-em-develop>` pelo commit de `develop` depois de aprovado.
 
 ```yaml
 permissions:
@@ -535,14 +537,14 @@ permissions:
 
 jobs:
   build-images:
-    uses: alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@e3ed68259f66af41e8054a4c0ac29a54082ddd60
+    uses: alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@<SHA-aprovado-em-develop>
     with:
       aws-region: us-east-1
       aws-role-arn: arn:aws:iam::<conta>:role/github-actions-image-base
       frameworks: '["java25", "java25-dev", "nodejs24", "nodejs24-dev"]'
 
   promote-images:
-    uses: alric-corp/alric-containers-image-base/.github/workflows/promote-stable.yml@e3ed68259f66af41e8054a4c0ac29a54082ddd60
+    uses: alric-corp/alric-containers-image-base/.github/workflows/promote-stable.yml@<SHA-aprovado-em-develop>
     with:
       aws-region: us-east-1
       aws-role-arn: arn:aws:iam::<conta>:role/github-actions-image-base
