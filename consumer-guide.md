@@ -4,21 +4,27 @@
 >
 > Containers Products mantém a imagem base. Sua squad acrescenta a aplicação, valida o resultado e controla seu deploy.
 
-**Público:** desenvolvedores e squads que vão consumir as imagens.  
-**Escopo:** benefícios, responsabilidades e primeiros passos; os detalhes internos da Factory ficam na documentação técnica.  
-**Edição:** 28/09/2026 — versão para revisão e publicação no projeto.
+**Público:** desenvolvedores e squads que vão consumir as imagens.\
+**Escopo:** benefícios, responsabilidades e uso das imagens no Dockerfile da sua aplicação.\
+**Atualizado em:** 28/09/2026.
 
-**Antes de começar:** confirme com Containers Products o registry, o ambiente e a versão liberados para sua squad. O catálogo definido não garante que todas as tags `stable` estejam disponíveis em todos os ambientes. Os exemplos abaixo são modelos de consumo; os Dockerfiles ainda precisam ser executados e homologados sobre as referências corporativas aprovadas.
+> **Imagens base disponíveis para consumo.**
+> As imagens são distribuídas pelo registry corporativo de Image Base.
+> Utilize a tag `stable` nos exemplos de Dockerfile deste guia.
+
+**Comece por aqui:** [Começar agora](#quick-start) · [Ver catálogo](#catalogo) · [Exemplos](#exemplos) · [Troubleshooting](#troubleshooting)
 
 ## Navegação
 
 | Entenda a proposta | Comece a usar | Mantenha sua aplicação |
 | --- | --- | --- |
-| [1. O que é a solução?](#visao-geral) | [5. Qual imagem devo usar?](#catalogo) | [10. Atualizações e CVEs](#atualizacoes) |
-| [2. Por que usar?](#por-que-usar) | [6. Runtime × `-dev`](#runtime-dev) | [11. Certificados](#certificados) |
-| [3. O que você ganha?](#beneficios) | [7. Quick Start](#quick-start) | [12. amd64 × arm64](#arquiteturas) |
-| [4. Matriz RACI](#responsabilidades) | [8. Exemplos por linguagem](#exemplos) | [13. Troubleshooting](#troubleshooting) |
-| | [9. `stable`, tag e digest](#referencias) | [14. FAQ](#faq) · [15. Suporte](#suporte) |
+| [1. O que é a solução?](#visao-geral) | [6. Qual imagem devo usar?](#catalogo) | [10. Atualizações e CVEs](#atualizacoes) |
+| [2. Por que usar?](#por-que-usar) | [7. Runtime × `-dev`](#runtime-dev) | [11. Certificados](#certificados) |
+| [3. Glossário rápido](#glossario) | [8. Quick Start](#quick-start) | [12. amd64 × arm64](#arquiteturas) |
+| [4. O que você ganha?](#beneficios) | [9. Exemplos por linguagem](#exemplos) | [13. Troubleshooting](#troubleshooting) |
+| [5. Matriz RACI](#responsabilidades) | | [14. FAQ](#faq) · [15. Suporte](#suporte) |
+
+Atalhos por linguagem: [Java](#exemplo-java) · [Go](#exemplo-go) · [.NET](#exemplo-dotnet) · [Node.js](#exemplo-nodejs) · [Python](#exemplo-python)
 
 ---
 
@@ -27,7 +33,7 @@
 
 As imagens base corporativas são a **fundação do container da sua aplicação**: fornecem o ambiente de execução, as bibliotecas essenciais e a integração de certificados prevista para a base.
 
-A Factory, mantida pelo **Containers Products**, constrói essas bases, executa verificações e testes e as distribui pelo **Amazon ECR**, o registro de imagens usado pelo produto. Sua squad consome uma base no `FROM` do Dockerfile e acrescenta seu código ou artefato compilado.
+**Containers Products** constrói essas bases, executa verificações e testes e as distribui pelo **Amazon ECR**, o registro de imagens usado pelo produto. Sua squad consome uma base no `FROM` do Dockerfile e acrescenta seu código ou artefato compilado.
 
 ```mermaid
 flowchart LR
@@ -38,7 +44,7 @@ flowchart LR
     TEST --> DEPLOY["Deploy pela esteira da squad"]
 ```
 
-**A Factory não é uma plataforma de deploy.** Ela não implanta seu serviço, não administra seus secrets e não atualiza automaticamente aplicações já construídas.
+**As imagens base não são uma plataforma de deploy.** O produto não implanta seu serviço, não administra seus secrets e não atualiza automaticamente aplicações já construídas.
 
 ---
 
@@ -47,7 +53,7 @@ flowchart LR
 
 **Porque manter uma aplicação não deveria exigir que cada squad mantenha, sozinha, toda a base do seu container.**
 
-Ao partir de uma distribuição genérica, o time também precisa decidir quais pacotes instalar, como disponibilizar o runtime, como tratar certificados e como acompanhar atualizações dessa base. A proposta da RFC-013 é centralizar essa fundação e reduzir a repetição dessas decisões entre squads.
+Ao partir de uma distribuição genérica, o time também precisa decidir quais pacotes instalar, como disponibilizar o runtime, como tratar certificados e como acompanhar atualizações dessa base. As imagens corporativas centralizam essa fundação e reduzem a repetição dessas decisões entre squads.
 
 | Sem uma base comum | Com a imagem base corporativa |
 | --- | --- |
@@ -58,23 +64,47 @@ Ao partir de uma distribuição genérica, o time também precisa decidir quais 
 
 Isso **não significa que imagens externas sejam necessariamente inseguras**, nem que migrar seja apenas trocar uma linha. O ganho é consumir um produto de plataforma com responsabilidades, testes e distribuição padronizados.
 
-**Distroless** descreve o runtime mínimo, sem shell ou gerenciador de pacotes no perfil final previsto. **Hardened** acrescenta controles de segurança e manutenção a essa base. Imagem pequena, sozinha, não é garantia de segurança.
+**Distroless** descreve o perfil mínimo do runtime, sem shell ou gerenciador de pacotes no perfil final previsto. **Hardened** acrescenta controles de segurança, manutenção e verificabilidade a essa base. Uma imagem Distroless não é automaticamente Hardened, e imagem pequena, sozinha, não é garantia de segurança. Veja o [glossário rápido](#glossario).
+
+---
+
+<a id="glossario"></a>
+## 3. Glossário rápido
+
+| Termo | Significado |
+| --- | --- |
+| **Hardened** | Imagem mantida com foco em redução de superfície de ataque, conteúdo controlado, tratamento de vulnerabilidades, manutenção e evidências verificáveis de supply chain. |
+| **Distroless** | Imagem orientada ao runtime, sem ferramentas gerais desnecessárias à execução, como shell e gerenciador de pacotes no perfil final. |
+| **Slim** | Variante reduzida de uma imagem convencional. O termo indica redução de conteúdo, mas não define sozinho controles de segurança, manutenção ou supply chain. |
+| **Scratch** | Ponto de partida vazio para uma imagem OCI. Tudo o que a aplicação precisa para executar deve ser fornecido explicitamente. |
+| **Runtime** | Imagem destinada à execução da aplicação, sem o toolchain de desenvolvimento. |
+| **`-dev`** | Variante destinada ao estágio de construção, contendo ferramentas como SDK, JDK, compilador ou npm conforme a família. |
+| **`stable`** | Referência atualmente disponibilizada pelo Containers Products para consumo daquela família e versão. |
+| **SBOM** | Inventário dos componentes presentes no artefato publicado. |
+| **Assinatura** | Evidência verificável associada à identidade que assinou o artefato. |
+| **Provenance** | Evidência verificável sobre a origem e o processo utilizado para produzir o artefato. |
+| **CVE** | Identificador de uma vulnerabilidade conhecida. |
+| **Multiarch** | Disponibilização da mesma referência de imagem para diferentes arquiteturas, neste produto `linux/amd64` e `linux/arm64`. |
+
+Distroless e Hardened não são sinônimos. Distroless descreve principalmente o perfil mínimo do runtime. Hardening acrescenta controles sobre conteúdo, manutenção, vulnerabilidades, testes e verificabilidade do artefato.
+
+Uma imagem slim pode ter menos componentes, mas tamanho reduzido, sozinho, não define uma postura de segurança.
 
 ---
 
 <a id="beneficios"></a>
-## 3. O que você ganha?
+## 4. O que você ganha?
 
 | Benefício | O que muda para sua squad |
 | --- | --- |
 | **Manutenção centralizada da base** | Você não precisa repetir a composição do runtime e dos componentes básicos em cada projeto. |
 | **Menos componentes desnecessários** | Compiladores, shells e ferramentas de desenvolvimento ficam fora do estágio final quando não são necessários à execução. |
-| **Correções disponibilizadas pela plataforma** | Novas bases podem incorporar patches disponíveis; sua esteira consome a versão aprovada em um novo build. |
+| **Correções disponibilizadas pela plataforma** | Novas bases podem incorporar patches disponíveis; sua aplicação passa a usá-las ao ser reconstruída a partir da tag `stable`. |
 | **Certificados padronizados** | A integração de confiança da base deixa de ser uma solução improvisada em cada Dockerfile. |
 | **Duas arquiteturas** | As bases do catálogo contemplam `linux/amd64` e `linux/arm64`; sua aplicação também precisa ser construída e testada para a arquitetura de destino. |
 | **Testes além do scan** | Os contratos verificam execução, versão, identidade do processo, filesystem e confiança TLS conforme a família. |
-| **Conteúdo e origem verificáveis** | Digest, assinatura, SBOM e provenance permitem conferir o que foi recebido e sua origem. |
-| **Um padrão de consumo** | Java, Go, .NET, Node.js e Python compartilham a mesma convenção de distribuição. |
+| **Conteúdo e origem verificáveis** | A base é publicada com assinatura, SBOM e provenance, que registram o que foi publicado e sua origem. |
+| **Um padrão de consumo** | Java, Go, .NET, Node.js e Python compartilham a mesma convenção de uso no Dockerfile. |
 
 ### Os termos de segurança, sem complicação
 
@@ -85,21 +115,21 @@ Isso **não significa que imagens externas sejam necessariamente inseguras**, ne
 ---
 
 <a id="responsabilidades"></a>
-## 4. Responsabilidades — matriz RACI
+## 5. Responsabilidades — matriz RACI
 
 **R:** executa a atividade. **A:** responde pelo resultado. **C:** é consultado. **I:** é informado. **R/A** reúne execução e responsabilidade pelo resultado.
 
-A matriz abaixo expressa o contrato de consumo proposto para este guia. Não substitui as atribuições formais de Segurança, PKI, Cloud ou dos responsáveis pelo ambiente de execução.
+A matriz abaixo resume as responsabilidades no consumo das imagens base. Não substitui as atribuições formais de Segurança, PKI, Cloud ou dos responsáveis pelo ambiente de execução.
 
 | Atividade | Containers Products | Squad da aplicação |
 | --- | :---: | :---: |
 | Manter o catálogo e a composição das bases | **R/A** | I |
 | Atualizar runtimes e pacotes da base, incorporando correções disponíveis | **R/A** | I |
-| Integrar e atualizar CAs aprovadas na base, em conjunto com PKI | **R/A** | I |
+| Integrar CAs aprovadas ao contrato técnico da base, em conjunto com PKI | **R/A** | I |
 | Executar o scan e tratar findings dos componentes da base | **R/A** | C |
 | Testar e publicar novas versões da base | **R/A** | I |
 | Produzir assinatura, SBOM e provenance da base | **R/A** | I |
-| Disponibilizar referências aprovadas e comunicar mudanças relevantes da base | **R/A** | I |
+| Disponibilizar a tag `stable` e comunicar mudanças relevantes da base | **R/A** | I |
 | Escolher a base compatível com a aplicação | C | **R/A** |
 | Manter código e dependências da aplicação | C | **R/A** |
 | Escanear e tratar vulnerabilidades da imagem final da aplicação | C | **R/A** |
@@ -116,32 +146,32 @@ A plataforma integra certificados aprovados; não se torna a autoridade emissora
 ---
 
 <a id="catalogo"></a>
-## 5. Qual imagem devo usar?
+## 6. Qual imagem devo usar?
 
 Escolha primeiro a **família e a versão compatíveis com sua aplicação**. Depois, verifique se precisa de um estágio de compilação/preparação ou somente do runtime.
 
 | Aplicação | Imagem de execução | Imagem de construção/preparação |
 | --- | --- | --- |
-| Java 21 | `image-base-java21` | `image-base-java21-dev` |
-| Java 25 | `image-base-java25` | `image-base-java25-dev` |
-| Go 1.25 | `image-base-go1-25` | `image-base-go1-25-dev` |
-| Go 1.26 | `image-base-go1-26` | `image-base-go1-26-dev` |
-| .NET 10 / ASP.NET Core | `image-base-dotnet10` | `image-base-dotnet10-dev` |
-| Node.js 22 | `image-base-nodejs22` | `image-base-nodejs22-dev` |
-| Node.js 24 | `image-base-nodejs24` | `image-base-nodejs24-dev` |
-| Python 3.13 | `image-base-python3-13` | Sem variante `-dev` neste catálogo |
-| Python 3.14 | `image-base-python3-14` | Sem variante `-dev` neste catálogo |
+| Java 21 | `image-base-java21:stable` | `image-base-java21-dev:stable` |
+| Java 25 | `image-base-java25:stable` | `image-base-java25-dev:stable` |
+| Go 1.25 | `image-base-go1-25:stable` | `image-base-go1-25-dev:stable` |
+| Go 1.26 | `image-base-go1-26:stable` | `image-base-go1-26-dev:stable` |
+| .NET 10 / ASP.NET Core | `image-base-dotnet10:stable` | `image-base-dotnet10-dev:stable` |
+| Node.js 22 | `image-base-nodejs22:stable` | `image-base-nodejs22-dev:stable` |
+| Node.js 24 | `image-base-nodejs24:stable` | `image-base-nodejs24-dev:stable` |
+| Python 3.13 | `image-base-python3-13:stable` | Sem variante `-dev` neste catálogo |
+| Python 3.14 | `image-base-python3-14:stable` | Sem variante `-dev` neste catálogo |
 
-O catálogo descrito reúne **16 imagens: nove runtimes e sete variantes `-dev`**. Fonte: [definições dos frameworks](../frameworks/).
+O catálogo reúne **16 imagens: nove runtimes e sete variantes `-dev`**.
+
+Para cada framework disponível no catálogo, a tag `stable` identifica a versão atualmente disponibilizada pelo Containers Products para consumo. Os exemplos deste guia utilizam essa tag.
 
 Para a primeira migração, preserve a linha de runtime que sua aplicação já suporta. Trocar a imagem base e a versão principal da linguagem ao mesmo tempo dificulta identificar a causa de incompatibilidades.
-
-**Confirme o ambiente de consumo.** DEV é o ambiente interno do time. HOM, associado à `staging` no modelo de evolução, é o destino previsto para testes dos usuários finais; sua liberação não deve ser presumida. `main` está reservada para uma futura produção real. Uma `stable` de DEV não é automaticamente uma aprovação para HOM ou PROD.
 
 ---
 
 <a id="runtime-dev"></a>
-## 6. Entendendo runtime × `-dev`
+## 7. Entendendo runtime × `-dev`
 
 **Runtime** é o ambiente necessário para executar a aplicação. **`-dev`** contém ferramentas para construí-la ou prepará-la: JDK, SDK .NET, compilador Go ou Node com npm, conforme a família.
 
@@ -155,34 +185,41 @@ flowchart LR
 
 **Multi-stage** é um Dockerfile com mais de um estágio. Você compila no primeiro e copia somente a saída necessária para o último. O SDK não precisa acompanhar o aplicativo no container final.
 
-**Atenção: `-dev` não significa ambiente DEV.** É uma variante de imagem para construção, que também pode ser usada na esteira de uma aplicação destinada a HOM ou PROD. O ambiente é definido pelo destino e pelo processo de release.
+**Atenção: `-dev` não é um ambiente.** É uma variante de imagem usada no estágio de construção do Dockerfile; o estágio final usa sempre a variante runtime.
 
-Nos pares Go, Java e .NET, use as referências runtime/`-dev` da **mesma release aprovada**. Não misture digests de releases diferentes. Para Node, o uso dev → runtime é um padrão de consumo; ele não transforma as variantes em um par de promoção no modelo atual.
+Use o `-dev` e o runtime **da mesma família e versão** — por exemplo, `image-base-java21-dev:stable` no build e `image-base-java21:stable` no estágio final.
 
 Python não ter `-dev` não significa que qualquer biblioteca Python possa ser instalada sem preparação. Dependências externas e extensões nativas exigem uma estratégia de build compatível com o runtime.
 
 ---
 
 <a id="quick-start"></a>
-## 7. Quick Start — uma aplicação funcionando
+## 8. Quick Start — uma aplicação funcionando
 
 Este exemplo usa **Python 3.13 e biblioteca padrão**, sem instalar pacotes. É um servidor HTTP demonstrativo para testar o consumo da base, não um servidor recomendado para tráfego de produção.
 
-### 7.1 Pré-requisitos e acesso
+### 8.1 Pré-requisitos e acesso
 
-Você precisa de Docker/Buildx com containers Linux, uma sessão AWS corporativa autorizada a ler o ECR e conectividade ao registry. Na esteira, use os runners e a autenticação aprovados pela empresa; não copie credenciais estáticas da plataforma.
+Você precisa de:
 
-Os comandos abaixo usam **Bash/Git Bash**. Ajuste os valores:
+- **Docker com Buildx**, executando containers Linux, e um terminal **Bash/Git Bash** para os comandos abaixo;
+- **AWS CLI** e uma sessão AWS obtida pelo mecanismo corporativo de autenticação, com **acesso de leitura ao registry corporativo de Image Base**;
+- conectividade ao registry;
+- o **código da aplicação e seu Dockerfile**.
+
+Na esteira, use os runners e a autenticação aprovados pela empresa. Não use credenciais estáticas.
+
+Defina as variáveis do registry corporativo de Image Base e a arquitetura do seu destino:
 
 ```bash
-export AWS_REGION='sa-east-1'  # substitua se o destino aprovado for outro
-export REGISTRY='<conta-do-registry>.dkr.ecr.sa-east-1.amazonaws.com'
+export AWS_REGION='sa-east-1'
+export REGISTRY='758421218117.dkr.ecr.sa-east-1.amazonaws.com'
 export PLATFORM='linux/amd64' # use linux/arm64 se for seu destino
 ```
 
-`REGISTRY` é o host do ECR, sem `https://`. O número da conta é o do registry fornecedor da base, não necessariamente o da sua aplicação.
+`REGISTRY` é o host do ECR corporativo de Image Base, sem `https://`.
 
-Com sua sessão AWS já autenticada:
+Com sua sessão AWS já autenticada, faça login no registry:
 
 ```bash
 set -euo pipefail
@@ -190,18 +227,15 @@ aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$REGISTRY"
 ```
 
-Esse é o login documentado pela AWS. Ele não concede permissões que sua identidade não possua. Acesso ao conteúdo e autenticação no registry são necessários; o token de login tem validade limitada. [Documentação AWS](https://docs.aws.amazon.com/AmazonECR/latest/userguide/registry_auth.html).
+Esse é o login documentado pela AWS. Ele não concede permissões que sua identidade não possua, e o token tem validade limitada. [Documentação AWS](https://docs.aws.amazon.com/AmazonECR/latest/userguide/registry_auth.html).
 
-Para a demonstração, use a `stable` **somente se ela estiver liberada para esse runtime no ambiente escolhido**:
+Confirme o acesso baixando a base do exemplo:
 
 ```bash
-export RUNTIME_IMAGE="$REGISTRY/image-base-python3-13:stable"
-docker pull --platform "$PLATFORM" "$RUNTIME_IMAGE"
+docker pull --platform "$PLATFORM" "$REGISTRY/image-base-python3-13:stable"
 ```
 
-Se a plataforma entregar uma referência por digest, use-a diretamente em `RUNTIME_IMAGE`. Não troque por um candidate aleatório quando `stable` não existir.
-
-### 7.2 Crie os arquivos
+### 8.2 Crie os arquivos
 
 Em um diretório de teste, crie `app.py`:
 
@@ -248,8 +282,8 @@ finally:
 Crie `Dockerfile`:
 
 ```dockerfile
-ARG RUNTIME_IMAGE
-FROM ${RUNTIME_IMAGE}
+ARG REGISTRY
+FROM ${REGISTRY}/image-base-python3-13:stable
 
 WORKDIR /app
 COPY --chown=10000:10000 app.py /app/app.py
@@ -257,14 +291,14 @@ EXPOSE 8080
 ENTRYPOINT ["/usr/bin/python3", "-B", "/app/app.py"]
 ```
 
-`COPY --chown` mantém a propriedade dos arquivos coerente com o usuário da base. O `ENTRYPOINT` em formato de lista executa Python diretamente, sem depender de shell.
+`ARG REGISTRY` evita gravar a conta no Dockerfile; ele recebe o host do registry, **nunca credenciais**. `COPY --chown` mantém a propriedade dos arquivos coerente com o usuário da base. O `ENTRYPOINT` em formato de lista executa Python diretamente, sem depender de shell.
 
-### 7.3 Construa e execute
+### 8.3 Construa e execute
 
 ```bash
 docker buildx build --pull --load \
   --platform "$PLATFORM" \
-  --build-arg RUNTIME_IMAGE="$RUNTIME_IMAGE" \
+  --build-arg REGISTRY="$REGISTRY" \
   -t minha-app:teste .
 
 docker run -d --name minha-app-teste \
@@ -296,60 +330,53 @@ docker stop --time 15 minha-app-teste
 docker rm minha-app-teste
 ```
 
-**O que você acabou de validar:** acesso à base, construção de uma imagem derivada, execução sem shell e resposta HTTP com filesystem raiz somente leitura. Isso ainda não equivale à homologação da sua aplicação.
+**O que você acabou de validar:** acesso à base, construção de uma imagem derivada, execução sem shell e resposta HTTP com filesystem raiz somente leitura. Isso ainda não substitui os testes da sua aplicação.
 
 ---
 
 <a id="exemplos"></a>
-## 8. Exemplos por linguagem
+## 9. Exemplos por linguagem
 
-Os exemplos usam `ARG BUILD_IMAGE` e `ARG RUNTIME_IMAGE` para evitar gravar uma conta ou ambiente no Dockerfile. Esses argumentos recebem **referências de imagem, nunca credenciais**.
+Todos os exemplos usam a tag `stable` e recebem o host do registry por `ARG REGISTRY`, definido no [Quick Start](#quick-start). Nos exemplos multi-stage, o estágio de build usa a variante `-dev` e o estágio final usa o runtime da mesma família e versão.
 
-Para os exemplos multi-stage:
+Para construir qualquer um deles:
 
 ```bash
-# Referências completas fornecidas/verificadas no processo de release.
-export BUILD_IMAGE='<registry>/image-base-<framework>-dev@sha256:<digest-dev>'
-export RUNTIME_IMAGE='<registry>/image-base-<framework>@sha256:<digest-runtime>'
-
 docker buildx build --pull --load \
   --platform "$PLATFORM" \
-  --build-arg BUILD_IMAGE="$BUILD_IMAGE" \
-  --build-arg RUNTIME_IMAGE="$RUNTIME_IMAGE" \
+  --build-arg REGISTRY="$REGISTRY" \
   -t minha-app:teste .
 ```
 
-Substitua os placeholders pelos valores reais. Para Go/Java/.NET, selecione o par aprovado, não os dois digests mais recentes de forma independente.
+Os modelos abaixo são **adaptáveis à aplicação**. Dependências de Maven, npm, NuGet ou módulos Go devem usar as fontes corporativas autorizadas.
 
-Os modelos abaixo são **adaptáveis à aplicação**, inspirados nas [fixtures consumidoras do projeto](../tests/consumer-apps/). Dependências de Maven, npm, NuGet ou módulos Go devem usar as fontes corporativas autorizadas. A ausência de dependências externas nas fixtures de certificação não se aplica automaticamente ao seu projeto.
-
-### 8.1 Java — JDK para compilar, JRE para executar
+<a id="exemplo-java"></a>
+### 9.1 Java — JDK para compilar, JRE para executar
 
 Para uma aplicação simples com `Main.java` na raiz e sem dependências externas:
 
 ```dockerfile
-ARG BUILD_IMAGE
-ARG RUNTIME_IMAGE
+ARG REGISTRY
 
-FROM ${BUILD_IMAGE} AS build
+FROM ${REGISTRY}/image-base-java21-dev:stable AS build
 ENV HOME=/tmp
 WORKDIR /app
 COPY --chown=10000:10000 Main.java ./
 RUN javac -d /app/classes Main.java
 
-FROM ${RUNTIME_IMAGE}
+FROM ${REGISTRY}/image-base-java21:stable
 WORKDIR /app
 COPY --from=build --chown=10000:10000 /app/classes /app/classes
 ENTRYPOINT ["java", "-cp", "/app/classes", "Main"]
 ```
 
-Use o par Java 21 ou Java 25, conforme a aplicação. Para projetos Maven/Gradle/Spring, adapte o estágio de build e copie a saída apropriada. **JDK não implica Maven ou Gradle pré-instalados.** Wrappers e downloads também precisam de rede, certificados e repositórios aprovados.
+Para Java 25, use `image-base-java25-dev:stable` e `image-base-java25:stable`. Para projetos Maven/Gradle/Spring, adapte o estágio de build e copie a saída apropriada. **JDK não implica Maven ou Gradle pré-instalados.** Wrappers e downloads também precisam de rede, certificados e repositórios aprovados.
 
 Se sua esteira já produziu um JAR executável compatível, basta o runtime:
 
 ```dockerfile
-ARG RUNTIME_IMAGE
-FROM ${RUNTIME_IMAGE}
+ARG REGISTRY
+FROM ${REGISTRY}/image-base-java21:stable
 WORKDIR /app
 COPY --chown=10000:10000 target/app.jar /app/app.jar
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
@@ -357,40 +384,40 @@ ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 
 Troque `target/app.jar` pelo caminho real. O uso de `java -jar` pressupõe JAR executável e empacotamento correto das dependências.
 
-### 8.2 Go — compile o binário, não leve o compilador ao runtime
+<a id="exemplo-go"></a>
+### 9.2 Go — compile o binário, não leve o compilador ao runtime
 
 Exemplo para um módulo Go com `main` na raiz, compatível com **`CGO_ENABLED=0`**:
 
 ```dockerfile
-ARG BUILD_IMAGE
-ARG RUNTIME_IMAGE
+ARG REGISTRY
 
-FROM ${BUILD_IMAGE} AS build
+FROM ${REGISTRY}/image-base-go1-26-dev:stable AS build
 ENV HOME=/tmp GOCACHE=/tmp/gocache GOMODCACHE=/tmp/gomodcache \
     GOPATH=/tmp/gopath GOTOOLCHAIN=local CGO_ENABLED=0
 WORKDIR /app
 COPY --chown=10000:10000 . .
 RUN go build -trimpath -buildvcs=false -o /app/server .
 
-FROM ${RUNTIME_IMAGE}
+FROM ${REGISTRY}/image-base-go1-26:stable
 WORKDIR /app
 COPY --from=build --chown=10000:10000 /app/server /app/server
 ENTRYPOINT ["/app/server"]
 ```
 
-Use o par Go 1.25 ou 1.26. Configure o proxy de módulos corporativo quando houver dependências. `GOTOOLCHAIN=local` evita que uma exigência de outra versão seja atendida por download implícito de um compilador diferente.
+Para Go 1.25, use `image-base-go1-25-dev:stable` e `image-base-go1-25:stable`. Configure o proxy de módulos corporativo quando houver dependências. `GOTOOLCHAIN=local` evita que uma exigência de outra versão seja atendida por download implícito de um compilador diferente.
 
 Projetos com CGO ou bibliotecas C exigem validação específica; não desative CGO se a aplicação depende dele. O runtime Go mínimo não contém o comando `go`: sua função é executar o binário entregue pela squad.
 
-### 8.3 .NET — SDK no build, ASP.NET no runtime
+<a id="exemplo-dotnet"></a>
+### 9.3 .NET — SDK no build, ASP.NET no runtime
 
 Exemplo para um projeto `App.csproj`, com target compatível com .NET 10 e `NuGet.config` da aplicação:
 
 ```dockerfile
-ARG BUILD_IMAGE
-ARG RUNTIME_IMAGE
+ARG REGISTRY
 
-FROM ${BUILD_IMAGE} AS build
+FROM ${REGISTRY}/image-base-dotnet10-dev:stable AS build
 ENV HOME=/tmp DOTNET_CLI_HOME=/tmp NUGET_PACKAGES=/tmp/nuget \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 WORKDIR /app
@@ -399,7 +426,7 @@ RUN dotnet restore App.csproj --configfile NuGet.config && \
     dotnet publish App.csproj -c Release -o /app/out \
       --no-restore --no-self-contained -p:UseAppHost=false
 
-FROM ${RUNTIME_IMAGE}
+FROM ${REGISTRY}/image-base-dotnet10:stable
 WORKDIR /app
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
 COPY --from=build --chown=10000:10000 /app/out/ /app/out/
@@ -409,22 +436,22 @@ ENTRYPOINT ["dotnet", "/app/out/App.dll"]
 
 Ajuste o caminho do projeto e o nome da DLL para o `AssemblyName` real. Dependências nativas, publicação self-contained, AOT e necessidades de globalização exigem validação adicional; não estão cobertas por este exemplo genérico.
 
-### 8.4 Node.js — npm na preparação, Node na execução
+<a id="exemplo-nodejs"></a>
+### 9.4 Node.js — npm na preparação, Node na execução
 
 Exemplo para JavaScript sem transpilation, com `package.json`, `package-lock.json` e `src/server.js`. Este modelo pressupõe dependências que não precisam de scripts de instalação:
 
 ```dockerfile
-ARG BUILD_IMAGE
-ARG RUNTIME_IMAGE
+ARG REGISTRY
 
-FROM ${BUILD_IMAGE} AS build
+FROM ${REGISTRY}/image-base-nodejs22-dev:stable AS build
 ENV HOME=/tmp npm_config_cache=/tmp/npm-cache
 WORKDIR /app
 COPY --chown=10000:10000 package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 COPY --chown=10000:10000 src/ ./src/
 
-FROM ${RUNTIME_IMAGE}
+FROM ${REGISTRY}/image-base-nodejs22:stable
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build --chown=10000:10000 /app/ /app/
@@ -432,13 +459,14 @@ EXPOSE 8080
 ENTRYPOINT ["node", "/app/src/server.js"]
 ```
 
-Use Node 22 com Node 22-dev, ou Node 24 com Node 24-dev. A aplicação precisa escutar no endereço/porta desejados; este Dockerfile não modifica seu servidor.
+Para Node.js 24, use `image-base-nodejs24-dev:stable` e `image-base-nodejs24:stable`. A aplicação precisa escutar no endereço/porta desejados; este Dockerfile não modifica seu servidor.
 
 Para TypeScript, bundles ou frameworks com build, instale as dependências de desenvolvimento no estágio de construção, execute o build e selecione a saída/dependências de produção para o estágio final. Se houver scripts de instalação legítimos, revise-os e ajuste o comando; `--ignore-scripts` não é compatível com todo pacote. Addons nativos precisam corresponder ao Node, Linux, bibliotecas e arquitetura de destino.
 
-### 8.5 Python — fonte sobre o runtime
+<a id="exemplo-python"></a>
+### 9.5 Python — fonte sobre o runtime
 
-Para uma aplicação sem bibliotecas externas, use o Dockerfile do [Quick Start](#quick-start), com a base Python 3.13 ou 3.14.
+Para uma aplicação sem bibliotecas externas, use o Dockerfile do [Quick Start](#quick-start) com `image-base-python3-13:stable` ou `image-base-python3-14:stable`. Python não possui variante `-dev` neste catálogo.
 
 **Não presuma que o runtime contém `pip`, compilador ou gerenciador de pacotes do sistema.** Projetos com `requirements.txt`, wheels ou ambientes virtuais precisam preparar suas dependências em um ambiente compatível e autorizado, depois copiar somente o necessário.
 
@@ -450,28 +478,7 @@ Use `.dockerignore` para excluir `.git`, `.env`, credenciais, caches e saídas l
 
 Tokens de registries de dependências devem entrar pelo mecanismo de secrets da esteira/BuildKit, não por `ARG`, `ENV`, URL com senha ou arquivo copiado para a imagem. [Build secrets](https://docs.docker.com/build/building/secrets/).
 
----
-
-<a id="referencias"></a>
-## 9. Como escolher `stable`, build tag ou digest
-
-| Referência | Significado | Uso |
-| --- | --- | --- |
-| `image-base-java21:stable` | Versão aprovada atual daquele destino; pode mudar. | Conveniência para descobrir/consumir uma atualização aprovada. |
-| `image-base-java21:<tag-de-build>` | Referência imutável da publicação. | Identificar a release enquanto ela estiver retida. |
-| `image-base-java21@sha256:<digest>` | Hash do conteúdo exato da imagem. | Fixar a identidade utilizada no build e registrar evidência. |
-
-**Candidate** é uma publicação que ainda não equivale à aprovação `stable`. Testes assistidos podem consumir candidates por digest, desde que isso esteja explicitamente combinado.
-
-Para um build auditável, prefira receber/resolver e verificar as referências aprovadas, registrar os digests e fornecê-los como argumentos ao Dockerfile. No par compilado, registre **os dois membros da mesma release**. Ler duas tags móveis em momentos diferentes pode não representar o par aprovado.
-
-Um digest fixa identidade, **não garante retenção eterna nem segurança permanente**. Combine a janela de recuperação com a plataforma e preserve também as imagens finais da aplicação necessárias ao seu rollback.
-
-### Verifique a base; escaneie a aplicação
-
-O [contrato de verificação do consumidor](consumer-verification-contract.md) descreve como conferir assinatura, identidade esperada, SBOM e provenance associados ao digest. Use a política de identidade corporativa, não a identidade do LAB.
-
-A assinatura da base **não assina automaticamente sua imagem derivada**. Da mesma forma, o SBOM da base não lista todas as bibliotecas que você adicionar. O scan, a geração de evidências e os controles de release da imagem final continuam na esteira da aplicação.
+A assinatura da base **não assina automaticamente sua imagem derivada**, e o SBOM da base não lista as bibliotecas que você adicionar. O scan, a geração de evidências e os controles de release da imagem final continuam na esteira da aplicação.
 
 ---
 
@@ -480,37 +487,35 @@ A assinatura da base **não assina automaticamente sua imagem derivada**. Da mes
 
 **Trivy detecta. A atualização, remoção ou substituição do componente corrige.**
 
-A plataforma incorpora correções disponíveis nos componentes da base, produz outro candidate e aplica seus controles antes de liberar a referência aprovada. Esse processo não modifica imagens de aplicações já construídas.
+A plataforma incorpora correções disponíveis nos componentes da base, produz e valida uma nova versão e então atualiza a tag `stable`. Esse processo não modifica imagens de aplicações já construídas.
 
 ```mermaid
 flowchart LR
     FIX["Correção disponível"] --> BASE["Plataforma produz<br/>e valida nova base"]
-    BASE --> REL["Base aprovada<br/>Novo digest"]
-    REL --> ADOPT["Squad atualiza<br/>a referência consumida"]
-    ADOPT --> BUILD["Rebuild da aplicação"]
+    BASE --> REL["Nova versão<br/>publicada como stable"]
+    REL --> BUILD["Squad reconstrói<br/>a aplicação com --pull"]
     BUILD --> TEST["Testes e scan<br/>da imagem final"]
     TEST --> DEPLOY["Deploy aprovado"]
 ```
 
 ### O novo build vai incorporar a correção?
 
-**Somente se ele consumir a base corrigida.** Com uma tag móvel, `--pull` pede ao builder que consulte as imagens referenciadas. Com digest fixo, é preciso atualizar o digest primeiro. `--no-cache` não substitui `--pull` e não transforma um digest antigo em outro. [Docker: atualização de bases](https://docs.docker.com/build/building/best-practices/).
+**Somente se ele consumir a base corrigida.** Com `--pull`, o builder consulta a versão atual da tag `stable` em vez de reutilizar uma cópia local antiga. `--no-cache` não substitui `--pull`. [Docker: atualização de bases](https://docs.docker.com/build/building/best-practices/).
 
 ```bash
-# Para o Dockerfile configurado com a referência aprovada atual:
 docker buildx build --pull --load \
   --platform "$PLATFORM" \
-  --build-arg RUNTIME_IMAGE="$RUNTIME_IMAGE" \
+  --build-arg REGISTRY="$REGISTRY" \
   -t minha-app:teste .
 ```
 
-Em multi-stage, atualize também a referência de build quando aplicável. Trocar somente o runtime não garante corrigir vulnerabilidades incorporadas ao binário durante a compilação.
+Em multi-stage, o estágio de build também é atualizado pelo `--pull`. Trocar somente o runtime não garante corrigir vulnerabilidades incorporadas ao binário durante a compilação.
 
 **Reiniciar o Pod não reconstrói a aplicação.** Se a imagem final continua a mesma, atualizar a `stable` da base não injeta novas camadas naquele aplicativo.
 
 ### E se a aplicação ficar meses sem PR?
 
-Ela pode continuar com a base antiga. A squad deve definir um processo de adoção: revisão periódica, rebuild controlado ou automação aprovada que proponha atualização das referências e dispare os testes. Esse mecanismo não está entregue automaticamente apenas por adotar a Factory.
+Ela continua com a base usada no último build. A squad deve definir um processo de adoção: revisão periódica, rebuild controlado ou automação aprovada que dispare o rebuild e os testes. Esse mecanismo não é entregue automaticamente apenas por adotar as imagens base.
 
 | Onde está o problema? | Tratamento |
 | --- | --- |
@@ -519,7 +524,7 @@ Ela pode continuar com a base antiga. A squad deve definir um processo de adoç�
 | Componente incorporado durante build | A squad atualiza os insumos/toolchain pertinentes e recompila. |
 | Sem correção disponível | Registrar risco e seguir o processo de análise/exceção; não declarar o problema resolvido. |
 
-No baseline documentado, o gate usa `--ignore-unfixed` e reporta os casos sem correção separadamente. Portanto, **scan aprovado não significa ausência de todas as vulnerabilidades conhecidas**. Confirme a política vigente na release consumida.
+O scan da base trata separadamente vulnerabilidades que ainda não têm correção disponível. Portanto, **scan aprovado não significa ausência de todas as vulnerabilidades conhecidas**.
 
 ---
 
@@ -545,7 +550,7 @@ Se houver `x509: unknown authority` ou erro equivalente, confira a cadeia, hostn
 
 ```mermaid
 flowchart TD
-    BASE["Referência da base<br/>OCI Image Index"] --> AMD["Base linux/amd64"]
+    BASE["Imagem base :stable<br/>OCI Image Index"] --> AMD["Base linux/amd64"]
     BASE --> ARM["Base linux/arm64"]
     AMD --> A1["Build e teste<br/>da aplicação amd64"]
     ARM --> A2["Build e teste<br/>da aplicação arm64"]
@@ -553,23 +558,21 @@ flowchart TD
 
 **A base ser multiarch não torna sua aplicação multiarch automaticamente.** Bibliotecas nativas, wheels Python, addons Node, CGO, JNI e dependências .NET específicas precisam corresponder ao destino.
 
-Para um Dockerfile com estágio de build, teste uma arquitetura por vez:
+Teste uma arquitetura por vez:
 
 ```bash
 docker buildx build --pull --load \
   --platform linux/amd64 \
-  --build-arg BUILD_IMAGE="$BUILD_IMAGE" \
-  --build-arg RUNTIME_IMAGE="$RUNTIME_IMAGE" \
+  --build-arg REGISTRY="$REGISTRY" \
   -t minha-app:amd64 .
 
 docker buildx build --pull --load \
   --platform linux/arm64 \
-  --build-arg BUILD_IMAGE="$BUILD_IMAGE" \
-  --build-arg RUNTIME_IMAGE="$RUNTIME_IMAGE" \
+  --build-arg REGISTRY="$REGISTRY" \
   -t minha-app:arm64 .
 ```
 
-Para Dockerfiles somente runtime, omita `BUILD_IMAGE`. Execute e teste cada saída em um host compatível ou por emulação aprovada; presença do manifest não comprova execução. QEMU permite emulação, mas pode ser mais lento e não substitui benchmark no hardware de destino.
+Execute e teste cada saída em um host compatível ou por emulação aprovada; presença do manifest não comprova execução. QEMU permite emulação, mas pode ser mais lento e não substitui benchmark no hardware de destino.
 
 A publicação da imagem final multiarch deve ocorrer na esteira da squad e no registry da aplicação — **não nos repositórios `image-base-*`**.
 
@@ -594,8 +597,8 @@ Não envie dumps completos de `docker inspect` ou configurações sem revisão: 
 
 | Sintoma | O que verificar primeiro |
 | --- | --- |
-| `no basic auth credentials`, 401 ou 403 | Sessão/login, permissões de pull, região, registry e conectividade corporativa. |
-| Tag ou manifest não encontrado | Ambiente, nome, release disponível e retenção do digest. Não crie `stable` manualmente. |
+| `no basic auth credentials`, 401 ou 403 | Sessão/login, acesso de leitura ao registry corporativo de Image Base, região, registry e conectividade corporativa. |
+| Tag ou manifest não encontrado | Nome da imagem, tag `stable` e host do registry. Não crie tags nos repositórios `image-base-*`. |
 | `exec format error` | Arquitetura do binário, da imagem e do nó. |
 | `/bin/sh` ou `bash` não encontrado | Comando depende de shell ausente; use o executável diretamente. |
 | Arquivo existe, mas executável não inicia | Permissão, shebang/CRLF, loader ou biblioteca dinâmica ausente. |
@@ -604,7 +607,11 @@ Não envie dumps completos de `docker inspect` ou configurações sem revisão: 
 | Erro TLS | Cadeia/CA, hostname e trust store realmente usado pelo cliente. |
 | JAR/DLL/módulo não encontrado | Caminho de `COPY`, saída do build, dependências e comando de entrada. |
 
+### Diagnóstico interativo
+
 Para diagnóstico interativo em Kubernetes, use **o toolkit e o processo de ephemeral container aprovados pela plataforma**. O container efêmero fornece ferramentas separadamente; não exige transformar a aplicação em uma imagem de troubleshooting. Seu uso depende de autorização e das políticas do cluster. [Kubernetes: debug de Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/).
+
+O toolkit corporativo de troubleshooting é mantido no repositório `https://github.com/itau-corp/<REPOSITORIO_TROUBLESHOOTING>` (nome do repositório pendente de preenchimento).
 
 ### Segurança da execução continua sendo configuração do workload
 
@@ -632,57 +639,53 @@ Adicione os volumes/mounts graváveis que sua aplicação realmente precisa; ess
 <a id="faq"></a>
 ## 14. Perguntas frequentes
 
-**Posso fazer `RUN apk add`, `apt-get` ou instalar Bash no runtime?**  
+**Posso fazer `RUN apk add`, `apt-get` ou instalar Bash no runtime?**\
 Não conte com esses comandos na base final. Uma dependência adicional de sistema precisa ser avaliada no contrato da base. Não use a variante `-dev` como runtime apenas para contornar a ausência de ferramentas.
 
-**Preciso conhecer Melange, Apko ou Terraform para consumir?**  
-Não. Essas ferramentas compõem/provisionam a solução. O consumo principal é escolher a referência aprovada e usá-la no Dockerfile/esteira.
+**Preciso conhecer como as imagens base são construídas?**\
+Não. Para consumir a solução, utilize a imagem correspondente com a tag `stable` no Dockerfile e siga o fluxo de autenticação e testes deste guia.
 
-**Preciso da imagem `-dev` se meu pipeline já compila?**  
+**Preciso da imagem `-dev` se meu pipeline já compila?**\
 Não necessariamente. Você pode copiar o artefato pronto para o runtime, desde que ele seja compatível com a versão, o sistema, as bibliotecas e a arquitetura de destino.
 
-**Posso usar `:stable` nos dois estágios?**  
-É uma referência de conveniência. Para garantir um par compilado auditável, resolva/verifique a mesma release e fixe os dois digests antes do build; não suponha atomicidade entre duas tags móveis.
+**Uso `:stable` nos dois estágios?**\
+Sim. Os exemplos usam `stable` no estágio de build (`-dev`) e no estágio final (runtime), sempre da mesma família e versão.
 
-**Posso usar `-dev` em HOM ou PROD?**  
-Como estágio de build, sim, dentro do processo aprovado. Como estágio final da aplicação, não é o padrão recomendado do produto. `-dev` descreve a função da imagem, não o ambiente.
+**Posso usar `-dev` como imagem final da aplicação?**\
+Não é o padrão recomendado. `-dev` é para o estágio de construção; o estágio final usa o runtime. `-dev` descreve a função da imagem, não um ambiente.
 
-**A `stable` de DEV serve automaticamente para produção?**  
-Não. `stable` significa aprovado naquele destino. Use somente o ambiente/release liberados para sua squad.
+**Minha aplicação terá `/health`, `/ready` e `/info` automaticamente?**\
+Não. Esses endpoints existem apenas na aplicação do Quick Start. Sua aplicação implementa seus próprios endpoints e probes.
 
-**Minha aplicação terá `/health`, `/ready` e `/info` automaticamente?**  
-Não. Esses endpoints existem nas aplicações de exemplo/certificação. Sua aplicação implementa seus próprios endpoints e probes.
-
-**A imagem vem com todas as bibliotecas da minha aplicação?**  
+**A imagem vem com todas as bibliotecas da minha aplicação?**\
 Não. Spring, dependências npm/Python/NuGet e bibliotecas internas pertencem à aplicação. A base não é um ambiente de desenvolvimento completo.
 
-**O scan verde elimina a necessidade de scan da minha imagem final?**  
+**O scan verde elimina a necessidade de scan da minha imagem final?**\
 Não. Seu código, suas dependências e seus arquivos acrescentam conteúdo que não existia na base. Assinatura da base também não comprova segurança desse conteúdo.
 
-**Atualizar a tag da base e reiniciar o Pod corrige tudo?**  
+**Atualizar a tag da base e reiniciar o Pod corrige tudo?**\
 Não. É necessário reconstruir a aplicação usando os insumos corrigidos, testar e fazer deploy da nova imagem final.
 
-**Como faço rollback?**  
-Pelo processo de release da aplicação, usando uma imagem final anterior retida e autorizada. Recovery de `stable` da base não altera automaticamente deployments nem substitui o rollback da squad.
+**Como faço rollback?**\
+Pelo processo de release da aplicação, usando uma imagem final anterior retida e autorizada. Mudanças na `stable` da base não alteram deployments existentes nem substituem o rollback da squad.
 
 ---
 
 <a id="suporte"></a>
 ## 15. Suporte e adoção assistida
 
-Comece por uma aplicação de baixo risco, preserve a versão de runtime quando possível e compare funcionamento, tamanho e findings antes/depois. Homologue com testes da própria aplicação antes de expandir o uso.
+Comece por uma aplicação de baixo risco, preserve a versão de runtime quando possível e compare funcionamento, tamanho e findings antes/depois. Valide com os testes da própria aplicação antes de expandir o uso.
 
-O responsável pelo produto é **Containers Products**. O canal oficial, o catálogo de releases liberadas e os prazos de atendimento devem ser informados pela equipe; este guia não inventa endereço de suporte nem SLA.
+O responsável pelo produto é **Containers Products**. O canal oficial de atendimento está pendente de publicação neste guia. Este guia não define endereço de suporte nem SLA.
 
 Ao solicitar ajuda, forneça uma reprodução sem secrets:
 
 ```text
 Aplicação / squad:
-Ambiente e arquitetura:
-Runtime escolhido:
-Referência completa da base + digest:
-Referência da variante -dev, se usada:
-Run/job da esteira:
+Arquitetura:
+Imagem base utilizada (ex.: image-base-java21:stable):
+Imagem -dev utilizada, se houver:
+Link do job da esteira da aplicação, se houver:
 Etapa da falha: pull / build / startup / runtime / TLS
 Mensagem de erro sanitizada:
 Comportamento esperado e observado:
@@ -694,34 +697,17 @@ Não envie tokens, chaves privadas, senhas, arquivos `.env` completos ou dumps s
 
 ### Checklist de adoção
 
-- [ ] Ambiente, registry e release liberados para a squad.
-- [ ] Referências/digests registrados; par de build/runtime coerente quando aplicável.
+- [ ] Acesso de leitura ao registry corporativo de Image Base confirmado e `docker pull` da base funcionando.
+- [ ] Dockerfile usa a tag `stable`; nos multi-stage, `-dev` e runtime da mesma família e versão.
 - [ ] Artefato final deriva do runtime, sem toolchain desnecessário.
 - [ ] Testes, scan da aplicação, TLS, permissões de escrita e shutdown validados.
 - [ ] Arquiteturas necessárias realmente construídas e executadas.
-- [ ] Processo de atualização da base definido, sem depender de um PR eventual meses depois.
+- [ ] Processo de rebuild da aplicação definido para incorporar atualizações da base.
 - [ ] Deploy/rollback e canal de suporte conhecidos.
 
-### Referências e escopo desta edição
+### Referências externas
 
-Este guia foi elaborado a partir da RFC-013, do documento de fluxo e dos checkpoints compartilhados. A atualização informada pelo responsável registra **`stable` em DEV e lifecycle via IaC**; isso não comprova disponibilidade de todas as versões em HOM/PROD nem certificação de toda aplicação consumidora.
-
-Os exemplos são modelos novos/adaptados; as fixtures consultadas pertencem à implementação de referência do LAB no commit `f44b2edf84538b41bfb96dde68e0aa7ffb192d00`. Elas apoiam a estrutura dos exemplos, mas não substituem a revisão e a execução no ambiente corporativo. Nesta edição foram conferidas a sintaxe dos blocos Python/Bash/YAML e as respostas HTTP e o SIGTERM do serviço Python em execução local, com porta de teste. Não houve build Docker, acesso ao ECR ou homologação corporativa dos exemplos nesta elaboração.
-
-**Fontes do produto:** [RFC-013](../RFC-013-Image-Base-Completa-com-Mermaid.md), [fluxo técnico](../TODO/ALRIC-CONTAINERS-IMAGE-BASE-FLOW.md), [catálogo](../frameworks/), [contrato de verificação](consumer-verification-contract.md), [certificação de aplicações](consumer-app-certification.md) e [fixtures de aplicação](../tests/consumer-apps/).
-
-**Referências externas usadas para conferir os exemplos e recomendações de operação:** documentação oficial [Dockerfile](https://docs.docker.com/reference/dockerfile/), [Buildx](https://docs.docker.com/reference/cli/docker/buildx/build/), [boas práticas de build](https://docs.docker.com/build/building/best-practices/), [secrets de build](https://docs.docker.com/build/building/secrets/), [multiarch](https://docs.docker.com/build/building/multi-platform/), [autenticação ECR](https://docs.aws.amazon.com/AmazonECR/latest/userguide/registry_auth.html), [security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/) e [debug de Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/).
-
-<details>
-<summary>Revisão editorial antes de publicar no repositório corporativo</summary>
-
-- Publicar preferencialmente como `docs/consumer-guide.md`; os links relativos foram escritos para essa posição e precisam ser conferidos no checkout de destino.
-- Confirmar catálogo/references liberados e acrescentar o canal oficial de suporte e acesso.
-- Ratificar a RACI com os responsáveis, sem substituir a governança de Segurança/PKI/Cloud.
-- Validar os Dockerfiles nas versões corporativas aprovadas; ajustar nomes de projetos, ferramentas e fontes de dependências conforme o consumidor.
-- Não anunciar SLA, ganho percentual, atualização automática de aplicações ou homologação HOM/PROD sem evidência e aprovação.
-
-</details>
+Documentação oficial [Dockerfile](https://docs.docker.com/reference/dockerfile/), [Buildx](https://docs.docker.com/reference/cli/docker/buildx/build/), [boas práticas de build](https://docs.docker.com/build/building/best-practices/), [secrets de build](https://docs.docker.com/build/building/secrets/), [multiarch](https://docs.docker.com/build/building/multi-platform/), [autenticação ECR](https://docs.aws.amazon.com/AmazonECR/latest/userguide/registry_auth.html), [security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/) e [debug de Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/).
 
 ---
 
