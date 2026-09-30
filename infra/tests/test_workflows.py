@@ -106,6 +106,13 @@ class InfraWorkflowTests(unittest.TestCase):
             for job in workflow['jobs'].values():
                 if ' init ' not in shell(job):
                     continue
+                initializations = [line for line in shell(job).splitlines() if ' init ' in line]
+                if all('-backend=false' in line for line in initializations):
+                    # Mock-provider tests do not initialize an AWS backend and
+                    # must stay in the job with no AWS/OIDC permissions.
+                    self.assertNotIn('id-token', job['permissions'])
+                    self.assertNotIn('configure-aws-credentials', str(job))
+                    continue
                 ensure = step_index(job, 'python3 infra/backend.py ensure')
                 init = step_index(job, 'terraform -chdir=infra/ecr init')
                 self.assertLess(ensure, init)
