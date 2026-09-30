@@ -408,30 +408,19 @@ class PromotionWorkflowWiringTests(unittest.TestCase):
         document = yaml.safe_load((ROOT / '.github/workflows/promote-stable.yml').read_text())
         job = document['jobs']['promote']
         steps = job['steps']
-        names = [step['name'] for step in steps]
-        validation = names.index('Validate workflow inputs before privileged operations')
-        credentials = names.index('Configure AWS credentials (OIDC)')
-        self.assertLess(validation, credentials)
-        self.assertIn('--plan', steps[validation]['run'])
-        self.assertIn('scripts.pipeline.catalog.validate_inputs', steps[validation]['run'])
+        names = [step.get('name') for step in steps]
+        self.assertLess(names.index('Validate explicit release identity'),
+                        names.index('Configure HOM credentials'))
+        self.assertEqual(job['environment'], 'HOM')
         self.assertNotIn('strategy', job)
         self.assertFalse(job['concurrency']['cancel-in-progress'])
         self.assertIn("vars.STABLE_PROMOTION_AUTHORIZED == 'true'", job['if'])
-        execution = steps[names.index('Authorize candidates and promote stable pairs')]
-        self.assertIn('scripts.pipeline.release.promotion_batch', execution['run'])
+        execution = steps[names.index('Promote exact eligible release to HOM')]
+        self.assertIn('scripts.pipeline.release.lifecycle promote-hom', execution['run'])
         self.assertNotIn('continue-on-error', execution)
-        self.assertNotIn('imagetools create', '\n'.join(step.get('run', '') for step in steps))
-        self.assertIn('policies/release/promotion-quarantine.json', execution['run'])
-        outcome = steps[names.index('Preserve promotion outcome')]
-        self.assertIn('reports/promotion-*/promotion-evidence.json', outcome['with']['path'])
-        self.assertIn('reports/promotion-batch.json', outcome['with']['path'])
-        for name in ('verify-pair', 'summary'):
-            download = next(step for step in document['jobs'][name]['steps']
-                            if step['name'] == 'Download promotion evidence')
-            self.assertEqual(download['with']['pattern'], 'promotion-*-${{ github.run_attempt }}')
-            self.assertTrue(download['with']['merge-multiple'])
-            self.assertEqual(download['with']['digest-mismatch'], 'error')
-            self.assertEqual(download['with']['run-id'], '${{ github.run_id }}')
+        outcome = steps[names.index('Preserve HOM promotion evidence')]
+        self.assertEqual(outcome['if'], '${{ !cancelled() }}')
+        self.assertEqual(outcome['with']['path'], 'reports/release/')
 
 
 if __name__ == '__main__':

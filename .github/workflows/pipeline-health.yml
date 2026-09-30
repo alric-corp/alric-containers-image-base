@@ -34,7 +34,7 @@ concurrency:
 jobs:
   health:
     name: Operational health and tool pins
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     # Observado local: 25s para checar 45 pins na origem. A margem cobre as
     # consultas de jobs por run da métrica por framework e variância de rede.

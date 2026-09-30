@@ -1,10 +1,15 @@
 # Certificação controlada do catálogo
 
 `Distroless - Catalog certification` (`catalog-certification.yml`) é um
-entrypoint exclusivamente manual, executável na `main` após revisão/merge e
+entrypoint exclusivamente manual, executável na `develop` após revisão/merge e
 autorização explícita para publicar candidatos. Não aceita inputs. Seu array
 versionado contém exatamente os 16 frameworks atuais; os testes exigem que
 continue igual a `frameworks/*.yaml`, sem duplicatas e com pares completos.
+
+No cutover para DEV em `develop`, execute uma nova certificação autorizada
+nessa branch antes de usar App Certification. Runs históricos em `main`
+continuam evidência histórica; não satisfazem a origem DEV exigida pelo
+resolver atual. A migração em si não despacha nem publica imagens.
 
 O único job chama `build-base-images.yml`, com as mesmas variáveis AWS e
 permissões do publicador normal. O lock

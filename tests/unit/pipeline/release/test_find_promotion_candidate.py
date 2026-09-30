@@ -225,10 +225,12 @@ class QuarantineWiringTests(unittest.TestCase):
     def test_promotion_uses_the_versioned_quarantine_after_migration(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/promote-stable.yml').read_text())
         candidates = [step for job in workflow['jobs'].values()
-                      for step in job.get('steps', []) if step.get('id') == 'candidate']
+                      for step in job.get('steps', []) if step.get('name') == 'Promote exact eligible release to HOM']
         self.assertEqual(len(candidates), 1)
         policy = 'policies/release/promotion-quarantine.json'
-        self.assertIn(policy, candidates[0]['run'])
+        from scripts.pipeline.release import lifecycle
+        import inspect
+        self.assertIn(policy, inspect.getsource(lifecycle.promote_hom))
         entries = json.loads((ROOT / policy).read_text())
         for repository, records in entries.items():
             if repository.startswith('_'):

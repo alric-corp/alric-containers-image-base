@@ -53,14 +53,19 @@ and never created or deleted here. No static AWS credentials are stored in GitHu
 | --- | --- | --- |
 | Infra plan | Exact immutable repository subject ending `:pull_request` | Read ECR, ensure this backend, read state, acquire/release its lock |
 | Infra apply | Exact immutable repository subject ending `:environment:lab-image-base-infra` | Manage this catalog and its state; ensure this backend |
-| Existing product Build | Existing exact main subject | Publish/read images; no Terraform or ECR administration |
+| Existing product Build | Exact `refs/heads/develop` subject required by the DEV contract | Publish/read images; no Terraform or ECR administration |
 
 Trust uses exact audience, repository ID, owner ID and subject. Infra trust has
-no generic main-branch subject or repository wildcard. The LAB environment limits
-deployment to `main` and requires its configured reviewer. Both dispatch jobs
-use the environment so no unprotected branch session is needed to plan an apply.
+no generic branch subject or repository wildcard. The existing LAB environment
+still limits deployment to `main`; the authorized cutover must change that
+restriction to `develop` and preserve the configured reviewer. Both dispatch
+jobs use the same environment and require `refs/heads/develop` in code. The
+environment-based Infra subject does not change. Publisher trust is ref-based
+and requires a separate external update; editing its JSON does not update IAM.
+See [the cutover procedure](../docs/develop-as-dev.md).
 
-PRs run static checks without AWS; only same-repository PRs receive the plan
+PRs targeting `develop` run static checks without AWS; only same-repository
+PRs targeting `develop` receive the plan
 identity. Fork PRs never receive AWS. `infra-apply.yml` is dispatch-only, with no
 scheduled apply. It uploads the binary plan and SHA-256 checksum, pins both jobs
 to the same commit, and applies only that exact plan. Its final plan must have

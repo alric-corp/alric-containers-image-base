@@ -225,47 +225,39 @@ class PromotionOutcomeTests(unittest.TestCase):
                 self.assertIsNone(evidence['candidate_digest'])
                 self.assertIsNone(evidence['stable_digest_observed'])
 
-    def test_workflow_uses_batch_authorization_and_preserves_outcomes_after_failure(self):
+    def test_workflow_preserves_failed_promotion_outcomes(self):
         steps = promotion_steps()
-        by_name = {step['name']: i for i, step in enumerate(steps)}
-        sequence = [by_name[name] for name in (
-            'Validate workflow inputs before privileged operations',
-            'Configure AWS credentials (OIDC)', 'Login to Amazon ECR',
-            'Install cosign', 'Install Trivy',
-            'Authorize candidates and promote stable pairs', 'Preserve promotion outcome')]
-        self.assertEqual(sequence, sorted(sequence))
-        self.assertIn('--plan', steps[sequence[0]]['run'])
-        executor = steps[sequence[5]]
+        executor = next(s for s in steps if s.get('name') == 'Promote exact eligible release to HOM')
         self.assertNotIn('continue-on-error', executor)
         self.assertNotIn('if', executor)
-        self.assertIn('scripts.pipeline.release.promotion_batch "$FRAMEWORKS"', executor['run'])
-        self.assertNotIn('--plan', executor['run'])
-        # The batch helper owns security checks, writes and read-back in one
-        # process. YAML cannot start a separate write before it authorizes.
+        self.assertIn('scripts.pipeline.release.lifecycle promote-hom', executor['run'])
         for step in steps:
             self.assertNotIn('imagetools create', step.get('run', ''))
             self.assertNotIn('ecr put-image', step.get('run', ''))
-        outcome = steps[sequence[6]]
+        outcome = next(s for s in steps if s.get('name') == 'Preserve HOM promotion evidence')
         self.assertEqual(outcome['if'], '${{ !cancelled() }}')
-        self.assertIn('reports/promotion-*/promotion-evidence.json', outcome['with']['path'])
-        self.assertIn('reports/promotion-*/ecr-before.json', outcome['with']['path'])
+        self.assertEqual(outcome['with']['path'], 'reports/release/')
 
 
 class RecoveryReadBackRegressionTests(unittest.TestCase):
-    def test_existing_recovery_readback_success_mismatch_missing_and_error(self):
-        steps = yaml.safe_load((ROOT / '.github/workflows/recover-stable.yml').read_text())['jobs']['recover']['steps']
-        step = next(step for step in steps if step['name'] == 'Confirm stable via independent read-back')
-        for observed, code, success in ((CANDIDATE, 0, True), (OTHER, 0, False),
-                                        ('', 0, False), ('None', 0, False), ('', 254, False)):
-            with self.subTest(observed=observed, code=code), tempfile.TemporaryDirectory() as directory:
-                aws = Path(directory) / 'aws'
-                aws.write_text('#!/bin/sh\nprintf "%s\\n" "$TEST_OBSERVED"\nexit "$TEST_AWS_EXIT"\n')
-                aws.chmod(0o755)
-                result = subprocess.run(bash_command('-c', step['run']), capture_output=True, text=True,
-                                        env={**os.environ, 'PATH': directory + os.pathsep + os.environ['PATH'],
-                                             'FRAMEWORK': 'go1-26', 'DIGEST': CANDIDATE,
-                                             'TEST_OBSERVED': observed, 'TEST_AWS_EXIT': str(code)})
-                self.assertEqual(result.returncode == 0, success, result.stderr)
+    def test_recovery_readback_success_mismatch_missing_and_error(self):
+        from scripts.pipeline.release import lifecycle
+        from tests.unit.pipeline.release.test_lifecycle import manifest
+        for observed in (CANDIDATE, OTHER, None, ValueError('AWS unavailable')):
+            with self.subTest(observed=observed), tempfile.TemporaryDirectory() as directory, \
+                 patch.object(lifecycle, 'read_index'), patch.object(lifecycle, 'aws'), \
+                 patch.object(lifecycle, 'stable_digest') as readback:
+                m = manifest()
+                m['images']['go1-26']['digest'] = CANDIDATE
+                if isinstance(observed, Exception):
+                    readback.side_effect = observed
+                else:
+                    readback.return_value = observed
+                if observed == CANDIDATE:
+                    lifecycle.write_stable(m, 'go1-26', 'HOM', Path(directory))
+                else:
+                    with self.assertRaises(ValueError):
+                        lifecycle.write_stable(m, 'go1-26', 'HOM', Path(directory))
 
 
 if __name__ == '__main__':

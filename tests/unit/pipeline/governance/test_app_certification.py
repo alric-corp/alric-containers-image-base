@@ -40,7 +40,7 @@ class AppCertificationWorkflowTests(unittest.TestCase):
         self.assertIs(inputs['source-run-id']['required'], True)
         self.assertNotIn('default', inputs['source-run-id'])
         self.assertEqual(self.jobs['inventory']['if'],
-                         "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'")
+                         "github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'")
 
     def test_exact_eighteen_real_execution_legs_keep_failure_isolation(self):
         job = self.jobs['applications']
@@ -101,7 +101,7 @@ class AppCertificationWorkflowTests(unittest.TestCase):
                 credentials = action_steps(job, 'aws-actions/configure-aws-credentials')
                 self.assertEqual(len(credentials), 1)
                 config = credentials[0]['with']
-                self.assertEqual(config['role-to-assume'], '${{ vars.AWS_ROLE_ARN }}')
+                self.assertEqual(config['role-to-assume'], '${{ vars.DEV_ROLE_ARN }}')
                 self.assertEqual(config['allowed-account-ids'], '${{ vars.AWS_ACCOUNT_ID }}')
                 self.assertNotIn('aws-access-key-id', config)
                 self.assertNotIn('aws-secret-access-key', config)

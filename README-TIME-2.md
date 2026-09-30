@@ -169,6 +169,10 @@ As aplicações respondem em `/health`, `/ready` e `/info`. Os testes incluem us
 
 O desenho corporativo considera **`develop → DEV`, `staging → HOM` e `main → PROD futuro`**, com `stable` por ambiente. Resultados do LAB não comprovam homologação corporativa; implantação, aprovações e pendências ficam no checkpoint correspondente.
 
+Nesta revisão do LAB, somente o contrato **DEV em `develop`** é implementado.
+Default branch e trust remotas aguardam [cutover autorizado](docs/develop-as-dev.md);
+HOM e PROD permanecem futuros.
+
 A base hardened **não substitui código seguro, gestão de secrets ou permissões/configuração seguras no Kubernetes**. Também não entrega migração automática, deploy das aplicações ou SLA corporativo de correção por si só. Ganhos de CVE, tamanho, pull e adoção devem ser medidos, não presumidos.
 
 > **A entrega é uma base menor, padronizada e verificável, com um processo controlado para construir, testar, publicar e evoluir.**

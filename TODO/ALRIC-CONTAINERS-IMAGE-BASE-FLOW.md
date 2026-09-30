@@ -1,5 +1,12 @@
 # alric-containers-image-base
 
+> **HISTÓRICO — snapshot de 21/09/2026.** As descrições de execução em
+> `main`, identities e Settings abaixo correspondem à baseline registrada,
+> não ao contrato de branch desta revisão. O código DEV migra para `develop`;
+> default branch e IAM continuam pendentes de cutover externo. Consulte
+> [o contrato atual e o procedimento de migração](../docs/develop-as-dev.md).
+> Os runs, SHAs e digests históricos deste snapshot não foram reescritos.
+
 ## 1. Visão executiva e referência desta documentação
 
 O `alric-containers-image-base` implementa uma fábrica governada de imagens base Distroless multi-arquitetura. O produto combina pacotes Wolfi, empacotamento Melange, composição Apko, execução em GitHub Actions, publicação em Amazon ECR, gates Trivy, assinatura Cosign/Sigstore, SBOM SPDX, provenance, infraestrutura Terraform e autenticação OIDC. Seu resultado é uma base verificável para aplicações; não é uma aplicação pronta, um serviço de deploy ou um admission controller.
@@ -1082,6 +1089,6 @@ Usar `<registry>/image-base-go1-26:stable` é uma alternativa de referência mó
 
 **FUTURO / TARGET DESIGN — não é o comportamento dos workflows atuais.** A [estratégia futura de ambientes](FACTORY-DISTROLESS-ENVIRONMENTS.md) propõe `develop` como DEV/default branch, `staging` como HOM e `main` como PROD futuro, com build apenas em DEV e promoção do mesmo digest entre destinos. Cada ambiente teria seu próprio stable; aprovar uma release fixa impediria que uma movimentação posterior da stable DEV alterasse o objeto autorizado para HOM.
 
-Hoje main ainda é a origem de build, assinatura, certificação e promoção do LAB. Não existem neste fluxo implementado promoção DEV→HOM→PROD, manifesto de promoção entre ambientes ou troca automática das identidades OIDC/Cosign por branch. O documento de ambientes contém checklist de implementação, não prova de que essas migrações ocorreram.
+Na baseline histórica deste snapshot, main ainda era a origem de build, assinatura, certificação e promoção do LAB. Não existiam naquele fluxo promoção DEV→HOM→PROD, manifesto de promoção entre ambientes ou troca automática das identidades OIDC/Cosign por branch. O documento de ambientes contém checklist de implementação, não prova de que essas migrações ocorreram.
 
 A evolução exige decisões explícitas de Cloud/IAM, PKI, rede/mirror, scanners, Sigstore, proteções GitHub, destinos ECR, alertas e SLA; runners Linux efêmeros via ARC são parte desse alvo. [Corporate production readiness](../docs/corporate-production-readiness.md), [ADR-0002](../docs/adr/0002-sigstore-trust-model.md) e [ADR-0003](../docs/adr/0003-controles-seguranca-workflows-federados.md) registram fronteiras de aceite. O sucesso hospedado do catálogo e das aplicações no LAB é evidência técnica útil para reproduzir esse desenho, sem substituir a primeira execução e aprovação no ambiente corporativo.

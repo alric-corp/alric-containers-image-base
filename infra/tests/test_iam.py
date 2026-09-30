@@ -16,6 +16,21 @@ BUILD = json.loads((IAM / "build-publication-policy.json").read_text())
 
 
 class IamBoundaryTests(unittest.TestCase):
+    def test_publication_oidc_trust_allows_only_exact_develop_subject(self):
+        trust = json.loads((ROOT / 'policies/aws/github-actions-image-base-trust.json').read_text())
+        self.assertEqual(len(trust['Statement']), 1)
+        statement = trust['Statement'][0]
+        self.assertEqual(statement['Effect'], 'Allow')
+        self.assertEqual(statement['Action'], 'sts:AssumeRoleWithWebIdentity')
+        self.assertEqual(statement['Principal'], {
+            'Federated': 'arn:aws:iam::712107929769:oidc-provider/token.actions.githubusercontent.com',
+        })
+        self.assertEqual(statement['Condition'], {'StringEquals': {
+            'token.actions.githubusercontent.com:sub': (
+                'repo:alric-corp@178685987/alric-containers-image-base@1360616627:ref:refs/heads/develop'),
+            'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
+        }})
+
     def test_build_publishes_only_to_exact_catalog(self):
         statements = BUILD["Statement"]
         self.assertEqual(BUILD["Version"], "2012-10-17")
@@ -72,6 +87,7 @@ class IamBoundaryTests(unittest.TestCase):
         self.assertIn('apply = "${var.github_subject_prefix}:environment:${var.github_apply_environment}"', text)
         self.assertNotIn("StringLike", text)
         self.assertNotIn(":ref:refs/heads/main", text)
+        self.assertNotIn(":ref:refs/heads/develop", text)
         for claim in ("aud", "repository_id", "repository_owner_id", "sub"):
             self.assertIn(f'"token.actions.githubusercontent.com:{claim}"', text)
         lab = (IAM / "lab.tfvars").read_text()

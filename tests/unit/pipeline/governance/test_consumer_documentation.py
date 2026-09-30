@@ -78,7 +78,7 @@ class ConsumerDocumentationTests(unittest.TestCase):
             ("Owner ID", self.policy[repository]["owner_id"]),
             ("Certificate identity Cosign", self.variables["CERT_IDENTITY"]),
             ("OIDC issuer Cosign", self.variables["OIDC_ISSUER"]),
-            ("Source ref", "refs/heads/main"),
+            ("Source ref", "refs/heads/develop"),
         ):
             for document in (CONTRACT, TRUST_ADR):
                 with self.subTest(document=document.relative_to(ROOT), field=label):
@@ -100,7 +100,7 @@ class ConsumerDocumentationTests(unittest.TestCase):
         certificate = {"sourceRepositoryIdentifier": expected["repository_id"],
                        "sourceRepositoryOwnerIdentifier": expected["owner_id"],
                        "sourceRepositoryURI": f"https://github.com/{repository}",
-                       "sourceRepositoryRef": "refs/heads/main"}
+                       "sourceRepositoryRef": "refs/heads/develop"}
         proof = [{"verificationResult": {"signature": {"certificate": certificate}}}]
         outputs = [subprocess.CompletedProcess([], 0, stdout=json.dumps(value))
                    for value in (index, [{}], proof)]
@@ -140,7 +140,7 @@ class ConsumerDocumentationTests(unittest.TestCase):
             with self.subTest(signer=signer):
                 variables = dict(self.variables, VERIFIED_SIGNER=signer)
                 variables["SBOM_CERT_IDENTITY"] = Template(shlex.split(value)[0]).substitute(variables)
-                identity = f"https://github.com/{signer}/.github/workflows/build-base-images.yml@refs/heads/main"
+                identity = f"https://github.com/{signer}/.github/workflows/build-base-images.yml@refs/heads/develop"
                 self.assertEqual(self.command("cosign verify-attestation", variables), [
                     "cosign", "verify-attestation", "--certificate-identity", identity,
                     "--certificate-oidc-issuer", variables["OIDC_ISSUER"], "--type",

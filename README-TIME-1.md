@@ -155,7 +155,12 @@ O documento de origem registra sucesso no **LAB**: Catalog Certification com 16 
 
 Na referência, a agenda normal ainda publica somente o par Go 1.26; FULL é a certificação manual. A App Certification é complementar: seu PASS não é consultado automaticamente pela promoção.
 
-O modelo `develop → DEV`, `staging → HOM` e `main → PROD futuro`, com `stable` por ambiente, aparece no anexo como **evolução prevista**. O status corporativo atual deve ser consultado no checkpoint da implantação, não inferido dos resultados do LAB.
+O anexo registra a evolução prevista de ambientes. Nesta revisão do LAB, o
+contrato de código já é **`develop → DEV`**; a troca de default branch e de
+trust ainda depende do [cutover autorizado](docs/develop-as-dev.md).
+`staging → HOM` e `main → PROD` continuam futuros, sem implementação.
+O status corporativo deve ser consultado no checkpoint da implantação,
+não inferido dos resultados históricos do LAB.
 
 > **Não entregamos apenas uma imagem pequena. Entregamos uma base cuja identidade, conteúdo e funcionamento podem ser verificados, preservando o mesmo artefato entre construção, testes e publicação.**
 

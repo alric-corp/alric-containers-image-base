@@ -25,6 +25,7 @@ não nesta árvore.
 | Necessidade | Documento |
 | --- | --- |
 | Operar a fábrica e avaliar alertas, indicadores e SLO/SLA | [Contrato operacional](m11-m04-operational-health.md) |
+| Migrar DEV para develop e revisar as ações externas de cutover | [Migração de branch do LAB](develop-as-dev.md) |
 | Recuperar `stable` | [Runbook de recuperação](../README.md#recuperação-de-stable-runbook-m15) |
 | Consultar a V1 de referência Go 1.26 | [ADR-0004](adr/0004-v1-referencia-go126.md) |
 

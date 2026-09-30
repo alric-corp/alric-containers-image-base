@@ -37,7 +37,9 @@ Controller (ARC).
 Os IDs dos jobs continuam `test` e `lint-workflows`; os nomes exibidos são
 `Unit & integration tests` e `Repository & workflow lint`. GitHub usa esses
 nomes exibidos nos check runs: a configuração de required checks deve ser
-alinhada na entrada aprovada em main, mantendo a exigência dos dois gates.
+alinhada na entrada aprovada em `develop`, mantendo a exigência dos dois gates.
+`main` mantém somente CI genérico sem AWS. A proteção e a default branch
+dependem do [cutover externo autorizado](docs/develop-as-dev.md).
 O analisador `ci_timing` usa os nomes atuais por padrão; para histórico,
 informe `--required test,lint-workflows` explicitamente.
 

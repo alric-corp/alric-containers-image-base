@@ -1,6 +1,6 @@
 # P1-04 — Contrato de permissões IAM da fábrica e proposta corporativa
 
-**PROPOSED / NOT APPLIED.** Baseline main
+**PROPOSED / NOT APPLIED.** Baseline histórica main
 `dd037cc9a8dc2b3585d9941666ba508ecca87c9a`, que incorpora PR #59.
 Este contrato entrega inventário, templates e aceite futuro para Cloud/IAM.
 Não descreve a identity policy efetivamente anexada ao sandbox: ela não está
@@ -11,6 +11,12 @@ Autoria e sustentação seguem o [ADR-0003](adr/0003-controles-seguranca-workflo
 Containers Products opera workflows próprios; isso não concede administração
 AWS nem dispensa decisões de Segurança. IAM corporativo é EXTERNAL_PENDING.
 Não há novo ADR: esta proposta preserva o desenho e explicita seus limites.
+
+A [migração do LAB para DEV em develop](develop-as-dev.md) atualiza abaixo
+somente o contrato de branch. O inventário e a proposta corporativa continuam
+vinculados à baseline histórica, sem nova aplicação IAM. Para as permissões
+atuais do publisher preprovisioned-only e das identidades Infra separadas,
+consulte [infra/README.md](../infra/README.md).
 
 ## Atual versus proposto
 
@@ -171,31 +177,33 @@ para todo o catálogo: a granularidade efetiva é a lista de ARNs dessa sessão.
 
 ## OIDC atual e proposta corporativa
 
-Trust versionada do sandbox: provider `token.actions.githubusercontent.com`,
+Trust desejada versionada para DEV após a migração de branch: provider `token.actions.githubusercontent.com`,
 issuer `https://token.actions.githubusercontent.com`, audience AWS
 `sts.amazonaws.com`, subject exato:
 
 ```text
-repo:alric-corp@178685987/alric-containers-image-base@1360616627:ref:refs/heads/main
+repo:alric-corp@178685987/alric-containers-image-base@1360616627:ref:refs/heads/develop
 ```
 
 Owner ID `178685987`, repository ID `1360616627`, role `github-actions-image-base`.
 Aplicação/read-back históricos na migração de nomes de 10/09/2026; nenhuma
-releitura IAM atual nesta sessão. Não registrar JWTs, tokens ECR ou credenciais.
+dessas evidências prova aplicação da mudança para `develop`. A trust aplicada
+ainda exige `main` no preflight desta migração e precisa de atualização externa
+autorizada. Não registrar JWTs, tokens ECR ou credenciais.
 A audience Sigstore é outra solicitação OIDC, não a sessão AWS.
 
 | Caminho | Caller / executor AWS | Ref/guard e claim relevante |
 | --- | --- | --- |
-| Push main; cron diário 03:00; dispatch de workflow.yml | workflow.yml → build-base-images.yml/build-push | Guards main/event nos dois; job_workflow_ref do publicador esperado pelo mecanismo reusable |
-| Cron horário :17; dispatch direto de promoção | promote-stable.yml/promote | Guard main; schedule nativo desde a separação build/promoção — não assumir job_workflow_ref presente em nenhuma das duas rotas |
-| Dispatch recovery | recover-stable.yml/recover | **Não tem guard main no job**; a trust exata rejeita outra ref na assunção, além da validação local de inputs |
+| Push develop; cron diário 03:23; dispatch de workflow.yml | workflow.yml → build-base-images.yml/build-push | Guards develop/event nos dois; job_workflow_ref do publicador esperado pelo mecanismo reusable |
+| Cron horário :17; dispatch direto de promoção | promote-stable.yml/promote | Guard develop; schedule nativo desde a separação build/promoção — não assumir job_workflow_ref presente em nenhuma das duas rotas |
+| Dispatch recovery | recover-stable.yml/recover | Guard develop/dispatch no job; a trust exata exige a mesma ref na assunção, além da validação local de inputs |
 | PR interno/fork | workflow.yml → validate-base-images.yml → executor shared | Somente validação/leitura, sem AWS/OIDC; não adicionar credenciais para teste |
 | Reusables de validação/runtime | Biblioteca consumida por SHA | Sem configure-aws ou grants AWS; scripts/checkout pertencem ao caller |
 
 Em reusable, `repository`, IDs, `ref` e `workflow` descrevem o caller;
-`job_workflow_ref` identifica o reusable chamado. Esperado nesta main apenas
+`job_workflow_ref` identifica o reusable chamado. Esperado na branch DEV develop apenas
 para o publicador:
-`alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@refs/heads/main`.
+`alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@refs/heads/develop`.
 `promote-stable.yml` roda como trigger direto (schedule ou dispatch) desde a
 separação build/promoção, sem relação reusable dentro deste repositório —
 não presumir `job_workflow_ref` nessa rota. Valor derivado do
@@ -264,7 +272,7 @@ Decisões a devolver com owner e referência autorizada:
   pré-provisionamento, incluindo scanning/criptografia/tags AWS exigidas.
 - Aceitação ou exigência adicional diante do risco PutImage/stable e do poder
   de PutImageTagMutability; não homologar isolamento que não é imposto.
-- Aceitação da trust por repo/IDs/main, claims extras reais em todas as rotas
+- Aceitação da trust por repo/IDs/develop, claims extras reais em todas as rotas
   e necessidade corporativa de limitar o caminho do workflow.
 - Quem autoriza, provisiona e observa uma eventual validação sandbox e onde
   guardar evidence; depois, critérios IAM para o primeiro aceite corporativo.

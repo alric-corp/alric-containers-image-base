@@ -8,6 +8,7 @@ NOW = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
 
 def run(created, event='schedule', started=None, identifier=1, conclusion='success'):
     return {'id': identifier, 'event': event, 'conclusion': conclusion,
+            'head_branch': 'develop',
             'created_at': created.isoformat().replace('+00:00', 'Z'),
             'run_started_at': (started or created).isoformat().replace('+00:00', 'Z'),
             'path': '.github/workflows/workflow.yml'}

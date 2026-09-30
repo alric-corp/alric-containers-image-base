@@ -1,288 +1,99 @@
 name: Distroless - Promote stable
 
-# Gate de promoção da tag "stable": em vez de mover "stable" no mesmo run
-# que publica a imagem, este workflow roda depois de uma janela de soak
-# (default 6h) e só promove um build imutável se, decorrida essa janela,
-# um re-scan Trivy continuar limpo. Isso cobre o cenário em que uma CVE é
-# divulgada horas depois do build original (comum num repositório
-# rolling-release como o Wolfi) — "stable" só avança se o build sobreviver
-# ao soak sem nenhuma vulnerabilidade nova conhecida.
-#
-# Não é um canário de tráfego real (não há apps consumidoras na POC pra
-# validar contra) — é um canário de tempo/CVE. Validar contra consumidores
-# reais é responsabilidade de cada pipeline de deploy downstream.
-
 on:
-  workflow_call:
-    inputs:
-      aws-region:
-        type: string
-        required: true
-      aws-role-arn:
-        type: string
-        required: true
-      frameworks:
-        description: "JSON array de frameworks a avaliar para promoção."
-        type: string
-        required: true
-      soak-hours:
-        description: "Horas mínimas que um build imutável precisa esperar antes de poder virar stable."
-        type: number
-        default: 6
   schedule:
-    - cron: "17 * * * *"  # promoção horária; soak mínimo contado desde o push
-  # Manual dispatch uses the same minimum six-hour production soak.
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
-      frameworks:
-        description: 'JSON array completo (ex.: ["go1-26","go1-26-dev"])'
+      release:
+        description: 'Release exata r<RUN_ID>-a<ATTEMPT>; vazio seleciona a mais nova elegível'
         type: string
-        default: '["go1-26","go1-26-dev"]'
+        default: ''
       soak-hours:
-        description: "Horas mínimas de soak (mínimo de produção: 6)"
+        description: 'Soak após DEV stable (mínimo de 6 horas)'
         type: number
         default: 6
+      resume-automation:
+        description: 'Retomar após recovery; exige release explícita e mantém todos os gates'
+        type: boolean
+        default: false
 
 permissions:
-  id-token: write
   contents: read
   actions: read
   attestations: read
 
 jobs:
-  # workflow_call/workflow_dispatch already carry frameworks/soak-hours as
-  # explicit inputs; a native `schedule` trigger has no inputs at all (GitHub
-  # Actions does not apply declared input defaults outside workflow_call and
-  # workflow_dispatch). This job resolves the same fail-safe defaults the
-  # former workflow.yml caller used to pass, in exactly one place, so no
-  # other job or step duplicates the literal fallback values.
-  resolve-defaults:
-    name: Resolve scheduled-run defaults
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    outputs:
-      frameworks: ${{ steps.defaults.outputs.frameworks }}
-      soak-hours: ${{ steps.defaults.outputs.soak-hours }}
-    steps:
-      - id: defaults
-        env:
-          FRAMEWORKS: ${{ inputs.frameworks }}
-          SOAK_HOURS: ${{ inputs.soak-hours }}
-        run: |
-          echo "frameworks=${FRAMEWORKS:-[\"go1-26\",\"go1-26-dev\"]}" >> "$GITHUB_OUTPUT"
-          echo "soak-hours=${SOAK_HOURS:-6}" >> "$GITHUB_OUTPUT"
-
   promote:
     name: Authorize and promote stable candidates
-    needs: [resolve-defaults]
-    # RFC-013/ADR-0005: stable restaurado como referência oficial de consumo.
-    # O kill switch abaixo continua existindo por design -- não é um relaxamento
-    # temporário, é o controle operacional permanente que permite desligar a
-    # promoção automática sem reverter código (ex.: durante uma reconciliação
-    # de Infra, ou se um ciclo de promoção precisar de pausa manual). Os dois
-    # ECRs Go só aceitam a escrita de `stable` de forma sustentável depois que
-    # a Infra do produto aplica `IMMUTABLE_WITH_EXCLUSION` com a
-    # exclusão exata `stable` (ver infra/ecr/main.tf) -- sem
-    # isso, a primeira promoção teria sucesso mas a segunda falharia ao tentar
-    # mover a tag (immutable tag mutation). A variável de repositório abaixo
-    # é o kill switch: ausente/diferente de "true" -> job não roda, em nenhum
-    # trigger (schedule ou dispatch manual). `STABLE_PROMOTION_AUTHORIZED=true`
-    # só depois de confirmar (fresh `aws ecr describe-repositories`) que os
-    # dois repositórios já refletem a exclusão de Infra.
     if: |
-      github.ref == 'refs/heads/main' &&
+      github.ref == 'refs/heads/develop' &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
       vars.STABLE_PROMOTION_AUTHORIZED == 'true'
+    environment: HOM
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+      id-token: write
     runs-on: ubuntu-latest
-    # One process checks every requested candidate before any stable mutation.
-    # Allow both architecture scans for future larger requested batches.
-    timeout-minutes: 60
-    # Destination-wide lock also used by recovery: no recovery can interleave
-    # the runtime/dev writes or change the previous-state snapshot.
+    timeout-minutes: 180
     concurrency:
-      group: stable-mutation-${{ inputs.aws-role-arn || vars.AWS_ROLE_ARN }}-${{ inputs.aws-region || vars.AWS_REGION }}
+      group: stable-mutation-HOM-${{ github.repository }}
       cancel-in-progress: false
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-
-      - name: Validate workflow inputs before privileged operations
+      - name: Validate explicit release identity
         env:
-          FRAMEWORKS: ${{ needs.resolve-defaults.outputs.frameworks }}
-          SOAK_HOURS: ${{ needs.resolve-defaults.outputs.soak-hours }}
+          RELEASE: ${{ inputs.release }}
         run: |
-          python3 -B -m scripts.pipeline.catalog.validate_inputs
-          python3 -B -m scripts.pipeline.release.promotion_batch "$FRAMEWORKS" \
-            --soak-hours "$SOAK_HOURS" --plan
-
-      # inputs.aws-region/aws-role-arn só existem no workflow_call; no
-      # schedule direto (produção) e no workflow_dispatch direto (usado pra
-      # testar o gate manualmente) caem para as vars do repo.
-      - name: Configure AWS credentials (OIDC)
+          python3 -B - <<'PY'
+          import os
+          from scripts.pipeline.release.lifecycle import manifest_key
+          if os.environ['RELEASE']:
+              manifest_key(os.environ['RELEASE'])
+          PY
+      - name: Configure HOM credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
-          role-to-assume: ${{ inputs.aws-role-arn || vars.AWS_ROLE_ARN }}
-          aws-region: ${{ inputs.aws-region || vars.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-
+          role-duration-seconds: 10800
+          role-to-assume: ${{ vars.HOM_ROLE_ARN }}
+          aws-region: ${{ vars.HOM_REGION }}
+          allowed-account-ids: ${{ vars.HOM_ACCOUNT_ID }}
+      - name: Authenticate source and destination registries
+        run: |
+          python3 -B -m scripts.pipeline.release.registry_login
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1, ORAS 1.3.1
       - name: Install Trivy
         uses: alric-corp/alric-containers-reusable-workflows/actions/setup-trivy@eea2d2f4c4102ded74204e4131c1417f444ae3fc # governed Trivy setup
-
-      - name: Record promotion tool versions
-        run: python3 -B -m scripts.pipeline.operations.tool_versions promotion reports/tool-versions.json
-
-      # The helper evaluates every unit through selection, pair authorization,
-      # trust and scan phases before the first write. Failed units cannot write;
-      # independently authorized units proceed after that global barrier.
-      # One in-memory execution owns authorization; stored JSON is evidence only.
-      # ECR has no cross-repository transaction: a partial write fails loudly,
-      # records both outcomes and preserves the initial inventories for recovery.
-      - name: Authorize candidates and promote stable pairs
-        id: candidate
+      - name: Promote exact eligible release to HOM
         env:
-          FRAMEWORKS: ${{ needs.resolve-defaults.outputs.frameworks }}
-          SOAK_HOURS: ${{ needs.resolve-defaults.outputs.soak-hours }}
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ inputs.release }}
+          SOAK_HOURS: ${{ inputs.soak-hours || '6' }}
+          RESUME: ${{ inputs.resume-automation }}
         run: |
-          python3 -B -m scripts.pipeline.release.promotion_batch "$FRAMEWORKS" \
-            --soak-hours "$SOAK_HOURS" --registry "$REGISTRY" \
-            --repository "$GITHUB_REPOSITORY" --attempt "$GITHUB_RUN_ATTEMPT" \
-            --quarantine policies/release/promotion-quarantine.json --reports reports
-
-      - name: Preserve promotion scan evidence
+          args=()
+          if [ -n "$RELEASE" ]; then args+=(--release "$RELEASE"); fi
+          if [ "$RESUME" = true ]; then args+=(--resume); fi
+          python3 -B -m scripts.pipeline.release.lifecycle promote-hom \
+            --soak-hours "$SOAK_HOURS" --reports reports/release "${args[@]}"
+      - name: Preserve HOM promotion evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: promotion-scans-batch-${{ github.run_attempt }}
-          path: |
-            reports/promotion-scans-*/
-            reports/tool-versions.json
+          name: release-hom-${{ github.run_attempt }}
+          path: reports/release/
           retention-days: 30
-          if-no-files-found: warn
-
-      - name: Preserve promotion outcome
+          if-no-files-found: error
+      - name: Preserve operational health evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: promotion-batch-${{ github.run_attempt }}
-          path: |
-            reports/promotion-*/promotion-evidence.json
-            reports/promotion-*/ecr-before.json
-            reports/promotion-batch.json
-          retention-days: 30
-          if-no-files-found: warn
-
-  # Independent post-write check complements the mandatory pre-write pair
-  # authorization. It rejects partial write/read-back outcomes and accepts a
-  # legitimate whole-pair skip when neither member has an eligible candidate.
-  verify-pair:
-    name: Verify runtime/dev promotion pair binding
-    needs: [promote, resolve-defaults]
-    if: ${{ !cancelled() && needs.promote.result != 'skipped' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - name: Download promotion evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          path: evidence
-          pattern: 'promotion-*-${{ github.run_attempt }}'
-          merge-multiple: true
-          digest-mismatch: error
-          repository: ${{ github.repository }}
-          run-id: ${{ github.run_id }}
-          github-token: ${{ github.token }}
-
-      - name: Verify runtime/dev pair binding
-        env:
-          FRAMEWORKS: ${{ needs.resolve-defaults.outputs.frameworks }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-        run: |
-          python3 -B -m scripts.pipeline.release.verify_promotion_pairs \
-            "$FRAMEWORKS" evidence "$RUN_ATTEMPT" \
-            --json reports/promotion-pair-binding.json
-
-      - name: Preserve pair binding evidence
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: promotion-pair-binding-${{ github.run_attempt }}
-          path: reports/promotion-pair-binding.json
-          retention-days: 30
-          if-no-files-found: warn
-
-  # M11/M04: mesma tabela do build, agora com a coluna de promoção preenchida.
-  summary:
-    name: Promotion summary
-    needs: [promote, resolve-defaults]
-    # Sem legs de promoção não há o que resumir; com qualquer resultado (mesmo
-    # falha parcial) a tabela é justamente o que interessa.
-    if: ${{ !cancelled() && needs.promote.result != 'skipped' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-
-      - name: Download promotion evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          path: evidence
-          pattern: 'promotion-*-${{ github.run_attempt }}'
-          merge-multiple: true
-          digest-mismatch: error
-          repository: ${{ github.repository }}
-          run-id: ${{ github.run_id }}
-          github-token: ${{ github.token }}
-
-      - name: List artifacts of this run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.run_id }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -eu
-          gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
-            > artifacts.json || echo '{}' > artifacts.json
-
-      - name: Publish per-framework promotion table
-        env:
-          FRAMEWORKS: ${{ needs.resolve-defaults.outputs.frameworks }}
-          REPOSITORY: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          python3 -B -m scripts.pipeline.operations.pipeline_summary evidence \
-            --frameworks "$FRAMEWORKS" --repository "$REPOSITORY" --run-id "$RUN_ID" \
-            --artifacts artifacts.json --title 'Promoção por framework' \
-            --markdown "$GITHUB_STEP_SUMMARY" --json reports/pipeline-summary.json
-
-      - name: Preserve the summary
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: pipeline-summary-${{ github.run_attempt }}
-          path: reports/pipeline-summary.json
+          path: reports/release/health/
           retention-days: 30
           if-no-files-found: warn

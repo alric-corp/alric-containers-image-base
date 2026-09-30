@@ -1,10 +1,15 @@
 # M11/M04 / P1-08: contrato operacional, alertas e proposta de SLO/SLA
 
-Revisão documental de 13/09/2026 sobre main
+Baseline histórica da revisão documental de 13/09/2026: main
 `d60be51de7d1480b40fb333b0d1afc6d7b0d1158` (PR #58 integrado).
 Este é o documento canônico de operação. A premissa de autoria/sustentação
 dos workflows federados permanece no [ADR-0003](adr/0003-controles-seguranca-workflows-federados.md).
 Não estabelece SLA, atendimento 24x7, plantão nomeado ou autorização de serviços.
+
+O coletor e os guards DEV desta revisão exigem `develop`. Os crons não mudam;
+a definição agendada passa a ser a de `develop` somente depois do
+[cutover da default branch](develop-as-dev.md). Runs históricos de `main`
+continuam históricos, sem preencher artificialmente a série DEV de `develop`.
 
 | Dimensão | Estado desta fatia |
 | --- | --- |
@@ -76,7 +81,7 @@ não execução ou expiração; nenhuma delas é PASS.
 
 [`operational_health.py`](../scripts/pipeline/operations/operational_health.py) roda em
 [`pipeline-health.yml`](../.github/workflows/pipeline-health.yml) (diário,
-05:40 UTC, e `workflow_dispatch`, somente main). Consulta APIs GitHub com
+05:40 UTC, e `workflow_dispatch`, somente develop). Consulta APIs GitHub com
 `contents: read` / `actions: read`, sem AWS. Não consulta o ECR. Mede:
 
 - **proxy de movimentação de `stable` por framework** — no fluxo atual,
@@ -102,7 +107,7 @@ não execução ou expiração; nenhuma delas é PASS.
 O coletor considera runs cujo path é um dos arquivos declarados em
 `policies/operations/health.json` → `schedules` (hoje `workflow.yml`,
 `promote-stable.yml` e `pipeline-health.yml`). Publicação e promoção usam
-eventos push/schedule/dispatch da main; desde a separação build/promoção,
+eventos push/schedule/dispatch da develop; desde a separação build/promoção,
 um dispatch manual de `promote-stable.yml` que promova de fato também entra
 nessa série — o que não acontecia quando só `workflow.yml` era considerado.
 `recover-stable.yml` não tem schedule próprio e continua fora dela. Ordena

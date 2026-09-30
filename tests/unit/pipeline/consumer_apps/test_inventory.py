@@ -39,7 +39,7 @@ def archive(files):
 class InventoryTests(unittest.TestCase):
     def setUp(self):
         self.run = {'id': RUN_ID, 'run_attempt': 1, 'head_sha': SHA,
-                    'head_branch': 'main', 'event': 'workflow_dispatch',
+                    'head_branch': 'develop', 'event': 'workflow_dispatch',
                     'path': '.github/workflows/catalog-certification.yml',
                     'status': 'completed', 'conclusion': 'success',
                     'repository': {'id': 42, 'full_name': REPOSITORY},
@@ -100,7 +100,7 @@ class InventoryTests(unittest.TestCase):
     def artifact(self, artifact_id, name):
         return {'id': artifact_id, 'name': name, 'expired': False,
                 'size_in_bytes': 1, 'digest': 'sha256:' + 'b' * 64,
-                'workflow_run': {'id': RUN_ID, 'head_sha': SHA, 'head_branch': 'main',
+                'workflow_run': {'id': RUN_ID, 'head_sha': SHA, 'head_branch': 'develop',
                                  'repository_id': 42, 'head_repository_id': 42}}
 
     def job(self, job_id, name, steps=None):
@@ -156,12 +156,27 @@ class InventoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'reruns are ambiguous'):
             self.build()
 
-    def test_source_must_be_successful_manual_catalog_run_on_main(self):
+    def test_source_must_be_successful_manual_catalog_run_on_develop(self):
         for key, value in (('conclusion', 'failure'), ('status', 'in_progress'),
                            ('event', 'push'), ('head_branch', 'topic'),
                            ('path', '.github/workflows/workflow.yml')):
-            with self.subTest(key=key), patch.dict(self.run, {key: value}):
+            with self.subTest(key=key, value=value), patch.dict(self.run, {key: value}):
                 with self.assertRaises(ValueError):
+                    self.build()
+
+    def test_main_and_other_non_dev_source_runs_are_rejected_before_lookups(self):
+        for branch in ('main', 'staging', 'feature', '', 'refs/heads/develop'):
+            with self.subTest(branch=branch), patch.dict(self.run, head_branch=branch), \
+                    patch.object(inventory, 'gh_json', return_value=self.run) as fetch:
+                with self.assertRaisesRegex(ValueError, 'develop catalog-certification'):
+                    inventory.resolve(RUN_ID, REPOSITORY, REGISTRY)
+                fetch.assert_called_once_with(f'repos/{REPOSITORY}/actions/runs/{RUN_ID}')
+
+    def test_develop_run_rejects_publication_evidence_from_main_or_other_branches(self):
+        for branch in ('main', 'staging', 'feature', ''):
+            with self.subTest(branch=branch), \
+                    patch.dict(self.arts[0]['workflow_run'], head_branch=branch):
+                with self.assertRaisesRegex(ValueError, 'artifact run/revision/repository'):
                     self.build()
 
     def test_source_repository_must_match(self):

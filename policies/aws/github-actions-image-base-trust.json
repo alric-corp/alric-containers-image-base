@@ -10,7 +10,7 @@
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
-          "token.actions.githubusercontent.com:sub": "repo:alric-corp@178685987/alric-containers-image-base@1360616627:ref:refs/heads/main",
+          "token.actions.githubusercontent.com:sub": "repo:alric-corp@178685987/alric-containers-image-base@1360616627:ref:refs/heads/develop",
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         }
       }

@@ -62,11 +62,22 @@ class PolicyTests(unittest.TestCase):
     def test_repository_policy_keeps_the_same_organization_and_two_pull_actions(self):
         policy = json.loads((ECR / "policies/ecr-repository-org-pull.json").read_text())
         self.assertEqual(policy["Version"], "2012-10-17")
-        self.assertEqual(policy["Statement"], [{
+        self.assertEqual(policy["Statement"][:1], [{
             "Sid": "AllowCrossAccountPull", "Effect": "Allow", "Principal": {"AWS": "*"},
             "Action": ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
             "Condition": {"StringEquals": {"aws:PrincipalOrgID": ["o-5gqr9v3h2q"]}},
         }])
+
+    def test_hom_receives_only_exact_role_source_read_access(self):
+        policy = json.loads((ECR / 'policies/ecr-repository-org-pull.json').read_text())
+        self.assertEqual(len(policy['Statement']), 2)
+        reader = policy['Statement'][1]
+        config = json.loads((ROOT / 'policies/release/environments.json').read_text())['HOM']
+        self.assertEqual(reader['Principal'], {'AWS': f'arn:aws:iam::{config["account_id"]}:role/{config["role_name"]}'})
+        self.assertEqual(reader['Effect'], 'Allow')
+        self.assertTrue(set(reader['Action']) <= {'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer',
+            'ecr:BatchCheckLayerAvailability', 'ecr:DescribeImages', 'ecr:ListImages',
+            'ecr:DescribeRepositories', 'ecr:ListImageReferrers'})
 
 
 if __name__ == "__main__":

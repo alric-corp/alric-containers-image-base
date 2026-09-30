@@ -40,7 +40,7 @@ class CatalogCertificationTests(unittest.TestCase):
         self.assertEqual(self.document['name'], 'Distroless - Catalog certification')
         self.assertEqual(events(self.document), {'workflow_dispatch': {}})
         self.assertEqual(self.job['if'],
-                         "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'")
+                         "github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'")
 
     def test_fixed_batch_is_exact_complete_catalog_without_duplicates(self):
         self.assertEqual(self.requested, FULL)
@@ -54,7 +54,7 @@ class CatalogCertificationTests(unittest.TestCase):
         self.assertEqual(set(self.job), {'if', 'concurrency', 'permissions', 'uses', 'with'})
         self.assertEqual(self.job['uses'], './.github/workflows/build-base-images.yml')
         self.assertEqual(self.job['uses'], self.publisher['uses'])
-        self.assertEqual(set(self.job['with']), {'frameworks', 'aws-region', 'aws-role-arn'})
+        self.assertEqual(set(self.job['with']), {'frameworks', 'aws-region'})
         self.assertNotIn('secrets', self.job)
         # One call with no executable steps or second release job: certification
         # has no alternative build path, stable write, or promotion call.
@@ -64,7 +64,7 @@ class CatalogCertificationTests(unittest.TestCase):
         self.assertEqual(self.document['permissions'], {'contents': 'read'})
         self.assertEqual(self.job['permissions'], self.publisher['permissions'])
         self.assertEqual(self.job['permissions'], workflow('build-base-images.yml')['permissions'])
-        for name in ('aws-region', 'aws-role-arn'):
+        for name in ('aws-region',):
             self.assertEqual(self.job['with'][name], self.publisher['with'][name])
 
     def test_candidate_publication_shares_one_non_cancelling_slot(self):
@@ -102,7 +102,8 @@ class CatalogCertificationTests(unittest.TestCase):
         self.assertEqual(events(self.normal)['schedule'], [{'cron': '23 3 * * *'}])
         promotion = workflow('promote-stable.yml')
         dispatch = events(promotion)['workflow_dispatch']['inputs']
-        self.assertEqual(json.loads(dispatch['frameworks']['default']), ['go1-26', 'go1-26-dev'])
+        self.assertNotIn('frameworks', dispatch)
+        self.assertEqual(dispatch['release']['default'], '')
         self.assertEqual(dispatch['soak-hours']['default'], 6)
         self.assertIn("vars.STABLE_PROMOTION_AUTHORIZED == 'true'", promotion['jobs']['promote']['if'])
 

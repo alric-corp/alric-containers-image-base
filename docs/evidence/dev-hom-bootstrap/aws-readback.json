@@ -1,0 +1,27 @@
+{
+  "checked_at": "2026-09-30T05:59:35.064171+00:00",
+  "environments": {
+    "DEV": {
+      "account": "712107929769",
+      "region": "us-east-1",
+      "role": "arn:aws:iam::712107929769:role/alric-image-base-factory-dev",
+      "exact_environment_subject": true,
+      "release_bucket": "712107929769-image-base-releases-dev",
+      "versioned_encrypted_private_bucket": true,
+      "catalog_count": 16,
+      "stable_only_mutability": true
+    },
+    "HOM": {
+      "account": "248908662184",
+      "region": "sa-east-1",
+      "role": "arn:aws:iam::248908662184:role/alric-image-base-factory-hom",
+      "exact_environment_subject": true,
+      "release_bucket": "248908662184-image-base-releases-hom",
+      "versioned_encrypted_private_bucket": true,
+      "catalog_count": 16,
+      "stable_only_mutability": true
+    }
+  },
+  "oidc_execution_verified": false,
+  "hom_promotion_verified": false
+}

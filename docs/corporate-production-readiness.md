@@ -7,6 +7,11 @@ no LAB e o que ainda precisa ser adaptado e validado ao levá-la para o ambiente
 corporativo, e aponta para o [manifesto de cópia](corporate-file-manifest.md)
 com a lista exata do que copiar manualmente.
 
+As evidências e tabelas `PROVEN` deste levantamento são históricas da baseline
+em `main`. O contrato executável de branch do LAB nesta revisão é DEV em
+`develop`, com [cutover externo ainda pendente](develop-as-dev.md); não se
+reescrevem os runs ou as identidades históricas como se fossem de `develop`.
+
 > **Não estamos levando um POC para o corporativo. Estamos levando uma
 > implementação de referência já comprovada, que precisa ser portada e
 > revalidada contra as dependências do ambiente corporativo.**
@@ -275,8 +280,8 @@ Transportar prioritariamente:
 - configuração específica do sandbox (`health.json` owners/escalation, `signing-identities.json` com IDs do LAB, `CODEOWNERS` com slugs do LAB);
 - evidências datadas de runs do LAB como se fossem aceites corporativos.
 
-Cada arquivo copiado passa por revisão corporativa antes de entrar na `main`
-de destino, e a `main` importada não pode disparar signing/push antes que as
+Cada arquivo copiado passa por revisão corporativa antes de entrar na `develop`
+de destino, e a `develop` importada não pode disparar signing/push antes que as
 decisões e os recursos existam (kill switches, Environments protegidos e
 `execution_scope` são os mecanismos já existentes para isso).
 
@@ -401,7 +406,8 @@ O port corporativo **não** começa reabrindo:
 Essas investigações já tiveram conclusão registrada; os ADRs originais
 (0001, 0006, 0007) foram removidos do repositório na minimização final do
 LAB, com a conclusão de cada um preservada acima e no histórico Git — nunca
-reescrita. O modelo ativo é o estado atual de `main`. Se surgir uma
+reescrita. O modelo dessa baseline era o estado de `main`; o contrato DEV
+atual usa `develop`, com o cutover externo documentado separadamente. Se surgir uma
 necessidade corporativa real, abre-se uma decisão separada (ADR), com owner
 e critério — não se reabre a anterior.
 

@@ -1,7 +1,9 @@
 # Testes de regressão
 
 O workflow `ci.yml` executa as verificações em todo PR e push para
-`main`, sem filtro de paths e com `contents: read`. Ele usa os mesmos alvos
+`develop` e `main`, sem filtro de paths e com `contents: read`. O CI genérico
+em `main` não recebe AWS; os contratos de mutação DEV exigem `develop`.
+Ele usa os mesmos alvos
 Make disponíveis localmente. Preparação do ambiente e checkout do executor:
 [CONTRIBUTING.md](../CONTRIBUTING.md).
 

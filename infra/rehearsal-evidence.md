@@ -3,6 +3,10 @@
 Account `712107929769`; ECR `us-east-1`; new backend `us-east-2`.
 This is LAB evidence, not corporate environment certification.
 
+Historical snapshot: the recorded `main` runs and environment settings below
+are preserved. The current code contract is DEV on `develop`; external cutover
+is tracked in [the branch migration procedure](../docs/develop-as-dev.md).
+
 ## Acceptance
 
 | Check | Result |
