@@ -6,6 +6,7 @@ on:
     paths:
       - 'infra/**'
       - 'frameworks/**'
+      - 'policies/release/environments.json'
       - '.github/workflows/infra-pr.yml'
       - '.github/workflows/infra-apply.yml'
       - 'requirements-dev.txt'
@@ -49,6 +50,11 @@ jobs:
           terraform_wrapper: false
       - name: Terraform fmt
         run: terraform fmt -check -recursive -diff infra
+      - name: Test DEV and HOM boundaries with mocked AWS providers
+        run: |
+          terraform -chdir=infra/lifecycle init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=infra/lifecycle validate
+          terraform -chdir=infra/lifecycle test -no-color
 
   plan:
     name: Infra plan (same-repository PR only)
