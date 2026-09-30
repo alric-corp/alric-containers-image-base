@@ -25,7 +25,6 @@ jobs:
     uses: ./.github/workflows/build-base-images.yml
     with:
       aws-region: ${{ vars.AWS_REGION }}
-      aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
       frameworks: >-
         ["dotnet10", "dotnet10-dev", "go1-25", "go1-25-dev",
         "go1-26", "go1-26-dev", "java21", "java21-dev", "java25", "java25-dev",

@@ -18,6 +18,22 @@
           ]
         }
       }
+    },
+    {
+      "Sid": "FactoryHomReadExactSource",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::248908662184:role/alric-image-base-factory-hom"
+      },
+      "Action": [
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:DescribeImages",
+        "ecr:ListImages",
+        "ecr:DescribeRepositories",
+        "ecr:ListImageReferrers"
+      ]
     }
   ]
 }

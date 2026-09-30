@@ -1,3 +1,9 @@
+> Documento da migração anterior, preservado como histórico e análise da
+> autorização de runs antigos. O contrato atual é
+> [DEV → HOM por release](dev-hom-promotion.md): `develop` representa código;
+> DEV/HOM são contas e GitHub Environments. Não adotar `main`/`staging` como
+> branches de ambiente nem executar o procedimento antigo abaixo.
+
 # Migração do LAB: develop como DEV
 
 Esta revisão migra o contrato executável de

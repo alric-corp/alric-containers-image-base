@@ -73,7 +73,7 @@ A composição e os controles atuais são:
 
 Referência completa de uma imagem: `<registro-ecr>/image-base-<framework>:<tag>`, onde `<registro-ecr>` é `<conta-aws>.dkr.ecr.<região>.amazonaws.com`.
 
-Cada publicação recebe uma **build tag imutável** `<ddmmaa>-<hhmm>-r<run_id>-a<tentativa>`. **`stable` é um ponteiro mutável**, atribuído somente após promoção com soak, verificações, re-scan e read-back; nem todo build recebe essa tag. O **OCI index digest** identifica o artifact multiarch exato. As tags históricas `ddmmaa-hhmm` continuam reconhecidas pelo seletor. O [Consumer Verification Contract](docs/consumer-verification-contract.md) define os três níveis de consumo e os comandos de verificação.
+Cada publicação recebe uma **build tag imutável** `<ddmmaa>-<hhmm>-r<run_id>-a<tentativa>`. **`stable` é um ponteiro mutável em cada conta**: DEV após validação interna; HOM após soak, cópia por digest, verificações e read-back; nem todo build recebe essa tag. O **OCI index digest** identifica o artifact multiarch exato. As tags históricas `ddmmaa-hhmm` continuam reconhecidas pelo seletor. O [Consumer Verification Contract](docs/consumer-verification-contract.md) define os três níveis de consumo e os comandos de verificação.
 
 ## Pré-requisitos
 
@@ -83,6 +83,7 @@ Cada publicação recebe uma **build tag imutável** `<ddmmaa>-<hhmm>-r<run_id>-
 
 ## Como usar
 
+O registry consumidor é **`248908662184.dkr.ecr.sa-east-1.amazonaws.com` (HOM)**.
 Os exemplos com `stable` abaixo são de conveniência. Para deployment reproduzível
 e consumo auditado, fixe e verifique o **OCI index digest** de cada estágio
 conforme o [contrato canônico](docs/consumer-verification-contract.md).
@@ -262,11 +263,10 @@ annotations e a publicação dos SBOMs originais por digest.
 
 ## Pipeline de CI/CD (GitHub Actions)
 
-O contrato de branches desta revisão é **`develop` = DEV**, `staging` = HOM
-futuro e `main` = PROD futuro. Só DEV está implementado. A default branch
-remota continua `main` até o cutover autorizado; código local não altera
-Settings nem IAM. O [procedimento de migração](docs/develop-as-dev.md)
-separa esse contrato das evidências históricas de runs em `main`.
+A branch `develop` representa o código da Factory. DEV e HOM são contas AWS
+separadas, vinculadas aos GitHub Environments correspondentes. `stable` existe
+como tag de imagem em ambas as contas. A configuração e o procedimento de
+ativação estão no [runbook DEV → HOM](docs/dev-hom-promotion.md).
 
 O `workflow.yml` separa validação e publicação:
 
@@ -276,7 +276,7 @@ O `workflow.yml` separa validação e publicação:
 
 **Distroless - Catalog certification** oferece um dispatch manual na `develop`
 com os 16 frameworks fixos, usando o mesmo engine e lock do publicador.
-Não amplia o perfil agendado Go 1.26 nem promove `stable`. Veja a
+Não amplia o perfil agendado Go 1.26. Um catálogo completo aprovado segue o mesmo lifecycle DEV → HOM. Veja a
 [certificação controlada do catálogo](docs/catalog-certification.md) para
 evidência por digest, read-back ECR e continuação após o soak real.
 
@@ -302,21 +302,22 @@ flowchart TD
     S --> G["Artifact aprovado de cada framework"]
     G -->|"caminho de publicação na develop"| F["Contrato conforme plano + gate comum de trust<br/>amd64 + arm64 sobre o candidato"]
     F -->|"somente execução autorizada na develop"| PUB["Job de publicação<br/>OIDC + cópia OCI + assinatura/provenance + SBOM attestations"]
-    PUB --> ECR[("ECR: tag de build")]
-    PUB --> T["Tabela por framework<br/>no resumo do run"]
-    H["Schedule horário"] --> P["promote-stable.yml"]
-    ECR --> P
-    P --> PAIR["Resolver runtime + dev elegíveis<br/>autorizar mesma identidade run/attempt"]
-    PAIR --> SOAK["Trust + re-scan dos dois<br/>amd64 + arm64 por digest"]
-    SOAK --> WRITE["stable runtime e dev por referência<br/>sem transação atômica"]
-    WRITE --> STABLE["ECR read-back confirma ambos<br/>só então par promoted=true"]
+    PUB --> ECR[("DEV: candidate imutável")]
+    ECR --> APPROVE["dev-stable.yml: trust + consumidores amd64/arm64"]
+    APPROVE --> DEVSTABLE["DEV stable + manifesto persistente"]
+    DEVSTABLE --> SOAK["Soak mínimo de 6 horas após aprovação"]
+    H["Schedule horário"] --> P["promote-stable.yml / Environment HOM"]
+    SOAK --> P
+    P --> COPY["Re-scan + cópia por digest e attachments"]
+    COPY --> VERIFY["HOM: read-back + digest equality + trust/SPDX/provenance"]
+    VERIFY --> STABLE["HOM stable: release completa"]
 ```
 
 O build do CI usa `apko build` uma única vez por framework para produzir um layout OCI multi-arquitetura. [oci_artifact.py](scripts/pipeline/artifacts/oci_artifact.py) verifica hashes/tamanhos dos blobs, presença de amd64/arm64 e coerência dos configs, preservando o índice original em um layout transportável. [scan_images.py](scripts/pipeline/artifacts/scan_images.py) fornece ao Trivy uma visão com apenas o manifest da arquitetura solicitada e confere a arquitetura no relatório: o teste real mostrou que somente `--platform` não bastava para layouts OCI multi-arquitetura no Trivy 0.72.0.
 
 Relatórios JSON e digests dos manifests ficam nos artifacts `build-scans-<framework>-<tentativa>` por 30 dias. O layout aprovado, sua evidência e os SBOMs são transferidos em `validated-oci-<framework>` por três dias. Uma falha em qualquer arquitetura impede a disponibilização desse artifact para publicação.
 
-O **lote padrão** que `workflow.yml` passa aos dois chamadores (`validate-pr` e build diário/push) é o catálogo `frameworks/*.yaml` menos os frameworks excluídos em `policies/operations/health.json` → `exceptions` — hoje nenhum (`dotnet8`, a única exceção já registrada, foi removido do catálogo em 17/09/2026). Um lint offline no check obrigatório ([default_batch.py](scripts/pipeline/catalog/default_batch.py)) reprova qualquer divergência entre as duas listas e `catálogo − exclusões`; a promoção agendada usa o mesmo perfil fixo em `promote-stable.yml`, conferido separadamente. Um framework excluído continua no catálogo e pode ser buildado por `workflow_dispatch`, com o mesmo gate.
+O **lote padrão** que `workflow.yml` passa aos dois chamadores (`validate-pr` e build diário/push) é o catálogo `frameworks/*.yaml` menos os frameworks excluídos em `policies/operations/health.json` → `exceptions` — hoje nenhum (`dotnet8`, a única exceção já registrada, foi removido do catálogo em 17/09/2026). Um lint offline no check obrigatório ([default_batch.py](scripts/pipeline/catalog/default_batch.py)) reprova qualquer divergência entre as duas listas e `catálogo − exclusões`; a promoção agendada usa o escopo dos manifestos DEV aprovados, com pares completos. Um framework excluído continua no catálogo e pode ser buildado por `workflow_dispatch`, com o mesmo gate.
 
 A validação usa matrix com `fail-fast: false`. **A publicação é independente por framework (M13):** cada leg do publicador exige o seu próprio artifact `validated-oci-<framework>` e falha, visível e sem publicar, se a validação daquele framework tiver reprovado — sem derrubar os demais do lote. Uma falha numa dependência comum, como o bundle melange, continua bloqueando todos. O job de publicação tem matrix própria e autenticação AWS restrita à `develop`. Para publicar um subconjunto, uma execução manual pode selecionar os frameworks desejados.
 
@@ -399,97 +400,39 @@ Detalhes e estado anterior estão no histórico Git.
 
 ## Gate de promoção para stable (canário de soak)
 
-A tag `stable` **não** é publicada no mesmo run que builda a imagem.
-**Distroless - Promote stable** (`promote-stable.yml`) tem cron
-separado a cada hora (minuto 17). O estado operacional desejado após o merge
-autorizado é ACTIVE, com `STABLE_PROMOTION_AUTHORIZED` como kill switch
-permanente, sem default true. Este PR mantém a variável false e não reativa
-o workflow enquanto o golden path corrente estiver congelado.
+A Factory usa `develop` como fonte do código e GitHub Environments `DEV` e
+`HOM` como boundaries AWS. O fluxo é candidate DEV → validações → DEV stable
+→ soak mínimo de seis horas → promoção por digest → HOM stable.
 
-O fluxo avalia todas as unidades antes de qualquer escrita de `stable`:
-um par compilado é uma unidade; um framework interpretado é uma unidade
-individual. A autorização pertence à unidade, não à conclusão agregada do
-lote.
+O manifesto persistente vincula run, attempt, SHA, digests, SBOMs e testes
+consumidores. A promoção copia o mesmo artifact, suas assinaturas e attestations
+para `248908662184.dkr.ecr.sa-east-1.amazonaws.com`; verifica o destino inteiro
+antes de atualizar qualquer stable. Não há rebuild nem resolução de DEV stable
+na seleção. O build diário continua no par Go 1.26; o dispatch de certificação
+suporta o catálogo completo. O cron horário usa as releases aprovadas e o kill
+switch `STABLE_PROMOTION_AUTHORIZED`.
 
-1. Lista as imagens do repositório ECR e seleciona o índice OCI/Docker com tag de build válida (`ddmmaa-hhmm`, com sufixo opcional `-r<run_id>-a<tentativa>`) mais recente entre os que já completaram o soak. Descarta o digest já marcado como `stable` e candidatos com data de push anterior ou igual à dele ([find_promotion_candidate.py](scripts/pipeline/release/find_promotion_candidate.py)). Um build recente ainda em soak não impede a seleção de outro elegível.
-2. Resolve a relação runtime/`-dev` pelo catálogo. Ambos precisam estar presentes, fora de quarentena, elegíveis após o soak e com build tags do mesmo run/attempt. Par incompleto, lado ainda em soak e identidades divergentes não permitem a primeira escrita desse par. Framework interpretado mantém sua promoção independente.
-3. Para todos os candidatos elegíveis, inspeciona os índices e exige exatamente `linux/amd64` e `linux/arm64`. Verifica assinatura cosign com identidade exata do workflow `build-base-images.yml@refs/heads/develop` e provenance GitHub vinculada ao signer workflow e à source ref `refs/heads/develop`. Re-escaneia ambos os digests com Trivy por arquitetura (`--ignore-unfixed`). Qualquer falha bloqueia as escritas da unidade afetada, sem autorizar metade de um par nem suprimir unidades independentes aprovadas. O relatório separado de CVEs sem correção continua informativo. A barreira global de avaliação termina antes de começar as escritas.
-4. Somente depois dos pré-requisitos de ambos, move runtime e depois dev com `docker buildx imagetools create --tag <imagem>:stable <imagem>@<digest>` — retag do índice por referência, sem rebuild/repack.
-5. Lê ambas as tags no ECR e exige exatamente os digests autorizados. Só após os dois read-backs confirmados o par recebe `promoted=true`. Tag ausente, erro/timeout, resposta ambígua ou digest diferente falham fechado; a verificação final do par permanece.
-
-O diretório de evidência `promotion-<framework>-<tentativa>` registra `candidate_digest`,
-`stable_digest_observed`, `read_back_status` (`confirmed`, `mismatch`, `failed`
-ou `not_run`) e `promoted` em `promotion-evidence.json`. O campo `digest`
-continua identificando o candidato; `stable_digest` preserva a observação
-anterior à escrita. Falha de read-back não desfaz automaticamente uma tag já
-movida: consulte o estado e siga o runbook de recuperação se necessário.
-As duas escritas ECR não são uma transação atômica. Se a primeira funcionar
-e a segunda falhar, o par falha, mantém `promoted=false` e preserva a
-evidência do estado anterior e de cada escrita. O operador deve restaurar o
-par anterior conhecido pelo workflow de recuperação, sujeito aos seus gates;
-não reconstruir nem apagar a evidência para esconder uma escrita parcial.
-`promotion-batch.json` preserva os resultados por unidade em `unit_results`:
-status, fase, autorização prévia, `promoted` e erros. Uma unidade aprovada
-pode concluir enquanto outra falha; o job e o resultado agregado continuam
-falhos, sem apagar o sucesso comprovado da unidade independente. Skip não
-equivale a promoção. O health e o resumo devem consultar esses outcomes,
-sem tratar a conclusão do job como autorização de cada framework.
-O read-back confirma o estado naquele instante; escritores externos podem
-alterá-lo depois. Aceite hospedado P1-01: **PASS**, observado em `go1-26` e
-`go1-26-dev` no run `34768459323`, commit `e3ed682`, com read-back confirmado
-e igualdade dos digests.
-
-Isso é um canário de **tempo/CVE**, não um canário de tráfego real contra aplicações consumidoras — não há apps de referência nesta POC pra validar contra. Validar contra consumidores reais (deploy canário, smoke test de aplicação) é responsabilidade de cada pipeline de deploy downstream. O gate reavalia vulnerabilidades conhecidas no momento do scan, nas severidades configuradas e com correção disponível; ele não garante ausência de vulnerabilidades durante toda a janela de soak.
-
-A seleção inicial usa metadados ECR; o gate posterior valida plataformas, assinatura e provenance por digest. O verificador espera que o workflow assinante esteja no mesmo repositório GitHub informado ao script; chamadas externas precisam alinhar explicitamente essa política à localização do workflow assinante. Promoção e recovery compartilham `stable-mutation-<role>-<region>` dentro do mesmo repositório GitHub, sem cancelamento de execução ativa. O lock cobre seleção, autorização e escritas, inclusive os dois membros do par; escritores externos não participam. Os testes dos scripts rodam em PRs/pushes que alterem os scripts e antes da autenticação AWS na promoção. Para executá-los localmente, sem Docker ou AWS:
-
-```bash
-python3 -B -m unittest discover -s tests/unit -t . -p 'test_*.py' -v
-```
-
-**Medições de patch (M11 — observações históricas, SLA corporativo pendente):**
-
-| Etapa | O que é medido | Valor real observado | Fonte |
-| --- | --- | --- | --- |
-| Execução do job de promoção | Tempo do job `Promote <framework>` do dispatch até concluir (seleção + verificação + re-scan + retag) | 11-40s | Runs reais desta sessão, ver histórico de entregas M04/M14 |
-| Atraso do cron horário | Diferença entre o slot nominal (`17 * * * *`) e a criação do run | ≥24m43s (limite inferior — a API não expõe o instante nominal de enfileiramento) | [run 34390576742](https://github.com/alric-corp/alric-containers-image-base/actions/runs/34390576742), Décima sexta entrega |
-| Correção disponível no Wolfi → build que a incorpora → `stable` atualizado | Ainda **não medido de ponta a ponta** — exige correlacionar o timestamp de publicação do pacote corrigido no Wolfi com o build seguinte, e esse rastreamento ainda não existe no pipeline | — | Item aberto (ver M11 — restante) |
-
-A espera nominal após o soak (6h) até a próxima janela de promoção horária é inferior a uma hora, mas uma amostra única de atraso do scheduler não prova regularidade contínua — só observação repetida ao longo do tempo formaliza isso como garantia. O build publicado pode ser consumido antes da promoção, assumindo explicitamente que ainda não passou pelo gate de `stable`.
-
-**Política de exceção (M11/M15):** hoje não existe nenhuma exceção ao gate de CVE, em nenhum workflow, inclusive na recuperação de emergência (`recover-stable.yml`, M15) — um digest que falhe o re-scan não é promovido nem restaurado, ponto. Essa é a política vigente, declarada explicitamente em vez de implícita. Uma exceção formal (permitir conscientemente uma CVE específica, por prazo e responsável definidos) não está implementada; se vier a existir, precisa de escopo, aprovador e validade explícitos — nunca um bypass geral do gate.
+Veja [DEV → HOM: operação, infraestrutura e ativação](docs/dev-hom-promotion.md)
+para os contratos, limites da atomicidade ECR e critérios de aceite hospedado.
 
 ## Recuperação de `stable` (runbook, M15)
 
-Se um build promovido apresentar problema depois da promoção (ex.: CVE divulgada após o soak, comportamento inesperado reportado por um consumidor), `recover-stable.yml` restaura `stable` para um digest anterior já aprovado — sem rebuild, sem bypass do gate de segurança:
+Dispare `recover-stable.yml` em `develop` com `release=r<RUN_ID>-a<ATTEMPT>` e
+`reason`. O destino precisa ter sido promovido com sucesso em HOM. O workflow
+revalida trust, SBOM, provenance e Trivy, restaura a release completa por digest
+e confirma as tags. Não exige PR nem rebuild.
 
-1. **Escolher o digest de destino.** Precisa ser um build já publicado no repositório (`aws ecr describe-images --repository-name image-base-<framework>`) — nunca um digest arbitrário. Idealmente um build que já foi `stable` antes.
-2. **Disparar o workflow na `develop`** (Actions → "Distroless - Recover stable" → Run workflow) com `framework`, `digest` (`sha256:...`) e `reason`. O job:
-   - confirma que o digest existe no repositório;
-   - reverifica plataformas (amd64+arm64), assinatura cosign e provenance GitHub com a **mesma política** de `promote-stable.yml` — um digest antigo que não passe nessa verificação não é restaurado;
-   - reescaneia as duas arquiteturas com o banco de CVE atual — uma CVE nova no digest antigo bloqueia a recuperação; correção do gate por exceção exige política explícita, não esse workflow;
-   - move `stable` com `docker buildx imagetools create` (mesmo mecanismo da promoção normal, sem rebuild) e confirma por leitura de volta independente;
-   - grava um `recovery-evidence.json` (operador = `github.actor`, motivo, digest anterior/novo, run) como artifact.
-3. **Abrir um PR** adicionando o digest retirado a `policies/release/promotion-quarantine.json` (o job imprime o trecho JSON pronto pra colar). Sem isso, o build retirado continua sendo o mais recente por timestamp em `find_promotion_candidate.py`, e o próximo ciclo de promoção o selecionaria de novo — desfazendo a recuperação. A entrada de quarentena some quando um build mais novo e aprovado for promovido de verdade (a partir daí o timestamp de `stable` já avança e a exclusão explícita deixa de ser necessária).
-
-A recuperação e a promoção compartilham o lock
-`stable-mutation-<role>-<region>`, que permanece inalterado. Ele prioriza
-consistência das tags sobre latência de emergência: recovery pode esperar
-um lote de promoção ativo, inclusive de outros frameworks no mesmo destino.
-O timeout de 60 minutos do job de promoção é um limite superior configurado
-de execução, não o tempo esperado de espera nem um SLA da fila. Em emergência,
-inspecione o run ativo, a fase e as evidências antes da decisão operacional;
-não contorne o lock nem cancele automaticamente um escritor ativo.
-Restaurar a imagem base **não** reconstrói nem reverte automaticamente
-aplicações consumidoras; isso é responsabilidade do runbook de deploy de
-cada time.
+Recovery pausa automaticamente novas promoções dos membros afetados. Para
+retomar, dispare a promoção com release explícita e `resume-automation=true`;
+todos os gates continuam obrigatórios. Promoção e recovery compartilham o lock
+HOM. Consulte o [runbook completo](docs/dev-hom-promotion.md#recovery-sem-pr-e-sem-rebuild).
 
 ## Verificação: assinatura e build provenance
 
 O pipeline assina o **OCI index digest** com Cosign keyless, anexa provenance
 GitHub e atesta os SPDX originais do índice e de cada arquitetura. Uma tag de
 build pode existir antes dessas etapas concluírem; a promoção exige assinatura
-e provenance válidas. A promoção não possui gate específico de SBOM attestation.
+e provenance válidas. A aprovação DEV, a promoção HOM e o recovery verificam os três SPDX atestados contra os hashes originais do manifesto.
 
 O [Consumer Verification Contract](docs/consumer-verification-contract.md) é a
 fonte canônica para resolução única do digest, `cosign verify`,
@@ -523,9 +466,9 @@ O [ADR-0003 — Controles da fábrica em workflows federados](docs/adr/0003-cont
 corporativos a confirmar. O contrato de reuso abaixo permanece técnico;
 não estabelece homologação de scanner ou dispensa de requisitos externos.
 
-Os workflows podem ser chamados diretamente. `validate-base-images.yml` exige apenas `frameworks` e `contents: read`, sem credenciais AWS. Build/publicação e promoção exigem OIDC e restringem os jobs que acessam AWS a eventos autorizados na `develop` do chamador (build: push/schedule/dispatch; promoção: schedule/dispatch). No uso externo, `actions/checkout` utiliza o repositório chamador, que precisa conter os manifestos e scripts esperados. Exemplo de permissões para build/publicação e promoção.
+Os workflows podem ser chamados diretamente. `validate-base-images.yml` exige apenas `frameworks` e `contents: read`, sem credenciais AWS. Build/publicação exige OIDC e Environment DEV, com `DEV_ROLE_ARN` e `DEV_ACCOUNT_ID` configurados. Promoção HOM é um entrypoint interno por schedule/dispatch; seu destino e seu manifesto são governados em `policies/release/environments.json`. No uso externo, `actions/checkout` utiliza o repositório chamador, que precisa conter os manifestos e scripts esperados. Exemplo de permissões para build/publicação.
 
-> **Pin pendente.** O exemplo exige um SHA imutável de `alric-corp/alric-containers-image-base` cujo `build-base-images.yml` e `promote-stable.yml` restrinjam a publicação/promoção a `refs/heads/develop`. Esse SHA ainda não existe: só pode ser o commit aprovado e publicado em `develop`. O pin anterior, `e3ed68259f66af41e8054a4c0ac29a54082ddd60`, é **histórico** — nele os dois workflows exigem `refs/heads/main`, e um chamador em `develop` pularia publicação e promoção. Não use esse SHA, `@develop`, `@main` nem tag móvel; substitua `<SHA-aprovado-em-develop>` pelo commit de `develop` depois de aprovado.
+> **Pin pendente.** O exemplo exige um SHA imutável de `alric-corp/alric-containers-image-base` cujo `build-base-images.yml` restrinja a publicação a `refs/heads/develop`. Esse SHA ainda não existe: só pode ser o commit aprovado e publicado em `develop`. O pin anterior, `e3ed68259f66af41e8054a4c0ac29a54082ddd60`, é **histórico** — nele os dois workflows exigem `refs/heads/main`, e um chamador em `develop` pularia publicação e promoção. Não use esse SHA, `@develop`, `@main` nem tag móvel; substitua `<SHA-aprovado-em-develop>` pelo commit de `develop` depois de aprovado.
 
 ```yaml
 permissions:
@@ -540,24 +483,18 @@ jobs:
     uses: alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@<SHA-aprovado-em-develop>
     with:
       aws-region: us-east-1
-      aws-role-arn: arn:aws:iam::<conta>:role/github-actions-image-base
       frameworks: '["java25", "java25-dev", "nodejs24", "nodejs24-dev"]'
 
-  promote-images:
-    uses: alric-corp/alric-containers-image-base/.github/workflows/promote-stable.yml@<SHA-aprovado-em-develop>
-    with:
-      aws-region: us-east-1
-      aws-role-arn: arn:aws:iam::<conta>:role/github-actions-image-base
-      soak-hours: 6
-      frameworks: '["java25", "java25-dev", "nodejs24", "nodejs24-dev"]'
 ```
 
 | Nome | Workflow | Tipo | Obrigatório | Descrição |
 |---|---|---|---|---|
-| `aws-region` | ambos | input | sim | região AWS onde o ECR está |
-| `aws-role-arn` | ambos | input | sim | role assumida via OIDC, com permissão de push/leitura no ECR |
-| `frameworks` | ambos | input | sim | array JSON com os nomes dos arquivos em `frameworks/*.yaml` a processar |
-| `soak-hours` | promote-stable | input | não (default `6`) | horas mínimas que um build imutável espera antes de poder virar `stable` |
+| `aws-region` | build-base-images | input | sim | região DEV onde o ECR está |
+| `DEV_ROLE_ARN` / `DEV_ACCOUNT_ID` | build-base-images | variável GitHub | sim | identidade do Environment DEV |
+| `frameworks` | build-base-images | input | sim | array JSON de pares completos do catálogo |
+| `release` | promote-stable / recover-stable | dispatch | recovery: sim | identidade exata `r<RUN>-a<ATTEMPT>` |
+| `soak-hours` | promote-stable | dispatch | não (default `6`) | horas após aprovação DEV stable |
+| `resume-automation` | promote-stable | dispatch | não (default `false`) | retoma membros pausados somente com release explícita |
 
 Pré-requisito de infraestrutura: provider OIDC e roles aprovados por Cloud/IAM, com trust restrita e permissões conforme o [contrato P1-04](docs/iam-permission-contract.md). Seus exemplos locais não alteram a policy ativa. A [Infra do produto](infra/README.md) provisiona os ECRs; o publicador é `PREPROVISIONED_ONLY`, sem administração de repositórios. `PutImage` no mesmo repositório não reserva `stable` exclusivamente ao promotor.
 

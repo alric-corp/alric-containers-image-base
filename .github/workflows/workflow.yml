@@ -12,6 +12,7 @@ on:
       - 'melange/**'
       - '.github/workflows/workflow.yml'
       - '.github/workflows/build-base-images.yml'
+      - '.github/workflows/dev-stable.yml'
       - '.github/workflows/validate-base-images.yml'
       - '.github/workflows/test-runtime-images.yml'
       - '.github/workflows/image-trust.yml'
@@ -21,6 +22,7 @@ on:
       # O contrato funcional é gate de publicação (M08/M10): mudar um projeto
       # mínimo ou um probe muda o que autoriza publicar.
       - 'tests/runtime/**'
+      - 'tests/consumer-apps/**'
       - 'Makefile'
   pull_request:
     paths:
@@ -29,6 +31,7 @@ on:
       - 'melange/**'
       - '.github/workflows/workflow.yml'
       - '.github/workflows/build-base-images.yml'
+      - '.github/workflows/dev-stable.yml'
       - '.github/workflows/validate-base-images.yml'
       - '.github/workflows/test-runtime-images.yml'
       - '.github/workflows/image-trust.yml'
@@ -38,6 +41,7 @@ on:
       # O contrato funcional é gate de publicação (M08/M10): mudar um projeto
       # mínimo ou um probe muda o que autoriza publicar.
       - 'tests/runtime/**'
+      - 'tests/consumer-apps/**'
       - 'Makefile'
   schedule:
     - cron: "23 3 * * *"   # build diário: 00:23 America/Sao_Paulo (03:23 UTC; fora do início da hora)
@@ -119,5 +123,4 @@ jobs:
     uses: ./.github/workflows/build-base-images.yml
     with:
       aws-region: ${{ vars.AWS_REGION }}
-      aws-role-arn: ${{ vars.AWS_ROLE_ARN }}
       frameworks: '["go1-26", "go1-26-dev"]'

@@ -101,7 +101,7 @@ class AppCertificationWorkflowTests(unittest.TestCase):
                 credentials = action_steps(job, 'aws-actions/configure-aws-credentials')
                 self.assertEqual(len(credentials), 1)
                 config = credentials[0]['with']
-                self.assertEqual(config['role-to-assume'], '${{ vars.AWS_ROLE_ARN }}')
+                self.assertEqual(config['role-to-assume'], '${{ vars.DEV_ROLE_ARN }}')
                 self.assertEqual(config['allowed-account-ids'], '${{ vars.AWS_ACCOUNT_ID }}')
                 self.assertNotIn('aws-access-key-id', config)
                 self.assertNotIn('aws-secret-access-key', config)

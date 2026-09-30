@@ -1,0 +1,31 @@
+{
+  "checked_at": "2026-09-30T06:04:43.719096+00:00",
+  "default_branch": "main",
+  "code_branch": "develop",
+  "required_checks": [
+    "Unit & integration tests",
+    "Repository & workflow lint"
+  ],
+  "required_code_owner_reviews": true,
+  "required_approvals": 1,
+  "enforce_admins": true,
+  "environments": {
+    "DEV": {
+      "allowed_refs": [
+        {
+          "name": "develop",
+          "type": "branch"
+        }
+      ]
+    },
+    "HOM": {
+      "allowed_refs": [
+        {
+          "name": "develop",
+          "type": "branch"
+        }
+      ]
+    }
+  },
+  "automatic_hom_promotion_enabled": false
+}

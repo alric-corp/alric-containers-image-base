@@ -5,9 +5,9 @@ Baseline histórica: 13/09/2026, main
 `e3ed68259f66af41e8054a4c0ac29a54082ddd60`. Este documento descreve o projeto
 no sandbox e os requisitos de adoção corporativa; não declara produção liberada.
 
-O contrato executável desta revisão usa `develop` como DEV. Os SHAs, runs e
+O contrato executável usa `develop` como fonte do código e DEV/HOM como contas AWS e GitHub Environments. O destino consumidor é HOM (`248908662184`, `sa-east-1`); veja o [lifecycle](dev-hom-promotion.md). Os SHAs, runs e
 assinaturas anteriores à migração continuam históricos de `main`. A
-[migração](develop-as-dev.md) ainda depende do cutover externo; o verificador
+[ativação](dev-hom-promotion.md#provisionamento-e-ativação) depende do cutover externo; o verificador
 DEV não aceita automaticamente assinaturas da branch antiga. Não reassine
 um artifact antigo para declarar que ele foi construído em `develop`.
 

@@ -40,13 +40,22 @@ def validate_inventory(document):
     if type(document.get('schema_version')) is not int or document['schema_version'] != 1:
         raise ValueError('unsupported candidate inventory schema')
     run = document.get('source_run_id')
-    if (type(run) is not int or run <= 0 or type(document.get('source_run_attempt')) is not int
-            or document['source_run_attempt'] != 1):
-        raise ValueError('inventory must identify one source run and attempt 1')
+    release = document.get('scope') == 'release'
+    attempt = document.get('source_run_attempt')
+    if (type(run) is not int or run <= 0 or type(attempt) is not int or attempt <= 0
+            or (not release and attempt != 1)):
+        raise ValueError('inventory must identify one source run and an explicit attempt')
     if not re.fullmatch(r'[0-9a-f]{40}', document.get('source_sha', '')):
         raise ValueError('inventory source revision must be a full Git SHA')
     candidates = document.get('candidates', {})
-    if set(candidates) != set(CATALOG):
+    if release:
+        if not candidates or not set(candidates) <= set(CATALOG):
+            raise ValueError('release inventory has no supported candidates')
+        for item in SCENARIOS:
+            pair = {item['framework'], item['dev_framework']} - {None}
+            if pair & set(candidates) and not pair <= set(candidates):
+                raise ValueError('release inventory has an incomplete runtime/dev pair')
+    elif set(candidates) != set(CATALOG):
         raise ValueError('inventory must cover exactly the 16 catalog artifacts')
     registries = set()
     for framework, item in candidates.items():
@@ -59,7 +68,7 @@ def validate_inventory(document):
                 or item.get('framework') != framework or item.get('repository') != repository):
             raise ValueError(f'invalid immutable candidate identity: {framework}')
         tag = item.get('immutable_tag', '')
-        if not re.fullmatch(rf'[0-9]{{6}}-[0-9]{{4}}-r{run}-a1', tag):
+        if not re.fullmatch(rf'[0-9]{{6}}-[0-9]{{4}}-r{run}-a{attempt}', tag):
             raise ValueError(f'candidate tag does not bind source run/attempt: {framework}')
         platforms = item.get('platforms', {})
         if set(platforms) != set(ARCHITECTURES) or any(

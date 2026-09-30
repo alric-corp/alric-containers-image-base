@@ -7,10 +7,6 @@ on:
         description: "Região AWS do ECR (ex.: us-east-1)"
         type: string
         required: true
-      aws-role-arn:
-        description: "Role assumida via OIDC com permissão de push no ECR"
-        type: string
-        required: true
       frameworks:
         description: "JSON array de frameworks a buildar (deve casar com um arquivo em frameworks/<nome>.yaml)."
         type: string
@@ -92,6 +88,7 @@ jobs:
       framework: ${{ matrix.framework }}
 
   build-push:
+    environment: DEV
     name: Build & push ${{ matrix.framework }}
     # M13: `needs: validate` sozinho pularia TODA a matriz de publicação se
     # QUALQUER framework falhasse a validação (um scan bloqueado por CVE sem
@@ -252,7 +249,8 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
-          role-to-assume: ${{ inputs.aws-role-arn }}
+          role-to-assume: ${{ vars.DEV_ROLE_ARN }}
+          allowed-account-ids: ${{ vars.DEV_ACCOUNT_ID }}
           aws-region: ${{ inputs.aws-region }}
 
       # Infra é source of truth da configuração do ECR; Containers valida o
@@ -282,11 +280,8 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
 
-      # Referência da imagem: <registry-ecr>/image-base-<framework>, com uma
-      # tag imutável <ddmmaa-hhmm> (GMT-3 / America/Sao_Paulo). A tag "stable"
-      # NÃO é publicada aqui — ela só é promovida pelo workflow
-      # promote-stable.yml, depois de uma janela de soak sem novas CVEs
-      # (ver "Gate de promoção" no README).
+      # Immutable candidate identity is carried into the release manifest.
+      # dev-stable.yml approves DEV; promote-stable.yml handles HOM after soak.
       - name: Set image name and tags
         env:
           FRAMEWORK: ${{ matrix.framework }}
@@ -357,6 +352,20 @@ jobs:
           subject-digest: ${{ steps.publish.outputs.digest }}
           push-to-registry: true
 
+      - name: Record exact candidate identity
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          python3 -B - <<'PYCODE'
+          import json, os
+          from pathlib import Path
+          Path('candidate-identity.json').write_text(json.dumps({
+              'run_id': int(os.environ['GITHUB_RUN_ID']),
+              'attempt': int(os.environ['GITHUB_RUN_ATTEMPT']),
+              'source_sha': os.environ['GITHUB_SHA'],
+              'tag': os.environ['TIMESTAMP_TAG'], 'digest': os.environ['DIGEST']}))
+          PYCODE
+
       - name: Preserve publication evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -367,6 +376,7 @@ jobs:
             published.digest
             published-index.json
             publication-evidence.json
+            candidate-identity.json
             runtime-gate-result.json
             runtime-artifacts.json
             runtime-jobs.json
@@ -379,6 +389,18 @@ jobs:
             tool-versions.json
           retention-days: 30
           if-no-files-found: warn
+
+  dev-stable:
+    needs: [validate, runtime-contract, build-push]
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: read
+    uses: ./.github/workflows/dev-stable.yml
+    with:
+      frameworks: ${{ inputs.frameworks }}
 
   # M11/M04: uma tabela por framework com digest, arquiteturas, resultado do
   # scan, motivo de bloqueio/skip, contrato funcional, publicação e links das

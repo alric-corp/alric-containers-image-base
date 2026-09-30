@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "repository": "alric-corp/alric-containers-image-base",
+  "branch": "develop",
+  "subject_prefix": "repo:alric-corp@178685987/alric-containers-image-base@1360616627",
+  "minimum_soak_hours": 6,
+  "DEV": {
+    "account_id": "712107929769",
+    "region": "us-east-1",
+    "role_name": "alric-image-base-factory-dev",
+    "release_bucket": "712107929769-image-base-releases-dev"
+  },
+  "HOM": {
+    "account_id": "248908662184",
+    "region": "sa-east-1",
+    "role_name": "alric-image-base-factory-hom",
+    "release_bucket": "248908662184-image-base-releases-hom"
+  }
+}

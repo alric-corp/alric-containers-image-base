@@ -20,7 +20,10 @@ DEPENDENCIES = {
 # opening release to every implementation module in those domains.
 MODULE_DEPENDENCIES = {
     'release': {'scripts.pipeline.runtime.runtime_images',
-                'scripts.pipeline.catalog.validate_inputs'},
+                'scripts.pipeline.catalog.validate_inputs',
+                'scripts.pipeline.consumer_apps.inventory',
+                'scripts.pipeline.consumer_apps.model',
+                'scripts.pipeline.consumer_apps.runner'},
     # Consumers reuse identity/metadata validation and architecture reporting,
     # never the internal runtime executor or release mutation mechanisms.
     'consumer_apps': {'scripts.pipeline.artifacts.oci_artifact',

@@ -25,7 +25,7 @@ def verify_repository_identity(provenance, repository, expected):
             raise ValueError('provenance não confirma os IDs e a origem do repositório renomeado')
 
 
-def verify_promotion(image, repository, reports=Path("reports")):
+def verify_promotion(image, repository, reports=Path("reports"), source_sha=None):
     require_digest_reference(image)
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
         raise ValueError("repositório de origem inválido")
@@ -58,6 +58,10 @@ def verify_promotion(image, repository, reports=Path("reports")):
             "provenance": ["gh", "attestation", "verify", f"oci://{image}", "--repo", signer,
                            "--signer-workflow", workflow, "--source-ref", "refs/heads/develop", "--format", "json"],
         }
+        if source_sha is not None:
+            if not re.fullmatch(r'[0-9a-f]{40}', source_sha):
+                raise ValueError('invalid expected provenance revision')
+            commands['provenance'].extend(['--source-digest', source_sha])
         evidence = {}
         try:
             for name, command in commands.items():

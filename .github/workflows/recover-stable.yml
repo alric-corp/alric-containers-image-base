@@ -1,241 +1,77 @@
-# M15: recuperação manual de "stable" para um digest anterior já
-# aprovado, sem rebuild. Runbook (ver README, seção "Recuperação de
-# stable"):
-#
-#   1. Escolher o digest de destino (um build já promovido/aprovado
-#      anteriormente — não um build qualquer não verificado).
-#   2. Dispatch manual deste workflow com framework/digest/reason.
-#      O job reverifica plataformas, assinatura e provenance do digest
-#      de destino com a MESMA política de promote-stable.yml — nenhum
-#      bypass do gate de segurança, mesmo em recuperação de emergência.
-#      Reescaneia as duas arquiteturas antes de mover a tag; uma CVE
-#      nova no digest antigo bloqueia a recuperação (exceção exige
-#      política explícita, não esse workflow).
-#   3. O job move "stable" por referência (sem rebuild) e imprime um
-#      trecho JSON pronto para colar em policies/release/promotion-quarantine.json.
-#   4. Abrir um PR de verdade adicionando essa entrada — impede que o
-#      próximo ciclo de promoção repromova o build retirado (ele
-#      continua sendo o mais novo por timestamp; sem quarentena,
-#      find_promotion_candidate.py o selecionaria de novo).
-#
-# Restaurar a imagem base não reconstrói nem reverte automaticamente
-# aplicações consumidoras — isso é responsabilidade do runbook de cada
-# pipeline de deploy downstream, fora do escopo deste repositório.
 name: Distroless - Recover stable
 
 on:
   workflow_dispatch:
     inputs:
-      framework:
-        description: 'Framework a recuperar (ex.: "go1-26") — sem o prefixo image-base-'
-        type: string
-        required: true
-      digest:
-        description: 'Digest de destino, já aprovado anteriormente (sha256:...)'
+      release:
+        description: 'Release anterior já promovida em HOM: r<RUN_ID>-a<ATTEMPT>'
         type: string
         required: true
       reason:
-        description: 'Motivo da recuperação (fica registrado na evidência)'
+        description: 'Motivo operacional da recuperação'
         type: string
         required: true
 
 permissions:
-  id-token: write
   contents: read
+  actions: read
   attestations: read
 
 jobs:
   recover:
-    name: Recover ${{ inputs.framework }} to ${{ inputs.digest }}
     if: github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
+    environment: HOM
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+      id-token: write
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # Mesmo lock por role/região da promoção: recovery espera o lote ativo
-    # terminar antes de mover stable; cancel-in-progress permanece false.
+    timeout-minutes: 120
     concurrency:
-      group: stable-mutation-${{ vars.AWS_ROLE_ARN }}-${{ vars.AWS_REGION }}
+      group: stable-mutation-HOM-${{ github.repository }}
       cancel-in-progress: false
     steps:
-      # M16: sem credencial Git persistida — nenhum passo daqui faz push.
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-
-      # M16: guard antes de qualquer credencial AWS. Mesma validação
-      # compartilhada com build/validação/promoção — o nome precisa casar
-      # com o padrão do catálogo E existir em frameworks/, não basta um
-      # caminho que resolva para um arquivo .yaml existente.
-      - name: Validate inputs before privileged operations
+      - name: Validate recovery request
         env:
-          FRAMEWORK: ${{ inputs.framework }}
-          DIGEST: ${{ inputs.digest }}
+          RELEASE: ${{ inputs.release }}
           REASON: ${{ inputs.reason }}
         run: |
-          set -eu
-          python3 -B -m scripts.pipeline.catalog.validate_inputs
-          if [ -z "$REASON" ]; then
-            echo "::error::reason não pode ser vazio" >&2
-            exit 1
-          fi
-
-      - name: Configure AWS credentials (OIDC)
+          python3 -B - <<'PY'
+          import os
+          from scripts.pipeline.release.lifecycle import manifest_key
+          manifest_key(os.environ['RELEASE'])
+          if not os.environ['REASON'].strip():
+              raise SystemExit('reason is required')
+          PY
+      - name: Configure HOM credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
-
-      # A recuperação só pode mirar um digest que já existe no repositório
-      # (um build real já aprovado) — nunca um digest arbitrário externo.
-      - name: Confirm target digest exists in the repository
-        env:
-          FRAMEWORK: ${{ inputs.framework }}
-          DIGEST: ${{ inputs.digest }}
-        run: |
-          set -eu
-          aws ecr describe-images --repository-name "image-base-${FRAMEWORK}" \
-            --image-ids "imageDigest=${DIGEST}" >/dev/null
-
-      - name: Capture current stable digest (for the record)
-        id: previous
-        env:
-          FRAMEWORK: ${{ inputs.framework }}
-        run: |
-          set -eu
-          PREVIOUS=$(aws ecr describe-images --repository-name "image-base-${FRAMEWORK}" \
-            --image-ids imageTag=stable --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || echo "none")
-          echo "digest=$PREVIOUS" >> "$GITHUB_OUTPUT"
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-
-      # Mesma política de promote-stable.yml: plataformas amd64+arm64,
-      # assinatura cosign e provenance do workflow de build na develop.
-      # Sem bypass — um digest de destino que não passe aqui não é
-      # restaurado, ponto.
-      - name: Verify target platforms, signature and provenance
-        env:
-          GH_TOKEN: ${{ github.token }}
-          FRAMEWORK: ${{ inputs.framework }}
-          DIGEST: ${{ inputs.digest }}
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |
-          python3 -B -m scripts.pipeline.release.verify_promotion \
-            "${REGISTRY}/image-base-${FRAMEWORK}@${DIGEST}" "$GITHUB_REPOSITORY"
-
+          role-duration-seconds: 10800
+          role-to-assume: ${{ vars.HOM_ROLE_ARN }}
+          aws-region: ${{ vars.HOM_REGION }}
+          allowed-account-ids: ${{ vars.HOM_ACCOUNT_ID }}
+      - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1, ORAS 1.3.1
       - name: Install Trivy
         uses: alric-corp/alric-containers-reusable-workflows/actions/setup-trivy@eea2d2f4c4102ded74204e4131c1417f444ae3fc # governed Trivy setup
-
-      # Re-scan com o banco de CVE atual — um digest antigo pode ter sido
-      # aprovado antes de uma CVE ser divulgada; recuperação não é bypass
-      # do gate de segurança.
-      - name: Re-scan both architectures before recovery
+      - name: Reverify and recover the complete HOM release without rebuilding
         env:
-          FRAMEWORK: ${{ inputs.framework }}
-          DIGEST: ${{ inputs.digest }}
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ inputs.release }}
+          REASON: ${{ inputs.reason }}
         run: |
-          python3 -B -m scripts.pipeline.artifacts.scan_images remote \
-            "${REGISTRY}/image-base-${FRAMEWORK}@${DIGEST}"
-
-      # M11: mesma visibilidade não-bloqueante — nunca falha o job.
-      # M12: sem `if:` nenhum, este passo herdava `success()` implícito e
-      # era pulado se o re-scan acima falhasse — mesmo bug de
-      # promote-stable.yml, confirmado empiricamente num runner real (PR
-      # #43, descartável) antes da correção.
-      - name: Report CVEs without an available fix (informational)
-        if: ${{ !cancelled() }}
-        env:
-          FRAMEWORK: ${{ inputs.framework }}
-          DIGEST: ${{ inputs.digest }}
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |
-          python3 -B -m scripts.pipeline.release.report_unfixed_cves remote \
-            "${REGISTRY}/image-base-${FRAMEWORK}@${DIGEST}"
-
-      - name: Preserve recovery scan evidence
+          python3 -B -m scripts.pipeline.release.lifecycle recover-hom \
+            --release "$RELEASE" --reason "$REASON" --reports reports/release
+      - name: Preserve recovery evidence and automation hold
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: recovery-scans-${{ inputs.framework }}-${{ github.run_attempt }}
-          path: reports/
+          name: recovery-${{ github.run_attempt }}
+          path: reports/release/
           retention-days: 30
-          if-no-files-found: warn
-
-      - name: Restore stable (no rebuild)
-        id: restore
-        env:
-          FRAMEWORK: ${{ inputs.framework }}
-          DIGEST: ${{ inputs.digest }}
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |
-          set -eu
-          IMAGE="${REGISTRY}/image-base-${FRAMEWORK}"
-          docker buildx imagetools create --tag "${IMAGE}:stable" "${IMAGE}@${DIGEST}"
-          echo "restaurado stable de image-base-${FRAMEWORK} para ${DIGEST}"
-
-      # Leitura de volta independente do que o comando de retag reportou —
-      # mesmo princípio já usado no publicador e na promoção normal.
-      - name: Confirm stable via independent read-back
-        env:
-          FRAMEWORK: ${{ inputs.framework }}
-          DIGEST: ${{ inputs.digest }}
-        run: |
-          set -eu
-          ACTUAL=$(aws ecr describe-images --repository-name "image-base-${FRAMEWORK}" \
-            --image-ids imageTag=stable --query 'imageDetails[0].imageDigest' --output text)
-          if [ "$ACTUAL" != "$DIGEST" ]; then
-            echo "::error::leitura de volta não bate: stable=$ACTUAL, esperado=$DIGEST" >&2
-            exit 1
-          fi
-          echo "confirmado: stable de image-base-${FRAMEWORK} = $ACTUAL"
-
-      - name: Record recovery evidence
-        env:
-          FRAMEWORK: ${{ inputs.framework }}
-          DIGEST: ${{ inputs.digest }}
-          REASON: ${{ inputs.reason }}
-          PREVIOUS: ${{ steps.previous.outputs.digest }}
-          OPERATOR: ${{ github.actor }}
-        run: |
-          set -eu
-          mkdir -p reports
-          jq -n \
-            --arg framework "$FRAMEWORK" \
-            --arg new_digest "$DIGEST" \
-            --arg previous_digest "$PREVIOUS" \
-            --arg reason "$REASON" \
-            --arg operator "$OPERATOR" \
-            --arg run_id "$GITHUB_RUN_ID" \
-            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
-            --arg recovered_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{framework:$framework,new_digest:$new_digest,previous_digest:$previous_digest,reason:$reason,operator:$operator,run_id:$run_id,run_attempt:$run_attempt,recovered_at:$recovered_at}' \
-            | tee reports/recovery-evidence.json
-
-      - name: Upload recovery evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: recovery-evidence-${{ inputs.framework }}-${{ github.run_attempt }}
-          path: reports/recovery-evidence.json
-          retention-days: 30
-
-      # Sem esta etapa manual (deliberadamente fora deste workflow — ver
-      # cabeçalho), o build retirado continua sendo o mais novo por
-      # timestamp e o próximo ciclo de promoção o selecionaria de novo,
-      # desfazendo a recuperação.
-      - name: Print quarantine PR reminder
-        env:
-          FRAMEWORK: ${{ inputs.framework }}
-          PREVIOUS: ${{ steps.previous.outputs.digest }}
-          REASON: ${{ inputs.reason }}
-          OPERATOR: ${{ github.actor }}
-        run: |
-          set -eu
-          echo "::warning::Recuperação concluída. Para impedir que o próximo ciclo de promoção repromova o build retirado (${PREVIOUS}), abra um PR adicionando esta entrada a policies/release/promotion-quarantine.json em image-base-${FRAMEWORK}:"
-          jq -n --arg digest "$PREVIOUS" --arg reason "$REASON" --arg by "$OPERATOR" \
-            --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{digest:$digest, reason:("recuperação: " + $reason), added_by:$by, added_at:$at}'
+          if-no-files-found: error

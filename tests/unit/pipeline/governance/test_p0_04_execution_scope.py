@@ -104,28 +104,25 @@ class ScheduleSeparationTests(unittest.TestCase):
             with self.subTest(cron=cron):
                 self.assertEqual(len(files), 1, f'{cron} declared in {files}')
 
-    def _scheduled_run_default(self, name):
-        step = self.promotion['jobs']['resolve-defaults']['steps'][0]
-        match = re.search(rf'\$\{{{re.escape(name)}:-([^}}]*)\}}', step['run'])
-        self.assertIsNotNone(match, f'no fallback found for {name}')
-        return match.group(1)
-
-    def test_scheduled_promotion_defaults_match_the_p0_04_profile(self):
-        raw = self._scheduled_run_default('FRAMEWORKS').replace('\\"', '"')
-        self.assertEqual(json.loads(raw), P0_04)
+    def test_promotion_scope_comes_from_the_approved_manifest(self):
+        inputs = self.promotion_triggers['workflow_dispatch']['inputs']
+        self.assertNotIn('frameworks', inputs)
+        self.assertEqual(inputs['release']['default'], '')
 
     def test_scheduled_promotion_soak_hours_default_is_six(self):
-        self.assertEqual(self._scheduled_run_default('SOAK_HOURS'), '6')
+        inputs = self.promotion_triggers['workflow_dispatch']['inputs']
+        self.assertEqual(inputs['soak-hours']['default'], 6)
+        execution = next(step for step in self.promotion['jobs']['promote']['steps']
+                         if step.get('name') == 'Promote exact eligible release to HOM')
+        self.assertEqual(execution['env']['SOAK_HOURS'], "${{ inputs.soak-hours || '6' }}")
 
-    def test_promote_job_reads_the_resolved_defaults_not_raw_inputs(self):
+    def test_one_hom_job_owns_the_entire_release_promotion(self):
         promote = self.promotion['jobs']['promote']
-        self.assertIn('resolve-defaults', promote['needs'])
+        self.assertEqual(promote['environment'], 'HOM')
         self.assertNotIn('strategy', promote)
-        execution = next(step for step in promote['steps'] if step.get('id') == 'candidate')
-        self.assertEqual(execution['env']['FRAMEWORKS'],
-                         '${{ needs.resolve-defaults.outputs.frameworks }}')
-        self.assertEqual(execution['env']['SOAK_HOURS'],
-                         '${{ needs.resolve-defaults.outputs.soak-hours }}')
+        execution = next(step for step in promote['steps']
+                         if step.get('name') == 'Promote exact eligible release to HOM')
+        self.assertIn('scripts.pipeline.release.lifecycle promote-hom', execution['run'])
 
     def test_promotion_only_changes_do_not_trigger_a_full_build(self):
         for event in ('push', 'pull_request'):

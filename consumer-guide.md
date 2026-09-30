@@ -1,5 +1,10 @@
 # Imagens base corporativas — Guia do desenvolvedor
 
+O destino consumidor desta Factory é **HOM**, na conta `248908662184`, região
+`sa-east-1`: `248908662184.dkr.ecr.sa-east-1.amazonaws.com/image-base-<framework>:stable`.
+A incorporação de uma nova base exige novo build da aplicação. Detalhes de
+promoção e recovery ficam no [runbook da Factory](docs/dev-hom-promotion.md).
+
 > **Menos manutenção da base. Mais foco na sua aplicação.**
 >
 > Containers Products mantém a imagem base. Sua squad acrescenta a aplicação, valida o resultado e controla seu deploy.

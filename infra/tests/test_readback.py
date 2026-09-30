@@ -157,7 +157,7 @@ class ReadbackTests(unittest.TestCase):
         statement['Action'].reverse()
         statement['Principal']['AWS'] = ['*']
         statement['Condition']['StringEquals']['aws:PrincipalOrgID'] = 'o-5gqr9v3h2q'
-        fake.policy['Statement'] = statement
+        fake.policy['Statement'].reverse()
         self.assertEqual(self.verify(fake)['status'], 'PASS')
 
     def test_policy_permission_or_condition_widening_is_rejected(self):
