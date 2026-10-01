@@ -32,7 +32,9 @@ def enabled(name, job, *, branch='develop', event='workflow_dispatch',
     return bool(eval('(' + expression.replace('&&', ' and ').replace('||', ' or ') + ')',
                      {'__builtins__': {}},
                      {'github': github,
-                      'vars': SimpleNamespace(STABLE_PROMOTION_AUTHORIZED=authorized),
+                      'needs': SimpleNamespace(
+                          config=SimpleNamespace(outputs=SimpleNamespace(promotion_authorized=authorized)),
+                          checks=SimpleNamespace(outputs=SimpleNamespace(infra_plan_enabled=authorized))),
                       'always': lambda: True}))
 
 

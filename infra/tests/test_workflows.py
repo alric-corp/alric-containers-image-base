@@ -62,7 +62,8 @@ class InfraWorkflowTests(unittest.TestCase):
         self.assertEqual(plan['needs'], 'checks')
         self.assertEqual(plan['if'],
                          "github.base_ref == 'develop' && "
-                         'github.event.pull_request.head.repo.full_name == github.repository')
+                         'github.event.pull_request.head.repo.full_name == github.repository && '
+                         "needs.checks.outputs.infra_plan_enabled == 'true'")
         self.assertNotIn('environment', plan)
         self.assertIn('unittest discover -s infra/tests', shell(checks))
         self.assertFalse(any(step.get('uses', '').startswith(
@@ -79,30 +80,28 @@ class InfraWorkflowTests(unittest.TestCase):
                 if job['permissions'].get('id-token') == 'write':
                     credentials = action_step(job, 'aws-actions/configure-aws-credentials')
                     role = credentials['with']['role-to-assume']
-                    self.assertIn(role, ('${{ vars.INFRA_PLAN_ROLE_ARN }}',
-                                         '${{ vars.INFRA_APPLY_ROLE_ARN }}'))
+                    self.assertEqual(role, '${{ steps.pipeline.outputs.AWS_ROLE_ARN }}')
+                    self.assertLess(step_index(job, 'scripts.pipeline.governance.configuration'),
+                                    step_index(job, 'aws-actions/configure-aws-credentials'))
                     self.assertNotIn('aws-access-key-id', credentials['with'])
                     self.assertNotIn('aws-secret-access-key', credentials['with'])
         pr_credentials = action_step(self.pr['jobs']['plan'],
                                      'aws-actions/configure-aws-credentials')
         self.assertEqual(pr_credentials['with']['role-to-assume'],
-                         '${{ vars.INFRA_PLAN_ROLE_ARN }}')
+                         '${{ steps.pipeline.outputs.AWS_ROLE_ARN }}')
+        self.assertIn('--scope INFRA_PLAN', shell(self.pr['jobs']['plan']))
         for job in self.apply['jobs'].values():
+            self.assertIn('--scope INFRA_APPLY', shell(job))
             self.assertEqual(job['environment'], 'lab-image-base-infra')
             credentials = action_step(job, 'aws-actions/configure-aws-credentials')
             self.assertEqual(credentials['with']['role-to-assume'],
-                             '${{ vars.INFRA_APPLY_ROLE_ARN }}')
+                             '${{ steps.pipeline.outputs.AWS_ROLE_ARN }}')
             self.assertLess(step_index(job, 'unittest discover -s infra/tests'),
                             step_index(job, 'aws-actions/configure-aws-credentials'))
 
     def test_every_backend_init_follows_independent_fail_closed_ensure(self):
         for workflow in (self.pr, self.apply):
-            self.assertEqual(workflow['env']['TF_STATE_BUCKET'],
-                             '${{ vars.INFRA_TF_STATE_BUCKET }}')
-            self.assertEqual(workflow['env']['TF_STATE_KEY'],
-                             'alric-containers-image-base/terraform.tfstate')
-            self.assertEqual(workflow['env']['TF_BACKEND_REGION'],
-                             '${{ vars.INFRA_BACKEND_REGION }}')
+            self.assertNotIn('vars.', str(workflow))
             for job in workflow['jobs'].values():
                 if ' init ' not in shell(job):
                     continue
@@ -115,6 +114,7 @@ class InfraWorkflowTests(unittest.TestCase):
                     continue
                 ensure = step_index(job, 'python3 infra/backend.py ensure')
                 init = step_index(job, 'terraform -chdir=infra/ecr init')
+                self.assertLess(step_index(job, 'scripts.pipeline.governance.configuration'), ensure)
                 self.assertLess(ensure, init)
                 command = job['steps'][ensure]['run']
                 self.assertIn('set -euo pipefail', command)

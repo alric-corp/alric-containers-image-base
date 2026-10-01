@@ -5,6 +5,7 @@ em `scripts/pipeline/` aplicam as regras; os workflows controlam a execução.
 
 | Arquivo | Consumidor | Responsabilidade |
 | --- | --- | --- |
+| `pipeline/config.json` | Workflows, `governance/configuration.py` e bootstrap DEV/HOM | Fonte única de contas, regiões, roles, buckets, backend e habilitação; [contrato](pipeline/README.md) |
 | `governance/reusable-workflows.json` | `governance/workflow_dependencies.py` | Origem GitHub.com aprovada da biblioteca; callers/actions literais por SHA, checkout e grupo Dependabot devem permanecer coerentes |
 | `operations/health.json` | `operations/operational_health.py`, `catalog/default_batch.py` | Donos, alertas, cron e retenção das evidências; `exceptions` é a lista de frameworks fora do lote padrão (motivo, dono, `review_by`, ADR) |
 | `operations/ecr-lifecycle.json` | ECR, após preview revisado | Expira somente imagens sem tag após 30 dias; preserva releases com tag |

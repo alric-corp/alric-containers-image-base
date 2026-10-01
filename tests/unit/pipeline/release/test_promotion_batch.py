@@ -414,7 +414,7 @@ class PromotionWorkflowWiringTests(unittest.TestCase):
         self.assertEqual(job['environment'], 'HOM')
         self.assertNotIn('strategy', job)
         self.assertFalse(job['concurrency']['cancel-in-progress'])
-        self.assertIn("vars.STABLE_PROMOTION_AUTHORIZED == 'true'", job['if'])
+        self.assertIn("needs.config.outputs.promotion_authorized == 'true'", job['if'])
         execution = steps[names.index('Promote exact eligible release to HOM')]
         self.assertIn('scripts.pipeline.release.lifecycle promote-hom', execution['run'])
         self.assertNotIn('continue-on-error', execution)

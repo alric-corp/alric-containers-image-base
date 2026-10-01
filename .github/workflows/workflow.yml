@@ -122,5 +122,4 @@ jobs:
       artifact-metadata: write
     uses: ./.github/workflows/build-base-images.yml
     with:
-      aws-region: ${{ vars.AWS_REGION }}
       frameworks: '["go1-26", "go1-26-dev"]'

@@ -11,9 +11,10 @@ certificados, Apko/Melange e Terraform passam por PR.
 | HOM | `248908662184` | `sa-east-1` | `alric-image-base-factory-hom` |
 
 O profile local `revolution-dev` autentica a conta **HOM** desta Factory.
-Essas identidades estão versionadas em
-[`environments.json`](../policies/release/environments.json). A role HOM lê
+Contas, regiões, roles, buckets e habilitação da promoção têm uma única fonte em
+[`policies/pipeline/config.json`](../policies/pipeline/config.json). A role HOM lê
 somente o catálogo e os manifestos DEV e escreve nos seus próprios recursos.
+O [contrato do JSON](../policies/pipeline/README.md) define validação e migração das variáveis antigas.
 A role DEV não escreve em HOM. Nenhuma delas cria repositórios ou apaga releases.
 As trusts exigem o subject imutável do repositório e o Environment exato;
 os Environments permitem somente a branch `develop`.
@@ -44,7 +45,7 @@ flowchart LR
    duas arquiteturas e executa aplicações consumidoras reais em amd64/arm64.
    Só então atualiza DEV `stable`, confirma todas as tags e persiste o manifesto.
 4. `promote-stable.yml` roda no cron `17 * * * *`, com
-   `STABLE_PROMOTION_AUTHORIZED=true`. O soak começa após o último read-back
+   `"promotion_authorized": true` no JSON. O soak começa após o último read-back
    de DEV `stable`. Não há runner aguardando seis horas.
 5. A seleção lê manifestos aprovados, escolhe a release elegível mais nova e
    fixa seus digests. Não resolve DEV `stable`. Assim, A pode completar o
@@ -113,7 +114,7 @@ gh workflow run promote-stable.yml --ref develop \
 
 Esse dispatch mantém soak, scans, trust e read-back. A pausa só é removida após
 sucesso. Um schedule não pode remover pausas nem fazer downgrade. O kill switch
-`STABLE_PROMOTION_AUTHORIZED=false` interrompe a promoção; recovery continua
+`"promotion_authorized": false` no JSON interrompe a promoção; recovery continua
 manual e disponível. Se houver uma falha na primeira release HOM, não existe
 recibo anterior para recuperar: inspecione os registros e reexecute uma promoção
 explícita com `resume-automation=true` após corrigir a causa, conservando os gates.
@@ -144,8 +145,8 @@ A preparação de infraestrutura não ativa código ainda em revisão. Para conc
 
 1. Integre o PR em `develop`, mantendo checks e revisão das mudanças da Factory.
 2. Configure a proteção de `develop` com os mesmos checks/revisores obrigatórios
-   da branch anterior. Confirme DEV/HOM restritos a `develop` e as variáveis
-   produzidas por `configure_github.py`.
+   da branch anterior. Confirme DEV/HOM restritos a `develop` e a configuração
+   em `policies/pipeline/config.json`; `configure_github.py` mantém os Environments.
 3. Retire a autorização de publicação dos workflows históricos em `main`
    desabilitando a trust da role antiga `alric-github-repo-1360616627`; a nova
    publicação usa `alric-image-base-factory-dev`. Trate também a role histórica
@@ -155,7 +156,7 @@ A preparação de infraestrutura não ativa código ainda em revisão. Para conc
    não os revoga. Preserve o Environment de Infra com seus controles de revisão.
 4. Altere a default branch para `develop`. Não crie branches de ambiente.
 5. Execute um build aprovado, confira o manifesto e DEV stable e ative
-   `STABLE_PROMOTION_AUTHORIZED=true`. O cron promove após seis horas reais.
+   `"promotion_authorized": true` no JSON. O cron promove após seis horas reais.
 6. Confirme os dois índices e suas attestations em HOM e execute um teste
    consumidor. Registre run, attempt, SHA, source/target digests e recibo S3.
    Valide recovery quando houver uma segunda release HOM aprovada.

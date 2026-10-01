@@ -10,9 +10,9 @@ on:
         type: string
         default: ''
       soak-hours:
-        description: 'Soak após DEV stable (mínimo de 6 horas)'
+        description: 'Soak após DEV stable; 0 usa minimum_soak_hours do JSON'
         type: number
-        default: 6
+        default: 0
       resume-automation:
         description: 'Retomar após recovery; exige release explícita e mantém todos os gates'
         type: boolean
@@ -24,12 +24,30 @@ permissions:
   attestations: read
 
 jobs:
+  config:
+    name: Read promotion configuration
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      promotion_authorized: ${{ steps.pipeline.outputs.PROMOTION_AUTHORIZED }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Load versioned pipeline configuration
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope HOM
+
   promote:
+    needs: config
     name: Authorize and promote stable candidates
     if: |
       github.ref == 'refs/heads/develop' &&
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
-      vars.STABLE_PROMOTION_AUTHORIZED == 'true'
+      needs.config.outputs.promotion_authorized == 'true'
     environment: HOM
     permissions:
       contents: read
@@ -55,13 +73,16 @@ jobs:
           if os.environ['RELEASE']:
               manifest_key(os.environ['RELEASE'])
           PY
+      - name: Load versioned pipeline configuration
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope HOM --require-promotion
       - name: Configure HOM credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-duration-seconds: 10800
-          role-to-assume: ${{ vars.HOM_ROLE_ARN }}
-          aws-region: ${{ vars.HOM_REGION }}
-          allowed-account-ids: ${{ vars.HOM_ACCOUNT_ID }}
+          role-to-assume: ${{ steps.pipeline.outputs.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.pipeline.outputs.AWS_REGION }}
+          allowed-account-ids: ${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}
       - name: Authenticate source and destination registries
         run: |
           python3 -B -m scripts.pipeline.release.registry_login
@@ -73,7 +94,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE: ${{ inputs.release }}
-          SOAK_HOURS: ${{ inputs.soak-hours || '6' }}
+          SOAK_HOURS: ${{ inputs.soak-hours || steps.pipeline.outputs.MINIMUM_SOAK_HOURS }}
           RESUME: ${{ inputs.resume-automation }}
         run: |
           args=()

@@ -19,7 +19,8 @@ DEPENDENCIES = {
 # Promotion reuses the canonical pair model and input validation without
 # opening release to every implementation module in those domains.
 MODULE_DEPENDENCIES = {
-    'release': {'scripts.pipeline.runtime.runtime_images',
+    'release': {'scripts.pipeline.governance.configuration',
+                'scripts.pipeline.runtime.runtime_images',
                 'scripts.pipeline.catalog.validate_inputs',
                 'scripts.pipeline.consumer_apps.inventory',
                 'scripts.pipeline.consumer_apps.model',

@@ -5,19 +5,15 @@ import json
 from pathlib import Path
 import re
 
+from scripts.pipeline.governance.configuration import configuration
 from scripts.pipeline.consumer_apps.inventory import json_document, require
 from scripts.pipeline.consumer_apps.model import CATALOG, SCENARIOS
 from scripts.pipeline.release.verify_publication import verify_publication
 from scripts.pipeline.runtime.runtime_images import publication_contract
 
 ROOT = Path(__file__).resolve().parents[3]
-CONFIG = ROOT / 'policies/release/environments.json'
 DIGEST = re.compile(r'sha256:[0-9a-f]{64}')
 RELEASE_ID = re.compile(r'r([1-9][0-9]*)-a([1-9][0-9]*)')
-
-
-def configuration():
-    return json_document(CONFIG.read_bytes())
 
 
 def registry(environment):

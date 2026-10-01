@@ -79,16 +79,23 @@ state with read-only state permissions (plus locking). The provider lockfiles
 include verified Linux amd64 and macOS arm64 checksums, so readonly initialization
 works in both the hosted runner and the LAB operator environment.
 
-Repository variables:
+Pipeline settings come from [`policies/pipeline/config.json`](../policies/pipeline/config.json):
 
-| Variable | LAB value |
+| JSON field | Current value |
 | --- | --- |
-| `AWS_ACCOUNT_ID` | `712107929769` |
-| `AWS_REGION` | `us-east-1` |
-| `INFRA_BACKEND_REGION` | `us-east-2` |
-| `INFRA_TF_STATE_BUCKET` | `712107929769-alric-containers-image-base-tfstate` |
-| `INFRA_PLAN_ROLE_ARN` | `arn:aws:iam::712107929769:role/alric-github-repo-1360616627-infra-plan` |
-| `INFRA_APPLY_ROLE_ARN` | `arn:aws:iam::712107929769:role/alric-github-repo-1360616627-infra-apply` |
+| `DEV.account_id` / `DEV.region` | `712107929769` / `us-east-1` |
+| `infra.backend.region` | `us-east-2` |
+| `infra.backend.bucket` | `712107929769-alric-containers-image-base-tfstate` |
+| `infra.backend.key` | `alric-containers-image-base/terraform.tfstate` |
+| `infra.plan_role_name` | `alric-github-repo-1360616627-infra-plan` |
+| `infra.apply_role_name` | `alric-github-repo-1360616627-infra-apply` |
+
+Roles derive their ARN from the DEV account and the configured name. Workflows
+load and validate this file before obtaining AWS credentials or ensuring the
+backend. `infra.plan_enabled=false` currently skips the AWS PR plan while the
+credential-free contracts and mocked Terraform checks still run. It preserves
+the disabled path previously indicated by the absent `INFRA_PLAN_ROLE_ARN`.
+See the [configuration and migration contract](../policies/pipeline/README.md).
 
 Corporate adoption substitutes the account, identities, backend, organization
 policy and environment configuration. The physical topology stays the same:

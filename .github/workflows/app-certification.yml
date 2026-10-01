@@ -47,19 +47,22 @@ jobs:
               raise SystemExit('source-run-id must be a positive integer')
           PY
 
+      - name: Load versioned pipeline configuration
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV
       - name: Configure read-only AWS session (OIDC)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
-          role-to-assume: ${{ vars.DEV_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-to-assume: ${{ steps.pipeline.outputs.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.pipeline.outputs.AWS_REGION }}
+          allowed-account-ids: ${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}
           # A session policy only restricts the existing LAB role; no IAM change.
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[
               {"Effect":"Allow","Action":["ecr:GetAuthorizationToken"],"Resource":"*"},
               {"Effect":"Allow","Action":["ecr:DescribeImages","ecr:DescribeRepositories",
                 "ecr:BatchGetImage","ecr:GetDownloadUrlForLayer","ecr:BatchCheckLayerAvailability"],
-                "Resource":"arn:aws:ecr:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:repository/image-base-*"}
+                "Resource":"arn:aws:ecr:${{ steps.pipeline.outputs.AWS_REGION }}:${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}:repository/image-base-*"}
             ]}
 
       - name: Authenticate registry pulls
@@ -121,18 +124,21 @@ jobs:
           digest-mismatch: error
           merge-multiple: false
 
+      - name: Load versioned pipeline configuration
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV
       - name: Configure read-only AWS session (OIDC)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
-          role-to-assume: ${{ vars.DEV_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-to-assume: ${{ steps.pipeline.outputs.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.pipeline.outputs.AWS_REGION }}
+          allowed-account-ids: ${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[
               {"Effect":"Allow","Action":["ecr:GetAuthorizationToken"],"Resource":"*"},
               {"Effect":"Allow","Action":["ecr:DescribeImages","ecr:DescribeRepositories",
                 "ecr:BatchGetImage","ecr:GetDownloadUrlForLayer","ecr:BatchCheckLayerAvailability"],
-                "Resource":"arn:aws:ecr:${{ vars.AWS_REGION }}:${{ vars.AWS_ACCOUNT_ID }}:repository/image-base-*"}
+                "Resource":"arn:aws:ecr:${{ steps.pipeline.outputs.AWS_REGION }}:${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}:repository/image-base-*"}
             ]}
 
       - name: Authenticate registry pulls

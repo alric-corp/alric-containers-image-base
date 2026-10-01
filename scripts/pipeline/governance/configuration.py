@@ -1,0 +1,120 @@
+"""Validated, versioned pipeline settings; GitHub variables are not inputs."""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+
+ROOT = Path(__file__).resolve().parents[3]
+CONFIG = ROOT / 'policies/pipeline/config.json'
+
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
+def object_pairs(pairs):
+    result = {}
+    for key, value in pairs:
+        require(key not in result, f'duplicate configuration key: {key}')
+        result[key] = value
+    return result
+
+
+def keys(value, expected, label):
+    require(isinstance(value, dict) and set(value) == set(expected),
+            f'{label}: missing or unknown configuration keys')
+
+
+def match(value, pattern, label):
+    require(isinstance(value, str) and re.fullmatch(pattern, value) is not None,
+            f'{label}: invalid value')
+
+
+def configuration(path=None):
+    cfg = json.loads((CONFIG if path is None else Path(path)).read_text(),
+                     object_pairs_hook=object_pairs)
+    keys(cfg, ('schema_version', 'repository', 'branch', 'subject_prefix',
+               'minimum_soak_hours', 'promotion_authorized', 'DEV', 'HOM', 'infra'), 'pipeline')
+    require(type(cfg['schema_version']) is int and cfg['schema_version'] == 1, 'unsupported pipeline schema')
+    match(cfg['repository'], r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', 'repository')
+    # Entrypoint branch guards and OIDC Environments are reviewed boundaries.
+    require(cfg['branch'] == 'develop', 'pipeline code branch must be develop')
+    owner, repo = cfg['repository'].split('/')
+    match(cfg['subject_prefix'], rf'repo:{re.escape(owner)}@[1-9][0-9]*/{re.escape(repo)}@[1-9][0-9]*',
+          'immutable repository subject')
+    require(type(cfg['minimum_soak_hours']) is int and cfg['minimum_soak_hours'] >= 6,
+            'minimum_soak_hours must be an integer >= 6')
+    require(type(cfg['promotion_authorized']) is bool, 'promotion_authorized must be boolean')
+    for env in ('DEV', 'HOM'):
+        item = cfg[env]
+        keys(item, ('account_id', 'region', 'role_name', 'release_bucket'), env)
+        match(item['account_id'], r'[0-9]{12}', f'{env}.account_id')
+        match(item['region'], r'[a-z]{2}-[a-z]+-[0-9]+', f'{env}.region')
+        match(item['role_name'], r'[A-Za-z0-9+=,.@_-]{1,64}', f'{env}.role_name')
+        match(item['release_bucket'], r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', f'{env}.release_bucket')
+    require(cfg['DEV']['account_id'] != cfg['HOM']['account_id'], 'DEV and HOM accounts must differ')
+    require(cfg['DEV']['release_bucket'] != cfg['HOM']['release_bucket'], 'release buckets must differ')
+    infra = cfg['infra']
+    keys(infra, ('plan_enabled', 'plan_role_name', 'apply_role_name', 'backend'), 'infra')
+    require(type(infra['plan_enabled']) is bool, 'infra.plan_enabled must be boolean')
+    for field in ('plan_role_name', 'apply_role_name'):
+        match(infra[field], r'[A-Za-z0-9+=,.@_-]{1,64}', 'infra.' + field)
+    require(len({infra['plan_role_name'], infra['apply_role_name'], cfg['DEV']['role_name']}) == 3,
+            'infra and publication roles must be distinct')
+    keys(infra['backend'], ('bucket', 'region', 'key'), 'infra.backend')
+    match(infra['backend']['bucket'], r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', 'infra.backend.bucket')
+    match(infra['backend']['region'], r'[a-z]{2}-[a-z]+-[0-9]+', 'infra.backend.region')
+    match(infra['backend']['key'], r'[A-Za-z0-9_-]+(?:/[A-Za-z0-9_.-]+)*', 'infra.backend.key')
+    require('..' not in infra['backend']['key'].split('/'), 'backend key cannot traverse directories')
+    return cfg
+
+
+def settings(cfg, scope):
+    require(scope in ('DEV', 'HOM', 'INFRA_PLAN', 'INFRA_APPLY'), 'unknown pipeline scope')
+    item = cfg['DEV' if scope.startswith('INFRA_') else scope]
+    role = item['role_name']
+    if scope.startswith('INFRA_'):
+        role = cfg['infra'][scope.removeprefix('INFRA_').lower() + '_role_name']
+    values = {
+        'AWS_ACCOUNT_ID': item['account_id'], 'AWS_REGION': item['region'],
+        'AWS_ROLE_ARN': f'arn:aws:iam::{item["account_id"]}:role/{role}',
+        'RELEASE_BUCKET': item['release_bucket'],
+        'PROMOTION_AUTHORIZED': str(cfg['promotion_authorized']).lower(),
+        'MINIMUM_SOAK_HOURS': str(cfg['minimum_soak_hours']),
+        'INFRA_PLAN_ENABLED': str(cfg['infra']['plan_enabled']).lower(),
+    }
+    if scope.startswith('INFRA_'):
+        backend = cfg['infra']['backend']
+        values.update(TF_STATE_BUCKET=backend['bucket'], TF_STATE_KEY=backend['key'],
+                      TF_BACKEND_REGION=backend['region'])
+    return values
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--scope', choices=('DEV', 'HOM', 'INFRA_PLAN', 'INFRA_APPLY'), required=True)
+    parser.add_argument('--require-promotion', action='store_true')
+    args = parser.parse_args(argv)
+    cfg = configuration()
+    if os.environ.get('GITHUB_REPOSITORY'):
+        require(os.environ['GITHUB_REPOSITORY'] == cfg['repository'], 'pipeline repository mismatch')
+    if args.require_promotion:
+        require(args.scope == 'HOM' and cfg['promotion_authorized'], 'HOM promotion is disabled in pipeline config')
+    values = settings(cfg, args.scope)
+    # Validate everything before writing either file. Only validated single-line
+    # values enter the Actions command files, never arbitrary JSON keys or env.
+    payload = ''.join(f'{key}={value}\n' for key, value in values.items())
+    for key in ('GITHUB_ENV', 'GITHUB_OUTPUT'):
+        if os.environ.get(key):
+            with Path(os.environ[key]).open('a') as output:
+                output.write(payload)
+    print(json.dumps(values, indent=2))
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (ValueError, OSError) as error:
+        raise SystemExit(f'Invalid pipeline configuration: {error}') from error

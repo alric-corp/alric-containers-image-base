@@ -315,12 +315,16 @@ def main(argv=None):
     parser.add_argument('--frameworks')
     parser.add_argument('--evidence', type=Path)
     parser.add_argument('--release')
-    parser.add_argument('--soak-hours', type=float, default=6)
+    parser.add_argument('--soak-hours', type=float)
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--reason')
     parser.add_argument('--reports', type=Path, default=Path('reports/release'))
     args = parser.parse_args(argv)
     try:
+        if args.soak_hours is None:
+            args.soak_hours = configuration()['minimum_soak_hours']
+        if args.operation == 'promote-hom':
+            require(configuration()['promotion_authorized'], 'HOM promotion is disabled in pipeline config')
         if args.release:
             manifest_key(args.release)
         if args.resume:

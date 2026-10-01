@@ -72,7 +72,7 @@ class PolicyTests(unittest.TestCase):
         policy = json.loads((ECR / 'policies/ecr-repository-org-pull.json').read_text())
         self.assertEqual(len(policy['Statement']), 2)
         reader = policy['Statement'][1]
-        config = json.loads((ROOT / 'policies/release/environments.json').read_text())['HOM']
+        config = json.loads((ROOT / 'policies/pipeline/config.json').read_text())['HOM']
         self.assertEqual(reader['Principal'], {'AWS': f'arn:aws:iam::{config["account_id"]}:role/{config["role_name"]}'})
         self.assertEqual(reader['Effect'], 'Allow')
         self.assertTrue(set(reader['Action']) <= {'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer',
