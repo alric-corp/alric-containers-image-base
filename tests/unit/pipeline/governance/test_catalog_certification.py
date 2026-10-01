@@ -54,7 +54,7 @@ class CatalogCertificationTests(unittest.TestCase):
         self.assertEqual(set(self.job), {'if', 'concurrency', 'permissions', 'uses', 'with'})
         self.assertEqual(self.job['uses'], './.github/workflows/build-base-images.yml')
         self.assertEqual(self.job['uses'], self.publisher['uses'])
-        self.assertEqual(set(self.job['with']), {'frameworks', 'aws-region'})
+        self.assertEqual(set(self.job['with']), {'frameworks'})
         self.assertNotIn('secrets', self.job)
         # One call with no executable steps or second release job: certification
         # has no alternative build path, stable write, or promotion call.
@@ -64,8 +64,8 @@ class CatalogCertificationTests(unittest.TestCase):
         self.assertEqual(self.document['permissions'], {'contents': 'read'})
         self.assertEqual(self.job['permissions'], self.publisher['permissions'])
         self.assertEqual(self.job['permissions'], workflow('build-base-images.yml')['permissions'])
-        for name in ('aws-region',):
-            self.assertEqual(self.job['with'][name], self.publisher['with'][name])
+        self.assertNotIn('aws-region', self.job['with'])
+        self.assertNotIn('aws-region', self.publisher['with'])
 
     def test_candidate_publication_shares_one_non_cancelling_slot(self):
         self.assertEqual(self.job['concurrency'], self.publisher['concurrency'])
@@ -104,8 +104,8 @@ class CatalogCertificationTests(unittest.TestCase):
         dispatch = events(promotion)['workflow_dispatch']['inputs']
         self.assertNotIn('frameworks', dispatch)
         self.assertEqual(dispatch['release']['default'], '')
-        self.assertEqual(dispatch['soak-hours']['default'], 6)
-        self.assertIn("vars.STABLE_PROMOTION_AUTHORIZED == 'true'", promotion['jobs']['promote']['if'])
+        self.assertEqual(dispatch['soak-hours']['default'], 0)
+        self.assertIn("needs.config.outputs.promotion_authorized == 'true'", promotion['jobs']['promote']['if'])
 
 
 if __name__ == '__main__':

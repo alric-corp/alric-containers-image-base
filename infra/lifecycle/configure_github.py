@@ -5,13 +5,18 @@ Does not merge code, change the default branch, or enable promotion. Existing
 review gates are preserved. GitHub Environment branch policies allow only the
 code branch; neither account is represented by a Git branch.
 """
+import base64
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG = json.loads((ROOT/'policies/release/environments.json').read_text())
+sys.path.insert(0, str(ROOT))
+from scripts.pipeline.governance.configuration import configuration, promotion_policy
+
+CONFIG = configuration()
 REPO = CONFIG['repository']
 
 
@@ -28,15 +33,8 @@ def api(path, method='GET', payload=None, missing=False):
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 
-def variable(path, name, value):
-    exists = api(f'{path}/{name}', missing=True)
-    api(f'{path}/{name}' if exists else path, 'PATCH' if exists else 'POST',
-        {'name':name, 'value':value})
-
-
 def main():
     for env in ('DEV', 'HOM'):
-        cfg = CONFIG[env]
         path = f'environments/{env}'
         existing = api(path, missing=True)
         if existing:
@@ -50,13 +48,6 @@ def main():
             raise ValueError(f'{env} allows an unexpected ref; reconcile explicitly before activation')
         if not policies:
             api(f'{path}/deployment-branch-policies', 'POST', {'name':CONFIG['branch'], 'type':'branch'})
-        arn = f'arn:aws:iam::{cfg["account_id"]}:role/{cfg["role_name"]}'
-        for key, value in {'AWS_REGION':cfg['region'], 'AWS_ACCOUNT_ID':cfg['account_id'],
-                           'AWS_ROLE_ARN':arn, 'RELEASE_BUCKET':cfg['release_bucket']}.items():
-            variable(path+'/variables', key, value)
-        for key, value in {f'{env}_ROLE_ARN':arn, f'{env}_ACCOUNT_ID':cfg['account_id'],
-                           f'{env}_REGION':cfg['region']}.items():
-            variable('actions/variables', key, value)
     # CODEOWNERS and CONTRIBUTING require both repository checks and a code
     # owner review on the code branch. Bootstrap can precede branch creation.
     if api('branches/develop', missing=True):
@@ -68,10 +59,14 @@ def main():
                 'require_code_owner_reviews': True, 'required_approving_review_count': 1},
             'restrictions': None, 'allow_force_pushes': False, 'allow_deletions': False,
         })
-    print('DEV/HOM prepared; develop is the only allowed deployment branch. Promotion switch unchanged.')
+    print('DEV/HOM prepared; develop is the only allowed deployment branch. Settings come from policies/pipeline/config.json.')
 
 
 def verify():
+    published = api('contents/policies/pipeline/config.json?ref=develop')
+    published_config = json.loads(base64.b64decode(published['content']))
+    if published_config != CONFIG:
+        raise ValueError('Local pipeline settings differ from the configuration published in develop')
     protection = api('branches/develop/protection')
     record = dict(checked_at=datetime.now(timezone.utc).isoformat(),
         default_branch=api('')['default_branch'], code_branch='develop',
@@ -83,8 +78,17 @@ def verify():
         policies = api(f'environments/{env}/deployment-branch-policies')['branch_policies']
         assert [(p['name'], p['type']) for p in policies] == [('develop', 'branch')]
         record['environments'][env] = {'allowed_refs': [{'name':p['name'], 'type':p['type']} for p in policies]}
-    variables = {v['name']:v['value'] for v in api('actions/variables')['variables']}
-    record['automatic_hom_promotion_enabled'] = variables.get('STABLE_PROMOTION_AUTHORIZED') == 'true'
+    record['pipeline_configuration'] = 'policies/pipeline/config.json'
+    record['pipeline_configuration_blob'] = published['sha']
+    record['promotion_policies'] = {}
+    for env in ('DEV', 'HOM'):
+        path = f'policies/pipeline/promote-{env.lower()}.json'
+        published = api(f'contents/{path}?ref=develop')
+        document = json.loads(base64.b64decode(published['content']))
+        if document != promotion_policy(env):
+            raise ValueError(f'Local {env} promotion policy differs from develop')
+        record['promotion_policies'][env] = dict(path=path, blob=published['sha'], **document)
+    record['automatic_hom_promotion_enabled'] = record['promotion_policies']['HOM']['enabled']
     path = ROOT / 'docs/evidence/dev-hom-bootstrap/github-readback.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(record, indent=2) + '\n')
@@ -92,7 +96,6 @@ def verify():
 
 
 if __name__ == '__main__':
-    import sys
     if sys.argv[1:] == ['--verify-only']:
         verify()
     elif not sys.argv[1:]:

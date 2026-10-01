@@ -21,7 +21,7 @@ variable "hom_profile" {
 }
 
 locals {
-  config = jsondecode(file("${path.module}/../../policies/release/environments.json"))
+  config = jsondecode(file("${path.module}/../../policies/pipeline/config.json"))
   dev    = local.config.DEV
   hom    = local.config.HOM
   catalog = toset([

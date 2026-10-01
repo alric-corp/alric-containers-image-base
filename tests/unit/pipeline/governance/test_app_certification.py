@@ -101,8 +101,8 @@ class AppCertificationWorkflowTests(unittest.TestCase):
                 credentials = action_steps(job, 'aws-actions/configure-aws-credentials')
                 self.assertEqual(len(credentials), 1)
                 config = credentials[0]['with']
-                self.assertEqual(config['role-to-assume'], '${{ vars.DEV_ROLE_ARN }}')
-                self.assertEqual(config['allowed-account-ids'], '${{ vars.AWS_ACCOUNT_ID }}')
+                self.assertEqual(config['role-to-assume'], '${{ steps.pipeline.outputs.AWS_ROLE_ARN }}')
+                self.assertEqual(config['allowed-account-ids'], '${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}')
                 self.assertNotIn('aws-access-key-id', config)
                 self.assertNotIn('aws-secret-access-key', config)
                 policy = json.loads(config['inline-session-policy'])
@@ -118,8 +118,8 @@ class AppCertificationWorkflowTests(unittest.TestCase):
                         self.assertEqual(item['Resource'], '*')
                     else:
                         self.assertEqual(item['Resource'],
-                                         'arn:aws:ecr:${{ vars.AWS_REGION }}:'
-                                         '${{ vars.AWS_ACCOUNT_ID }}:repository/image-base-*')
+                                         'arn:aws:ecr:${{ steps.pipeline.outputs.AWS_REGION }}:'
+                                         '${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}:repository/image-base-*')
         self.assertEqual(self.jobs['summary']['permissions'], {'contents': 'read', 'actions': 'read'})
         self.assertEqual(action_steps(self.jobs['summary'], 'aws-actions/configure-aws-credentials'), [])
 

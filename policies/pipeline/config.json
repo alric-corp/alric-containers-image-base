@@ -3,7 +3,6 @@
   "repository": "alric-corp/alric-containers-image-base",
   "branch": "develop",
   "subject_prefix": "repo:alric-corp@178685987/alric-containers-image-base@1360616627",
-  "minimum_soak_hours": 6,
   "DEV": {
     "account_id": "712107929769",
     "region": "us-east-1",
@@ -15,5 +14,15 @@
     "region": "sa-east-1",
     "role_name": "alric-image-base-factory-hom",
     "release_bucket": "248908662184-image-base-releases-hom"
+  },
+  "infra": {
+    "plan_enabled": false,
+    "plan_role_name": "alric-github-repo-1360616627-infra-plan",
+    "apply_role_name": "alric-github-repo-1360616627-infra-apply",
+    "backend": {
+      "bucket": "712107929769-alric-containers-image-base-tfstate",
+      "region": "us-east-2",
+      "key": "alric-containers-image-base/terraform.tfstate"
+    }
   }
 }

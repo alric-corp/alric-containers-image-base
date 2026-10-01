@@ -109,12 +109,15 @@ class ScheduleSeparationTests(unittest.TestCase):
         self.assertNotIn('frameworks', inputs)
         self.assertEqual(inputs['release']['default'], '')
 
-    def test_scheduled_promotion_soak_hours_default_is_six(self):
+    def test_scheduled_promotion_soak_hours_comes_from_json(self):
         inputs = self.promotion_triggers['workflow_dispatch']['inputs']
-        self.assertEqual(inputs['soak-hours']['default'], 6)
+        self.assertEqual(inputs['soak-hours']['default'], 0)
+        config = json.loads((ROOT / 'policies/pipeline/promote-hom.json').read_text())
+        self.assertGreaterEqual(config['soak_hours'], 6)
         execution = next(step for step in self.promotion['jobs']['promote']['steps']
                          if step.get('name') == 'Promote exact eligible release to HOM')
-        self.assertEqual(execution['env']['SOAK_HOURS'], "${{ inputs.soak-hours || '6' }}")
+        self.assertEqual(execution['env']['SOAK_HOURS'],
+                         '${{ inputs.soak-hours || steps.pipeline.outputs.MINIMUM_SOAK_HOURS }}')
 
     def test_one_hom_job_owns_the_entire_release_promotion(self):
         promote = self.promotion['jobs']['promote']

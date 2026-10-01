@@ -47,13 +47,16 @@ jobs:
           if not os.environ['REASON'].strip():
               raise SystemExit('reason is required')
           PY
+      - name: Load versioned pipeline configuration
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope HOM
       - name: Configure HOM credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-duration-seconds: 10800
-          role-to-assume: ${{ vars.HOM_ROLE_ARN }}
-          aws-region: ${{ vars.HOM_REGION }}
-          allowed-account-ids: ${{ vars.HOM_ACCOUNT_ID }}
+          role-to-assume: ${{ steps.pipeline.outputs.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.pipeline.outputs.AWS_REGION }}
+          allowed-account-ids: ${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}
       - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1, ORAS 1.3.1

@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "enabled": false,
+  "frameworks": [
+    "go1-26",
+    "go1-26-dev"
+  ],
+  "soak_hours": 6
+}

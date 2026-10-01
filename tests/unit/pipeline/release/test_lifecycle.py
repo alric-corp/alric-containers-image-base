@@ -23,6 +23,10 @@ CLOCK = datetime(2026, 9, 30, 20, tzinfo=timezone.utc)
 PAIR = ['go1-26', 'go1-26-dev']
 
 
+def policy(environment):
+    return dict(schema_version=1, enabled=True, frameworks=PAIR, soak_hours=0 if environment=='DEV' else 6)
+
+
 def manifest(run=12345, age=7):
     images = {}
     for name in PAIR:
@@ -72,6 +76,8 @@ class SelectionTests(unittest.TestCase):
         self.clock = patch.object(flow, 'now', return_value=CLOCK)
         self.clock.start()
         self.addCleanup(self.clock.stop)
+        policies = patch.object(flow, 'promotion_policy', side_effect=policy)
+        policies.start(); self.addCleanup(policies.stop)
 
     def test_A_is_selected_while_newer_B_has_not_completed_its_own_soak(self):
         a, b = manifest(), manifest(12346, 1)
@@ -127,6 +133,27 @@ class SelectionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             model.release_units(['nodejs22-dev'])
 
+    def test_target_policy_never_splits_or_promotes_unlisted_frameworks(self):
+        m = manifest()
+        with patch.object(flow, 'promotion_policy', return_value=dict(policy('HOM'), frameworks=['java21', 'java21-dev'])):
+            self.assertIsNone(flow.choose([m], {}, 6, CLOCK))
+        with patch.object(flow, 'promotion_policy', return_value=dict(policy('HOM'), enabled=False)):
+            with self.assertRaisesRegex(ValueError, 'disabled'):
+                flow.choose([m], {}, 6, CLOCK)
+
+    def test_dev_soak_begins_at_validation_and_preserves_monotonicity(self):
+        candidate = manifest()
+        candidate.update(state='DEV_VALIDATED', dev_validated_at=(CLOCK-timedelta(hours=2)).isoformat())
+        with patch.object(flow, 'promotion_policy', return_value=dict(policy('DEV'), soak_hours=2)):
+            self.assertEqual(flow.choose([candidate], {}, 2, CLOCK, environment='DEV'), candidate)
+            self.assertIsNone(flow.choose([candidate], {}, 2, CLOCK-timedelta(seconds=1), environment='DEV'))
+            with self.assertRaises(ValueError):
+                flow.choose([candidate], {}, 0, CLOCK, environment='DEV')
+            states = {name: {'high_watermark': [candidate['run_id']+1, 1]} for name in PAIR}
+            self.assertIsNone(flow.choose([candidate], states, 2, CLOCK, environment='DEV'))
+            states = {name: {'hold': True} for name in PAIR}
+            self.assertIsNone(flow.choose([candidate], states, 2, CLOCK, environment='DEV'))
+
 
 class MutationTests(unittest.TestCase):
     def setUp(self):
@@ -138,6 +165,8 @@ class MutationTests(unittest.TestCase):
         self.env.start(); self.addCleanup(self.env.stop)
         self.clock = patch.object(flow, 'now', return_value=CLOCK)
         self.clock.start(); self.addCleanup(self.clock.stop)
+        policies = patch.object(flow, 'promotion_policy', side_effect=policy)
+        policies.start(); self.addCleanup(policies.stop)
 
     def states(self):
         return {name: None for name in PAIR}
@@ -219,6 +248,87 @@ class MutationTests(unittest.TestCase):
             flow.write_stable(self.m, PAIR[0], 'HOM', self.reports)
         self.assertIn('--image-digest', aws.call_args.args)
         self.assertIn(self.m['images'][PAIR[0]]['digest'], aws.call_args.args)
+
+    def test_dev_validation_persists_identity_and_resumes_after_soak_without_rebuild(self):
+        for hours in (0, 2):
+            store = MemoryStore()
+            base = {k: v for k, v in self.m.items() if k not in ('state', 'dev_stable_at', 'dev_readback', 'consumer_results')}
+            args = SimpleNamespace(evidence=Path('unused'), frameworks=json.dumps(PAIR), reports=self.reports)
+            results = [self.m['consumer_results'][f'go1-26-{arch}'] for arch in ('amd64', 'arm64')]
+            with self.subTest(hours=hours), patch.dict(os.environ, GITHUB_SHA='a'*40), \
+                    patch.object(flow, 'promotion_policy', return_value=dict(policy('DEV'), soak_hours=hours)), \
+                    patch.object(flow, 'from_publications', return_value=copy.deepcopy(base)), \
+                    patch.object(flow, 'Store', return_value=store), patch.object(flow, 'validate_destination'), \
+                    patch.object(flow, 'verify_image'), patch.object(flow, 'scan_images', return_value=0), \
+                    patch.object(flow, 'execute', side_effect=results) as execute, \
+                    patch.object(flow, 'publish_states') as publish:
+                flow.approve_dev(args)
+                key = flow.candidate_key(self.m['release_id'])
+                original = copy.deepcopy(store.records[key])
+                self.assertEqual(original['state'], 'DEV_VALIDATED')
+                self.assertEqual(original['images'], self.m['images'])
+                scheduled = SimpleNamespace(release=None, soak_hours=hours, resume=False, reports=self.reports)
+                if hours:
+                    publish.assert_not_called()
+                    self.assertNotIn(flow.manifest_key(self.m['release_id']), store.records)
+                    with patch.object(flow, 'now', return_value=CLOCK+timedelta(hours=hours)-timedelta(seconds=1)):
+                        flow.promote_dev(scheduled)
+                    publish.assert_not_called()
+                    with patch.object(flow, 'now', return_value=CLOCK+timedelta(hours=hours)):
+                        flow.promote_dev(scheduled)
+                self.assertEqual(publish.call_count, 1)
+                approved = store.records[flow.manifest_key(self.m['release_id'])]
+                self.assertEqual(approved['state'], 'DEV_STABLE')
+                self.assertEqual(approved['dev_stable_at'], (CLOCK+timedelta(hours=hours)).isoformat())
+                self.assertEqual(approved['images'], original['images'])
+                self.assertEqual(store.records[key], original)
+                self.assertEqual(execute.call_count, 2)
+                with patch.object(flow, 'now', return_value=CLOCK+timedelta(hours=hours+1)):
+                    flow.promote_dev(scheduled)
+                self.assertEqual(publish.call_count, 1)
+
+    def test_dev_delayed_scan_or_trust_failure_cannot_write_stable(self):
+        candidate = dict(self.m, state='DEV_VALIDATED', dev_validated_at=(CLOCK-timedelta(hours=2)).isoformat())
+        for failure in ('trust', 'scan'):
+            store = MemoryStore({flow.candidate_key(self.m['release_id']): candidate})
+            args = SimpleNamespace(release=self.m['release_id'], soak_hours=2, resume=False, reports=self.reports)
+            with self.subTest(failure=failure), patch.object(flow, 'Store', return_value=store), \
+                    patch.object(flow, 'validate_destination'), \
+                    patch.object(flow, 'verify_image', side_effect=ValueError('bad trust') if failure=='trust' else None), \
+                    patch.object(flow, 'scan_images', return_value=1), patch.object(flow, 'publish_states') as publish, \
+                    self.assertRaises(ValueError):
+                flow.promote_dev(args)
+            publish.assert_not_called()
+            self.assertNotIn(flow.manifest_key(self.m['release_id']), store.records)
+
+    def test_failed_dev_approval_persistence_is_reported_and_retried_by_exact_identity(self):
+        candidate = dict(self.m, state='DEV_VALIDATED', dev_validated_at=(CLOCK-timedelta(hours=2)).isoformat())
+        approval_key = flow.manifest_key(candidate['release_id'])
+        store = MemoryStore({flow.candidate_key(candidate['release_id']): candidate})
+        original_put = store.put
+        def unavailable(key, value, immutable=False):
+            if key == approval_key:
+                raise ValueError('S3 unavailable')
+            return original_put(key, value, immutable)
+        def publish(target, m, before, environment, reports):
+            # Model completed tag/state writes before the final approval fails.
+            for name, item in m['images'].items():
+                target.put(f'state/{name}.json', dict(release_id=m['release_id'], digest=item['digest'],
+                    high_watermark=list(flow.ordering(m)), hold=False))
+            flow.save(reports / 'release-outcome.json', {'status': 'PASS'})
+        args = SimpleNamespace(release=candidate['release_id'], soak_hours=2, resume=False, reports=self.reports)
+        with patch.object(flow, 'Store', return_value=store), patch.object(flow, 'validate_destination'), \
+                patch.object(flow, 'verify_image'), patch.object(flow, 'scan_images', return_value=0), \
+                patch.object(flow, 'publish_states', side_effect=publish) as writes:
+            with patch.object(store, 'put', side_effect=unavailable), self.assertRaises(ValueError):
+                flow.promote_dev(args)
+            result = json.loads((self.reports/'release-outcome.json').read_text())
+            self.assertEqual((result['status'], result['phase']), ('FAIL', 'persist-dev-approval'))
+            self.assertNotIn(approval_key, store.records)
+            flow.promote_dev(args)
+        self.assertEqual(writes.call_count, 2)
+        self.assertEqual(store.records[approval_key]['images'], candidate['images'])
+        self.assertEqual(store.records[approval_key]['state'], 'DEV_STABLE')
 
 
 class StoreAndTrustTests(unittest.TestCase):

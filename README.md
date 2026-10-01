@@ -272,7 +272,8 @@ O `workflow.yml` separa validação e publicação:
 
 - **PRs para `develop`:** chamam `validate-base-images.yml`, com `contents: read`, sem OIDC, autenticação AWS ou push.
 - **Push na `develop`, execução manual na `develop` e schedule diário às 03:23 UTC:** chamam `build-base-images.yml`, que executa a mesma validação antes do job de publicação. O cron `23 3 * * *` corresponde aproximadamente a 00:23 em America/Sao_Paulo; permanece UTC e evita o início da hora, sem garantia de pontualidade do scheduler. O schedule passa a usar essa definição quando `develop` for a default branch.
-- **Promoção:** roda a cada hora, no minuto 17, e seleciona somente candidatos que completaram o soak mínimo de seis horas desde o push.
+- **Promoção DEV:** lê `promote-dev.json`; candidates validados com soak pendente são retomados a cada hora, no minuto 7.
+- **Promoção HOM:** lê `promote-hom.json`; roda a cada hora, no minuto 17, e exige o soak configurado após a confirmação de DEV `stable` (mínimo de seis horas).
 
 **Distroless - Catalog certification** oferece um dispatch manual na `develop`
 com os 16 frameworks fixos, usando o mesmo engine e lock do publicador.
@@ -409,8 +410,10 @@ consumidores. A promoção copia o mesmo artifact, suas assinaturas e attestatio
 para `248908662184.dkr.ecr.sa-east-1.amazonaws.com`; verifica o destino inteiro
 antes de atualizar qualquer stable. Não há rebuild nem resolução de DEV stable
 na seleção. O build diário continua no par Go 1.26; o dispatch de certificação
-suporta o catálogo completo. O cron horário usa as releases aprovadas e o kill
-switch `STABLE_PROMOTION_AUTHORIZED`.
+suporta o catálogo completo. O cron horário usa as releases aprovadas e a
+habilitação `enabled`, frameworks e soak de `policies/pipeline/promote-hom.json`.
+A promoção DEV usa `policies/pipeline/promote-dev.json`, com soak inicial zero
+e retomada horária pelo mesmo digest quando houver espera configurada.
 
 Veja [DEV → HOM: operação, infraestrutura e ativação](docs/dev-hom-promotion.md)
 para os contratos, limites da atomicidade ECR e critérios de aceite hospedado.
@@ -466,7 +469,7 @@ O [ADR-0003 — Controles da fábrica em workflows federados](docs/adr/0003-cont
 corporativos a confirmar. O contrato de reuso abaixo permanece técnico;
 não estabelece homologação de scanner ou dispensa de requisitos externos.
 
-Os workflows podem ser chamados diretamente. `validate-base-images.yml` exige apenas `frameworks` e `contents: read`, sem credenciais AWS. Build/publicação exige OIDC e Environment DEV, com `DEV_ROLE_ARN` e `DEV_ACCOUNT_ID` configurados. Promoção HOM é um entrypoint interno por schedule/dispatch; seu destino e seu manifesto são governados em `policies/release/environments.json`. No uso externo, `actions/checkout` utiliza o repositório chamador, que precisa conter os manifestos e scripts esperados. Exemplo de permissões para build/publicação.
+Os workflows podem ser chamados diretamente. `validate-base-images.yml` exige apenas `frameworks` e `contents: read`, sem credenciais AWS. Build/publicação exige OIDC e Environment DEV, com a configuração DEV em `policies/pipeline/config.json`. Promoção HOM é um entrypoint interno por schedule/dispatch; seu destino e seu manifesto são governados em `policies/pipeline/config.json`. No uso externo, `actions/checkout` utiliza o repositório chamador, que precisa conter os manifestos e scripts esperados. Exemplo de permissões para build/publicação.
 
 > **Pin pendente.** O exemplo exige um SHA imutável de `alric-corp/alric-containers-image-base` cujo `build-base-images.yml` restrinja a publicação a `refs/heads/develop`. Esse SHA ainda não existe: só pode ser o commit aprovado e publicado em `develop`. O pin anterior, `e3ed68259f66af41e8054a4c0ac29a54082ddd60`, é **histórico** — nele os dois workflows exigem `refs/heads/main`, e um chamador em `develop` pularia publicação e promoção. Não use esse SHA, `@develop`, `@main` nem tag móvel; substitua `<SHA-aprovado-em-develop>` pelo commit de `develop` depois de aprovado.
 
@@ -482,18 +485,17 @@ jobs:
   build-images:
     uses: alric-corp/alric-containers-image-base/.github/workflows/build-base-images.yml@<SHA-aprovado-em-develop>
     with:
-      aws-region: us-east-1
       frameworks: '["java25", "java25-dev", "nodejs24", "nodejs24-dev"]'
 
 ```
 
 | Nome | Workflow | Tipo | Obrigatório | Descrição |
 |---|---|---|---|---|
-| `aws-region` | build-base-images | input | sim | região DEV onde o ECR está |
-| `DEV_ROLE_ARN` / `DEV_ACCOUNT_ID` | build-base-images | variável GitHub | sim | identidade do Environment DEV |
+| `policies/pipeline/config.json` | todos os jobs AWS | arquivo versionado | sim | contas, regiões, roles, buckets e backend; [contrato](policies/pipeline/README.md) |
+| `promote-dev.json` / `promote-hom.json` | promoções | arquivos versionados | sim | `enabled`, `frameworks` e `soak_hours` por destino |
 | `frameworks` | build-base-images | input | sim | array JSON de pares completos do catálogo |
 | `release` | promote-stable / recover-stable | dispatch | recovery: sim | identidade exata `r<RUN>-a<ATTEMPT>` |
-| `soak-hours` | promote-stable | dispatch | não (default `6`) | horas após aprovação DEV stable |
+| `soak-hours` | promote-stable | dispatch | não (`0` usa JSON) | horas após aprovação DEV stable, respeitando `soak_hours` de `promote-hom.json` |
 | `resume-automation` | promote-stable | dispatch | não (default `false`) | retoma membros pausados somente com release explícita |
 
 Pré-requisito de infraestrutura: provider OIDC e roles aprovados por Cloud/IAM, com trust restrita e permissões conforme o [contrato P1-04](docs/iam-permission-contract.md). Seus exemplos locais não alteram a policy ativa. A [Infra do produto](infra/README.md) provisiona os ECRs; o publicador é `PREPROVISIONED_ONLY`, sem administração de repositórios. `PutImage` no mesmo repositório não reserva `stable` exclusivamente ao promotor.

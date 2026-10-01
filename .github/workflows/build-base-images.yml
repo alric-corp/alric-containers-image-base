@@ -3,10 +3,6 @@ name: Distroless - Build engine
 on:
   workflow_call:
     inputs:
-      aws-region:
-        description: "Região AWS do ECR (ex.: us-east-1)"
-        type: string
-        required: true
       frameworks:
         description: "JSON array de frameworks a buildar (deve casar com um arquivo em frameworks/<nome>.yaml)."
         type: string
@@ -246,19 +242,22 @@ jobs:
       - name: Record publication tool versions
         run: python3 -B -m scripts.pipeline.operations.tool_versions publication tool-versions.json
 
+      - name: Load versioned pipeline configuration
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
-          role-to-assume: ${{ vars.DEV_ROLE_ARN }}
-          allowed-account-ids: ${{ vars.DEV_ACCOUNT_ID }}
-          aws-region: ${{ inputs.aws-region }}
+          role-to-assume: ${{ steps.pipeline.outputs.AWS_ROLE_ARN }}
+          allowed-account-ids: ${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}
+          aws-region: ${{ steps.pipeline.outputs.AWS_REGION }}
 
       # Infra é source of truth da configuração do ECR; Containers valida o
       # destino pré-provisionado e falha fechado sem criar ou reparar recursos.
       - name: Validate pre-provisioned ECR repository
         env:
           FRAMEWORK: ${{ matrix.framework }}
-          EXPECTED_REGION: ${{ inputs.aws-region }}
+          EXPECTED_REGION: ${{ steps.pipeline.outputs.AWS_REGION }}
         run: |
           set -euo pipefail
           REPO="image-base-${FRAMEWORK}"

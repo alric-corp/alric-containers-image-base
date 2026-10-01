@@ -39,7 +39,8 @@ CALLER_INPUTS = {
         'artifact-run-id': '${{ inputs.artifact-run-id }}',
     },
 }
-LOCAL_ACTIONS = {'promote-stable.yml': 'promote', 'recover-stable.yml': 'recover'}
+LOCAL_ACTIONS = (('promote-stable.yml', 'promote'), ('recover-stable.yml', 'recover'),
+                 ('dev-stable.yml', 'approve'), ('dev-stable.yml', 'promote'))
 TRIVY = 'actions/setup-trivy'
 
 
@@ -185,7 +186,7 @@ def dependencies(root=ROOT):
 def _tooling(documents, repository, expected):
     pins = set()
     positions = set()
-    for name, job_id in expected.items():
+    for name, job_id in expected:
         job = required_job(documents, name, job_id)
         index, step = required_step(job, 'Install Trivy', f'{name}/{job_id}')
         pins.add(reference(step.get('uses'), repository, TRIVY,
