@@ -46,10 +46,10 @@ class ConfigurationTests(unittest.TestCase):
                     self.assertEqual(settings['TF_STATE_KEY'], 'alric-containers-image-base/terraform.tfstate')
 
     def test_disabled_promotion_is_not_overridden_by_environment_variables(self):
-        self.cfg['promotion_authorized'] = False
+        policy = dict(config.promotion_policy('HOM'), enabled=False)
         envfile = self.directory / 'env'
         outfile = self.directory / 'output'
-        with patch.object(config, 'configuration', return_value=self.cfg), patch.dict(os.environ, {
+        with patch.object(config, 'promotion_policy', return_value=policy), patch.dict(os.environ, {
                 'STABLE_PROMOTION_AUTHORIZED': 'true', 'AWS_ACCOUNT_ID': '999999999999',
                 'GITHUB_ENV': str(envfile), 'GITHUB_OUTPUT': str(outfile)}, clear=True):
             with self.assertRaisesRegex(ValueError, 'disabled'):
@@ -78,9 +78,7 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_invalid_destination_flags_and_soak_fail_closed(self):
         changes = [
-            ('promotion_authorized', 'false'), ('promotion_authorized', 1),
-            ('schema_version', True), ('minimum_soak_hours', 5),
-            ('minimum_soak_hours', float('nan')), ('minimum_soak_hours', float('inf')),
+            ('schema_version', True),
             ('branch', 'main'), ('subject_prefix', 'repo:other/repository'),
         ]
         for key, value in changes:
@@ -121,9 +119,8 @@ class ConfigurationTests(unittest.TestCase):
         self.assertFalse(outfile.exists())
 
     def test_lifecycle_cli_blocks_disabled_promotion_before_orchestration(self):
-        cfg = copy.deepcopy(self.cfg)
-        cfg['promotion_authorized'] = False
-        with patch.object(lifecycle, 'configuration', return_value=cfg), \
+        policy = dict(config.promotion_policy('HOM'), enabled=False)
+        with patch.object(lifecycle, 'promotion_policy', return_value=policy), \
                 patch.object(lifecycle, 'promote_hom') as promote, contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(lifecycle.main(['promote-hom', '--reports', str(self.directory)]), 1)
         promote.assert_not_called()
@@ -161,11 +158,53 @@ class ConfigurationTests(unittest.TestCase):
                          '${{ inputs.soak-hours || steps.pipeline.outputs.MINIMUM_SOAK_HOURS }}')
 
     def test_lifecycle_default_soak_tracks_json_without_cli_override(self):
-        cfg = copy.deepcopy(self.cfg)
-        cfg.update(promotion_authorized=True, minimum_soak_hours=12)
-        with patch.object(lifecycle, 'configuration', return_value=cfg), patch.object(lifecycle, 'promote_hom') as promote:
+        policy = dict(config.promotion_policy('HOM'), enabled=True, soak_hours=12)
+        with patch.object(lifecycle, 'promotion_policy', return_value=policy), patch.object(lifecycle, 'promote_hom') as promote:
             self.assertEqual(lifecycle.main(['promote-hom']), 0)
         self.assertEqual(promote.call_args.args[0].soak_hours, 12)
+
+    def test_promotion_files_have_independent_defaults_and_frameworks(self):
+        dev, hom = config.promotion_policy('DEV'), config.promotion_policy('HOM')
+        self.assertEqual(dev['frameworks'], ['go1-26', 'go1-26-dev'])
+        self.assertEqual(hom['frameworks'], dev['frameworks'])
+        self.assertEqual((dev['soak_hours'], hom['soak_hours']), (0, 6))
+        self.assertEqual((dev['enabled'], hom['enabled']), (True, False))
+        self.assertNotIn('minimum_soak_hours', self.cfg)
+        self.assertNotIn('promotion_authorized', self.cfg)
+
+    def test_invalid_promotion_policies_cannot_authorize_partial_pairs_or_bad_soak(self):
+        path = self.directory / 'promotion.json'
+        for environment in ('DEV', 'HOM'):
+            changes = [('enabled', 'true'), ('soak_hours', True), ('soak_hours', -1),
+                       ('soak_hours', float('nan')), ('soak_hours', float('inf')),
+                       ('frameworks', []), ('frameworks', ['go1-26']),
+                       ('frameworks', ['nodejs22-dev']), ('frameworks', ['not-in-catalog']),
+                       ('frameworks', ['go1-26', 'go1-26-dev', 'go1-26'])]
+            if environment == 'HOM':
+                changes += [('soak_hours', 0), ('soak_hours', 5.99)]
+            for key, value in changes:
+                policy = dict(config.promotion_policy(environment))
+                policy[key] = value
+                path.write_text(json.dumps(policy))
+                with self.subTest(environment=environment, key=key, value=value), self.assertRaises(ValueError):
+                    config.promotion_policy(environment, path)
+        with self.assertRaises(OSError):
+            config.promotion_policy('DEV', self.directory / 'missing.json')
+        path.write_text('{"enabled":false,"enabled":true}')
+        with self.assertRaisesRegex(ValueError, 'duplicate'):
+            config.promotion_policy('HOM', path)
+
+    def test_dev_promotion_schedule_shares_lock_and_consumes_exact_validated_candidates(self):
+        workflow = yaml.safe_load((config.ROOT / '.github/workflows/dev-stable.yml').read_text())
+        jobs = workflow['jobs']
+        self.assertEqual(jobs['config']['permissions'], {'contents': 'read'})
+        self.assertEqual(jobs['promote']['concurrency'], jobs['approve']['concurrency'])
+        self.assertEqual(jobs['promote']['environment'], 'DEV')
+        self.assertIn('inputs.frameworks !=', jobs['approve']['if'])
+        self.assertIn('inputs.frameworks ==', jobs['config']['if'])
+        commands = '\n'.join(s.get('run', '') for s in jobs['promote']['steps'])
+        self.assertIn('lifecycle promote-dev', commands)
+        self.assertNotIn('build_image', commands)
 
 
 if __name__ == '__main__':

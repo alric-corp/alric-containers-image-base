@@ -17,6 +17,7 @@ import sys
 from scripts.pipeline.artifacts.scan_images import scan_images
 from scripts.pipeline.consumer_apps.inventory import json_document, require
 from scripts.pipeline.consumer_apps.runner import execute, validate_result
+from scripts.pipeline.governance.configuration import promotion_policy
 from scripts.pipeline.release.find_promotion_candidate import load_quarantined_digests
 from scripts.pipeline.release.release_manifest import (
     RELEASE_ID, checksum, configuration, consumer_inventory, from_publications,
@@ -41,6 +42,10 @@ def save(path, document):
 def manifest_key(release_id):
     require(RELEASE_ID.fullmatch(release_id), 'release must be an exact r<RUN_ID>-a<ATTEMPT>')
     return f'releases/{release_id}/manifest.json'
+
+
+def candidate_key(release_id):
+    return manifest_key(release_id).replace('/manifest.json', '/candidate.json')
 
 
 def aws(environment, *args):
@@ -88,10 +93,8 @@ def write_stable(manifest, framework, environment, reports):
     read_index(image + ':stable', item, directory / 'stable-readback')
 
 
-def verify_approved(manifest):
+def verify_consumers(manifest):
     validate(manifest)
-    require(manifest['state'] == 'DEV_STABLE', 'release has no DEV stable approval')
-    require(timestamp(manifest['dev_stable_at']) <= now(), 'DEV approval timestamp is in the future')
     inventory = consumer_inventory(manifest)
     expected = {f'{unit[0]}-{arch}' for unit in manifest['units'] for arch in ('amd64', 'arm64')}
     require(set(manifest['consumer_results']) == expected, 'consumer coverage is incomplete')
@@ -99,6 +102,20 @@ def verify_approved(manifest):
         require(key == result['framework'] + '-' + result['platform'].removeprefix('linux/'),
                 'consumer result is filed under another framework or architecture')
         validate_result(result, inventory)
+    return manifest
+
+
+def verify_candidate(manifest):
+    verify_consumers(manifest)
+    require(manifest['state'] == 'DEV_VALIDATED', 'candidate has no completed DEV validation')
+    require(timestamp(manifest['dev_validated_at']) <= now(), 'candidate validation timestamp is in the future')
+    return manifest
+
+
+def verify_approved(manifest):
+    verify_consumers(manifest)
+    require(manifest['state'] == 'DEV_STABLE', 'release has no DEV stable approval')
+    require(timestamp(manifest['dev_stable_at']) <= now(), 'DEV approval timestamp is in the future')
     require(manifest['dev_readback'] == {f: i['digest'] for f, i in manifest['images'].items()},
             'DEV stable read-back did not confirm the whole release')
     return manifest
@@ -108,19 +125,26 @@ def ordering(manifest):
     return manifest['run_id'], manifest['attempt']
 
 
-def choose(manifests, states, soak_hours, clock, requested=None, resume=False):
+def choose(manifests, states, soak_hours, clock, requested=None, resume=False, environment='HOM'):
     """Selection consumes immutable approvals; it never resolves DEV:stable."""
-    minimum = configuration()['minimum_soak_hours']
-    require(math.isfinite(soak_hours) and soak_hours >= minimum, 'minimum soak is six hours')
+    policy = promotion_policy(environment)
+    require(policy['enabled'], f'{environment} promotion is disabled')
+    require(type(soak_hours) in (int, float) and math.isfinite(soak_hours)
+            and policy['soak_hours'] <= soak_hours <= 8760, 'requested soak is below policy or invalid')
     require(not resume or requested, 'resuming automation requires an explicit release')
     eligible = []
     for manifest in manifests:
-        verify_approved(manifest)
+        (verify_candidate if environment == 'DEV' else verify_approved)(manifest)
         if requested and manifest['release_id'] != requested:
             continue
-        if timestamp(manifest['dev_stable_at']) + timedelta(hours=soak_hours) > clock:
+        if not set(manifest['images']) <= set(policy['frameworks']):
+            continue  # Never split an approved manifest to fit the allowed scope.
+        approved_at = 'dev_validated_at' if environment == 'DEV' else 'dev_stable_at'
+        if timestamp(manifest[approved_at]) + timedelta(hours=soak_hours) > clock:
             continue
-        accepted, changed = True, False
+        # DEV receives only candidates without a durable approval. Rewriting
+        # an identical stable can repair a failed final manifest persistence.
+        accepted, changed = True, environment == 'DEV'
         for name, image in manifest['images'].items():
             state = states.get(name) or {}
             if state.get('hold') and not resume:
@@ -211,27 +235,81 @@ def approve_dev(args):
         require(all(existing[key] == value for key, value in manifest.items()),
                 'release approval already binds different content')
         return existing
-    validate_destination(manifest, 'DEV')
-    inventory = consumer_inventory(manifest)
-    manifest['consumer_results'] = {}
-    for name in manifest['images']:
-        verify_image(manifest, name, registry('DEV'), args.reports / 'trust' / name)
-    for unit in manifest['units']:
-        for arch in ('amd64', 'arm64'):
-            result = execute(inventory, unit[0], arch, args.reports / 'consumers')
-            validate_result(result, inventory)
-            manifest['consumer_results'][f'{unit[0]}-{arch}'] = result
+    candidate = store.get(candidate_key(manifest['release_id']), optional=True)
+    if candidate:
+        verify_candidate(candidate)
+        require(all(candidate[key] == value for key, value in manifest.items()),
+                'validated candidate already binds different content')
+        manifest = candidate
+    else:
+        validate_destination(manifest, 'DEV')
+        inventory = consumer_inventory(manifest)
+        manifest['consumer_results'] = {}
+        for name in manifest['images']:
+            verify_image(manifest, name, registry('DEV'), args.reports / 'trust' / name)
+        for unit in manifest['units']:
+            for arch in ('amd64', 'arm64'):
+                result = execute(inventory, unit[0], arch, args.reports / 'consumers')
+                validate_result(result, inventory)
+                manifest['consumer_results'][f'{unit[0]}-{arch}'] = result
+        manifest.update(state='DEV_VALIDATED', dev_validated_at=now().isoformat())
+        verify_candidate(manifest)
+        store.put(candidate_key(manifest['release_id']), manifest, immutable=True)
+    save(args.reports / 'validated-candidate.json', manifest)
+    policy = promotion_policy('DEV')
     before = {name: store.get(f'state/{name}.json', optional=True) for name in manifest['images']}
-    require(all(not value or not value.get('hold') for value in before.values()),
-            'DEV stable has an incomplete operation; reconcile before releasing another candidate')
-    publish_states(store, manifest, before, 'DEV', args.reports)
+    if not policy['enabled'] or choose([manifest], before, policy['soak_hours'], now(), environment='DEV') is None:
+        save(args.reports / 'release-outcome.json', {'status': 'WAITING', 'release_id': manifest['release_id'],
+             'reason': 'DEV promotion disabled, out of scope, held, superseded, or still in soak'})
+        return manifest
+    return complete_dev(store, manifest, before, args.reports)
+
+
+def complete_dev(store, candidate, before, reports):
+    # The persisted candidate remains immutable when the approved copy gains
+    # the destination state and timestamp used by HOM's independent soak.
+    manifest = dict(candidate)
+    validate_destination(manifest, 'DEV')
+    for name, item in manifest['images'].items():
+        verify_image(manifest, name, registry('DEV'), reports / 'promotion-trust' / name)
+        require(scan_images('remote', f'{registry("DEV")}/image-base-{name}@{item["digest"]}',
+                            reports / 'promotion-scans' / name) == 0, 'blocking DEV promotion re-scan failed')
+    publish_states(store, manifest, before, 'DEV', reports)
     manifest.update(state='DEV_STABLE', dev_stable_at=now().isoformat(),
                     dev_readback={name: item['digest'] for name, item in manifest['images'].items()})
     verify_approved(manifest)
     # Only this final immutable record makes a release visible to HOM selection.
-    store.put(manifest_key(manifest['release_id']), manifest, immutable=True)
-    save(args.reports / 'release-manifest.json', manifest)
+    try:
+        store.put(manifest_key(manifest['release_id']), manifest, immutable=True)
+    except ERRORS as error:
+        save(reports / 'release-outcome.json', dict(status='FAIL', phase='persist-dev-approval',
+             release_id=manifest['release_id'], dev_readback=manifest['dev_readback'], error=str(error)))
+        raise
+    save(reports / 'release-manifest.json', manifest)
     return manifest
+
+
+def promote_dev(args):
+    store = Store('DEV')
+    keys = [candidate_key(args.release)] if args.release else [
+        key for key in store.keys('releases/') if key.endswith('/candidate.json')]
+    candidates = []
+    for key in keys:
+        candidate = verify_candidate(store.get(key))
+        approved = store.get(manifest_key(candidate['release_id']), optional=True)
+        if approved:
+            verify_approved(approved)
+            require(approved['images'] == candidate['images'], 'DEV approval conflicts with the candidate')
+            continue
+        candidates.append(candidate)
+    names = {name for candidate in candidates for name in candidate['images']}
+    states = {name: store.get(f'state/{name}.json', optional=True) for name in names}
+    candidate = choose(candidates, states, args.soak_hours, now(), args.release, args.resume, environment='DEV')
+    if candidate is None:
+        require(not args.release, 'requested candidate is outside DEV policy, held, superseded, already promoted, or still in soak')
+        save(args.reports / 'release-outcome.json', {'status': 'SKIPPED', 'reason': 'no eligible DEV candidate'})
+        return
+    return complete_dev(store, candidate, {name: states[name] for name in candidate['images']}, args.reports)
 
 
 def promote_hom(args):
@@ -244,7 +322,7 @@ def promote_hom(args):
     states = {name: target.get(f'state/{name}.json', optional=True) for name in names}
     manifest = choose(manifests, states, args.soak_hours, now(), args.release, args.resume)
     if manifest is None:
-        require(not args.release, 'requested release is held, superseded, already promoted, or still in soak')
+        require(not args.release, 'requested release is outside HOM policy, held, superseded, already promoted, or still in soak')
         save(args.reports / 'release-outcome.json', {'status': 'SKIPPED', 'reason': 'no eligible DEV release'})
         health_evidence(args.reports, names, None, False)
         return
@@ -311,7 +389,7 @@ def recover_hom(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('approve-dev', 'promote-hom', 'recover-hom'))
+    parser.add_argument('operation', choices=('approve-dev', 'promote-dev', 'promote-hom', 'recover-hom'))
     parser.add_argument('--frameworks')
     parser.add_argument('--evidence', type=Path)
     parser.add_argument('--release')
@@ -321,16 +399,19 @@ def main(argv=None):
     parser.add_argument('--reports', type=Path, default=Path('reports/release'))
     args = parser.parse_args(argv)
     try:
+        environment = 'DEV' if args.operation in ('approve-dev', 'promote-dev') else 'HOM'
+        policy = promotion_policy(environment)
         if args.soak_hours is None:
-            args.soak_hours = configuration()['minimum_soak_hours']
-        if args.operation == 'promote-hom':
-            require(configuration()['promotion_authorized'], 'HOM promotion is disabled in pipeline config')
+            args.soak_hours = policy['soak_hours']
+        if args.operation in ('promote-dev', 'promote-hom'):
+            require(policy['enabled'], f'{environment} promotion is disabled in promotion policy')
         if args.release:
             manifest_key(args.release)
         if args.resume:
-            require(args.operation == 'promote-hom' and os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch',
+            require(args.operation in ('promote-dev', 'promote-hom') and os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch',
                     'only an explicit manual promotion can resume automation')
-        {'approve-dev': approve_dev, 'promote-hom': promote_hom, 'recover-hom': recover_hom}[args.operation](args)
+        {'approve-dev': approve_dev, 'promote-dev': promote_dev,
+         'promote-hom': promote_hom, 'recover-hom': recover_hom}[args.operation](args)
     except ERRORS as error:
         # Do not print captured CLI output: the log needs a bounded diagnostic.
         if not (args.reports / 'release-outcome.json').exists():

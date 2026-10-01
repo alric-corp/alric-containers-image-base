@@ -1,6 +1,7 @@
 """Validated, versioned pipeline settings; GitHub variables are not inputs."""
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -35,8 +36,7 @@ def match(value, pattern, label):
 def configuration(path=None):
     cfg = json.loads((CONFIG if path is None else Path(path)).read_text(),
                      object_pairs_hook=object_pairs)
-    keys(cfg, ('schema_version', 'repository', 'branch', 'subject_prefix',
-               'minimum_soak_hours', 'promotion_authorized', 'DEV', 'HOM', 'infra'), 'pipeline')
+    keys(cfg, ('schema_version', 'repository', 'branch', 'subject_prefix', 'DEV', 'HOM', 'infra'), 'pipeline')
     require(type(cfg['schema_version']) is int and cfg['schema_version'] == 1, 'unsupported pipeline schema')
     match(cfg['repository'], r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', 'repository')
     # Entrypoint branch guards and OIDC Environments are reviewed boundaries.
@@ -44,9 +44,6 @@ def configuration(path=None):
     owner, repo = cfg['repository'].split('/')
     match(cfg['subject_prefix'], rf'repo:{re.escape(owner)}@[1-9][0-9]*/{re.escape(repo)}@[1-9][0-9]*',
           'immutable repository subject')
-    require(type(cfg['minimum_soak_hours']) is int and cfg['minimum_soak_hours'] >= 6,
-            'minimum_soak_hours must be an integer >= 6')
-    require(type(cfg['promotion_authorized']) is bool, 'promotion_authorized must be boolean')
     for env in ('DEV', 'HOM'):
         item = cfg[env]
         keys(item, ('account_id', 'region', 'role_name', 'release_bucket'), env)
@@ -71,6 +68,30 @@ def configuration(path=None):
     return cfg
 
 
+def promotion_policy(environment, path=None):
+    require(environment in ('DEV', 'HOM'), 'unknown promotion environment')
+    path = Path(path) if path is not None else CONFIG.parent / f'promote-{environment.lower()}.json'
+    policy = json.loads(path.read_text(), object_pairs_hook=object_pairs)
+    keys(policy, ('schema_version', 'enabled', 'frameworks', 'soak_hours'), path.name)
+    require(type(policy['schema_version']) is int and policy['schema_version'] == 1,
+            'unsupported promotion policy schema')
+    require(type(policy['enabled']) is bool, 'promotion enabled must be boolean')
+    hours = policy['soak_hours']
+    minimum = 0 if environment == 'DEV' else 6
+    require(type(hours) in (int, float) and math.isfinite(hours) and minimum <= hours <= 8760,
+            f'{environment} soak_hours must be finite and between {minimum} and 8760')
+    frameworks = policy['frameworks']
+    catalog = {p.stem for p in (ROOT / 'frameworks').glob('*.yaml')}
+    require(isinstance(frameworks, list) and frameworks and all(isinstance(f, str) for f in frameworks)
+            and len(frameworks) == len(set(frameworks)) and set(frameworks) <= catalog,
+            f'{environment} frameworks must be a nonempty, distinct subset of the catalog')
+    for dev in sorted(f for f in catalog if f.endswith('-dev')):
+        pair = {dev, dev.removesuffix('-dev')}
+        require(not pair.intersection(frameworks) or pair.issubset(frameworks),
+                f'{environment} policy requires complete runtime/dev pair: {sorted(pair)}')
+    return policy
+
+
 def settings(cfg, scope):
     require(scope in ('DEV', 'HOM', 'INFRA_PLAN', 'INFRA_APPLY'), 'unknown pipeline scope')
     item = cfg['DEV' if scope.startswith('INFRA_') else scope]
@@ -81,10 +102,13 @@ def settings(cfg, scope):
         'AWS_ACCOUNT_ID': item['account_id'], 'AWS_REGION': item['region'],
         'AWS_ROLE_ARN': f'arn:aws:iam::{item["account_id"]}:role/{role}',
         'RELEASE_BUCKET': item['release_bucket'],
-        'PROMOTION_AUTHORIZED': str(cfg['promotion_authorized']).lower(),
-        'MINIMUM_SOAK_HOURS': str(cfg['minimum_soak_hours']),
         'INFRA_PLAN_ENABLED': str(cfg['infra']['plan_enabled']).lower(),
     }
+    if scope in ('DEV', 'HOM'):
+        policy = promotion_policy(scope)
+        values.update(PROMOTION_AUTHORIZED=str(policy['enabled']).lower(),
+                      MINIMUM_SOAK_HOURS=str(policy['soak_hours']),
+                      PROMOTION_FRAMEWORKS=json.dumps(policy['frameworks'], separators=(',', ':')))
     if scope.startswith('INFRA_'):
         backend = cfg['infra']['backend']
         values.update(TF_STATE_BUCKET=backend['bucket'], TF_STATE_KEY=backend['key'],
@@ -101,7 +125,8 @@ def main(argv=None):
     if os.environ.get('GITHUB_REPOSITORY'):
         require(os.environ['GITHUB_REPOSITORY'] == cfg['repository'], 'pipeline repository mismatch')
     if args.require_promotion:
-        require(args.scope == 'HOM' and cfg['promotion_authorized'], 'HOM promotion is disabled in pipeline config')
+        require(args.scope in ('DEV', 'HOM') and promotion_policy(args.scope)['enabled'],
+                f'{args.scope} promotion is disabled in promotion policy')
     values = settings(cfg, args.scope)
     # Validate everything before writing either file. Only validated single-line
     # values enter the Actions command files, never arbitrary JSON keys or env.

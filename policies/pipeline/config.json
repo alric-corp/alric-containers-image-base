@@ -3,7 +3,6 @@
   "repository": "alric-corp/alric-containers-image-base",
   "branch": "develop",
   "subject_prefix": "repo:alric-corp@178685987/alric-containers-image-base@1360616627",
-  "minimum_soak_hours": 6,
   "DEV": {
     "account_id": "712107929769",
     "region": "us-east-1",
@@ -16,7 +15,6 @@
     "role_name": "alric-image-base-factory-hom",
     "release_bucket": "248908662184-image-base-releases-hom"
   },
-  "promotion_authorized": false,
   "infra": {
     "plan_enabled": false,
     "plan_role_name": "alric-github-repo-1360616627-infra-plan",

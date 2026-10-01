@@ -272,7 +272,8 @@ O `workflow.yml` separa validação e publicação:
 
 - **PRs para `develop`:** chamam `validate-base-images.yml`, com `contents: read`, sem OIDC, autenticação AWS ou push.
 - **Push na `develop`, execução manual na `develop` e schedule diário às 03:23 UTC:** chamam `build-base-images.yml`, que executa a mesma validação antes do job de publicação. O cron `23 3 * * *` corresponde aproximadamente a 00:23 em America/Sao_Paulo; permanece UTC e evita o início da hora, sem garantia de pontualidade do scheduler. O schedule passa a usar essa definição quando `develop` for a default branch.
-- **Promoção:** roda a cada hora, no minuto 17, e seleciona somente candidatos que completaram o soak mínimo de seis horas desde o push.
+- **Promoção DEV:** lê `promote-dev.json`; candidates validados com soak pendente são retomados a cada hora, no minuto 7.
+- **Promoção HOM:** lê `promote-hom.json`; roda a cada hora, no minuto 17, e exige o soak configurado após a confirmação de DEV `stable` (mínimo de seis horas).
 
 **Distroless - Catalog certification** oferece um dispatch manual na `develop`
 com os 16 frameworks fixos, usando o mesmo engine e lock do publicador.
@@ -410,7 +411,9 @@ para `248908662184.dkr.ecr.sa-east-1.amazonaws.com`; verifica o destino inteiro
 antes de atualizar qualquer stable. Não há rebuild nem resolução de DEV stable
 na seleção. O build diário continua no par Go 1.26; o dispatch de certificação
 suporta o catálogo completo. O cron horário usa as releases aprovadas e a
-habilitação `promotion_authorized` de `policies/pipeline/config.json`.
+habilitação `enabled`, frameworks e soak de `policies/pipeline/promote-hom.json`.
+A promoção DEV usa `policies/pipeline/promote-dev.json`, com soak inicial zero
+e retomada horária pelo mesmo digest quando houver espera configurada.
 
 Veja [DEV → HOM: operação, infraestrutura e ativação](docs/dev-hom-promotion.md)
 para os contratos, limites da atomicidade ECR e critérios de aceite hospedado.
@@ -488,10 +491,11 @@ jobs:
 
 | Nome | Workflow | Tipo | Obrigatório | Descrição |
 |---|---|---|---|---|
-| `policies/pipeline/config.json` | todos os jobs AWS | arquivo versionado | sim | contas, regiões, roles, buckets, backend e habilitação da promoção; [contrato](policies/pipeline/README.md) |
+| `policies/pipeline/config.json` | todos os jobs AWS | arquivo versionado | sim | contas, regiões, roles, buckets e backend; [contrato](policies/pipeline/README.md) |
+| `promote-dev.json` / `promote-hom.json` | promoções | arquivos versionados | sim | `enabled`, `frameworks` e `soak_hours` por destino |
 | `frameworks` | build-base-images | input | sim | array JSON de pares completos do catálogo |
 | `release` | promote-stable / recover-stable | dispatch | recovery: sim | identidade exata `r<RUN>-a<ATTEMPT>` |
-| `soak-hours` | promote-stable | dispatch | não (`0` usa JSON) | horas após aprovação DEV stable, respeitando `minimum_soak_hours` |
+| `soak-hours` | promote-stable | dispatch | não (`0` usa JSON) | horas após aprovação DEV stable, respeitando `soak_hours` de `promote-hom.json` |
 | `resume-automation` | promote-stable | dispatch | não (default `false`) | retoma membros pausados somente com release explícita |
 
 Pré-requisito de infraestrutura: provider OIDC e roles aprovados por Cloud/IAM, com trust restrita e permissões conforme o [contrato P1-04](docs/iam-permission-contract.md). Seus exemplos locais não alteram a policy ativa. A [Infra do produto](infra/README.md) provisiona os ECRs; o publicador é `PREPROVISIONED_ONLY`, sem administração de repositórios. `PutImage` no mesmo repositório não reserva `stable` exclusivamente ao promotor.

@@ -27,7 +27,12 @@ inspeção desses gates e dos passos posteriores de assinatura/attestation.
 O schedule diário e o default de promoção permanecem no perfil
 `go1-26`/`go1-26-dev`. Mudar esse perfil para FULL exige uma aprovação separada
 depois da certificação. Este PR não despacha o workflow, não altera Terraform
-nem muda `promotion_authorized` em `policies/pipeline/config.json`.
+nem muda `enabled` em `policies/pipeline/promote-hom.json`.
+
+O manifesto completo só pode receber `stable` se seus 16 membros estiverem
+permitidos em `promote-dev.json` e, depois, `promote-hom.json`. A configuração
+inicial autoriza somente o par Go 1.26; candidatos fora desse escopo ficam
+persistidos aguardando promoção autorizada.
 
 ## Evidência da execução
 

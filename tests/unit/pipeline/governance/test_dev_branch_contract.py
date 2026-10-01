@@ -46,6 +46,7 @@ class DevBranchContractTests(unittest.TestCase):
         ('build-base-images.yml', 'build-push'),
         ('catalog-certification.yml', 'build-base-images'),
         ('promote-stable.yml', 'promote'),
+        ('dev-stable.yml', 'promote'),
         ('recover-stable.yml', 'recover'),
         ('infra-apply.yml', 'plan'),
         ('infra-apply.yml', 'apply'),
@@ -104,6 +105,7 @@ class DevBranchContractTests(unittest.TestCase):
     def test_schedules_keep_the_same_crons_and_target_only_dev(self):
         expected = {'workflow.yml': ('build-base-images', '23 3 * * *'),
                     'promote-stable.yml': ('promote', '17 * * * *'),
+                    'dev-stable.yml': ('promote', '7 * * * *'),
                     'pipeline-health.yml': ('health', '40 5 * * *')}
         scheduled = {path.name for path in (ROOT / '.github/workflows').glob('*.yml')
                      if 'schedule' in events(workflow(path.name))}

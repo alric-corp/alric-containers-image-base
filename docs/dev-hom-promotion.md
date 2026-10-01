@@ -11,10 +11,11 @@ certificados, Apko/Melange e Terraform passam por PR.
 | HOM | `248908662184` | `sa-east-1` | `alric-image-base-factory-hom` |
 
 O profile local `revolution-dev` autentica a conta **HOM** desta Factory.
-Contas, regiões, roles, buckets e habilitação da promoção têm uma única fonte em
+Contas, regiões, roles e buckets têm uma única fonte em
 [`policies/pipeline/config.json`](../policies/pipeline/config.json). A role HOM lê
 somente o catálogo e os manifestos DEV e escreve nos seus próprios recursos.
-O [contrato do JSON](../policies/pipeline/README.md) define validação e migração das variáveis antigas.
+Frameworks, habilitação e soak ficam em `promote-dev.json` e `promote-hom.json`
+na mesma pasta. O [contrato dos JSONs](../policies/pipeline/README.md) define validação e migração das variáveis antigas.
 A role DEV não escreve em HOM. Nenhuma delas cria repositórios ou apaga releases.
 As trusts exigem o subject imutável do repositório e o Environment exato;
 os Environments permitem somente a branch `develop`.
@@ -24,7 +25,8 @@ flowchart LR
     G[develop] --> B[Build e validação]
     B --> C[Candidate DEV por digest]
     C --> T[Trust, SBOM, provenance e testes consumidores]
-    T --> D[DEV stable e manifesto persistente]
+    T --> Q[Candidate validado e soak DEV configurado]
+    Q --> D[DEV stable e manifesto persistente]
     D --> S[Soak mínimo de 6 horas]
     S --> P[Cópia por digest para HOM]
     P --> V[Read-back, igualdade e trust em HOM]
@@ -43,9 +45,13 @@ flowchart LR
 3. `dev-stable.yml` exige sucesso dos gates globais e das publicações. Confere
    os digests e a provenance da execução exata, verifica SPDX do índice e das
    duas arquiteturas e executa aplicações consumidoras reais em amd64/arm64.
-   Só então atualiza DEV `stable`, confirma todas as tags e persiste o manifesto.
+   Persiste `candidate.json` com as evidências e o horário de validação.
+   `promote-dev.json` define os frameworks e o soak: com zero, promove no mesmo
+   run; com espera ou escopo incompatível, mantém o candidate pendente. O cron
+   `7 * * * *` retoma a release elegível por digest, revalida trust e scan,
+   atualiza DEV `stable`, confirma todas as tags e persiste `manifest.json`.
 4. `promote-stable.yml` roda no cron `17 * * * *`, com
-   `"promotion_authorized": true` no JSON. O soak começa após o último read-back
+   `"enabled": true` em `promote-hom.json`. O soak começa após o último read-back
    de DEV `stable`. Não há runner aguardando seis horas.
 5. A seleção lê manifestos aprovados, escolhe a release elegível mais nova e
    fixa seus digests. Não resolve DEV `stable`. Assim, A pode completar o
@@ -114,16 +120,17 @@ gh workflow run promote-stable.yml --ref develop \
 
 Esse dispatch mantém soak, scans, trust e read-back. A pausa só é removida após
 sucesso. Um schedule não pode remover pausas nem fazer downgrade. O kill switch
-`"promotion_authorized": false` no JSON interrompe a promoção; recovery continua
+`"enabled": false` em `promote-hom.json` interrompe a promoção; recovery continua
 manual e disponível. Se houver uma falha na primeira release HOM, não existe
 recibo anterior para recuperar: inspecione os registros e reexecute uma promoção
 explícita com `resume-automation=true` após corrigir a causa, conservando os gates.
 
-DEV também mantém pausa em escrita parcial. A reconciliação de DEV deve
-confirmar/restaurar todas as tags registradas em `events/` antes de remover a
-pausa; remover apenas um lado não autoriza o outro. Reexecute o build completo
-em nova tentativa quando os artifacts de publicação da tentativa não estiverem
-presentes. Evidence de outra tentativa nunca é escolhida silenciosamente.
+DEV também mantém pausa em escrita parcial. Após inspecionar `events/`, use
+o dispatch de `dev-stable.yml` com `release` explícita e
+`resume-automation=true` para revalidar e reconciliar todos os membros.
+O candidate persistido preserva as evidências da tentativa original; o cron
+não remove pausas. Quando a validação inicial ainda não persistiu um candidate,
+reexecute o build completo em nova tentativa se seus artifacts não existirem.
 
 ## Provisionamento e ativação
 
@@ -156,7 +163,7 @@ A preparação de infraestrutura não ativa código ainda em revisão. Para conc
    não os revoga. Preserve o Environment de Infra com seus controles de revisão.
 4. Altere a default branch para `develop`. Não crie branches de ambiente.
 5. Execute um build aprovado, confira o manifesto e DEV stable e ative
-   `"promotion_authorized": true` no JSON. O cron promove após seis horas reais.
+   `"enabled": true` em `promote-hom.json`. O cron promove após seis horas reais.
 6. Confirme os dois índices e suas attestations em HOM e execute um teste
    consumidor. Registre run, attempt, SHA, source/target digests e recibo S3.
    Valide recovery quando houver uma segunda release HOM aprovada.

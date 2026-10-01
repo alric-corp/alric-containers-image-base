@@ -14,7 +14,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from scripts.pipeline.governance.configuration import configuration
+from scripts.pipeline.governance.configuration import configuration, promotion_policy
 
 CONFIG = configuration()
 REPO = CONFIG['repository']
@@ -80,7 +80,15 @@ def verify():
         record['environments'][env] = {'allowed_refs': [{'name':p['name'], 'type':p['type']} for p in policies]}
     record['pipeline_configuration'] = 'policies/pipeline/config.json'
     record['pipeline_configuration_blob'] = published['sha']
-    record['automatic_hom_promotion_enabled'] = published_config['promotion_authorized']
+    record['promotion_policies'] = {}
+    for env in ('DEV', 'HOM'):
+        path = f'policies/pipeline/promote-{env.lower()}.json'
+        published = api(f'contents/{path}?ref=develop')
+        document = json.loads(base64.b64decode(published['content']))
+        if document != promotion_policy(env):
+            raise ValueError(f'Local {env} promotion policy differs from develop')
+        record['promotion_policies'][env] = dict(path=path, blob=published['sha'], **document)
+    record['automatic_hom_promotion_enabled'] = record['promotion_policies']['HOM']['enabled']
     path = ROOT / 'docs/evidence/dev-hom-bootstrap/github-readback.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(record, indent=2) + '\n')

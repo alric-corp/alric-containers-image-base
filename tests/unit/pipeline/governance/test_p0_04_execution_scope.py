@@ -112,8 +112,8 @@ class ScheduleSeparationTests(unittest.TestCase):
     def test_scheduled_promotion_soak_hours_comes_from_json(self):
         inputs = self.promotion_triggers['workflow_dispatch']['inputs']
         self.assertEqual(inputs['soak-hours']['default'], 0)
-        config = json.loads((ROOT / 'policies/pipeline/config.json').read_text())
-        self.assertGreaterEqual(config['minimum_soak_hours'], 6)
+        config = json.loads((ROOT / 'policies/pipeline/promote-hom.json').read_text())
+        self.assertGreaterEqual(config['soak_hours'], 6)
         execution = next(step for step in self.promotion['jobs']['promote']['steps']
                          if step.get('name') == 'Promote exact eligible release to HOM')
         self.assertEqual(execution['env']['SOAK_HOURS'],

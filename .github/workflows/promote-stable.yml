@@ -10,7 +10,7 @@ on:
         type: string
         default: ''
       soak-hours:
-        description: 'Soak após DEV stable; 0 usa minimum_soak_hours do JSON'
+        description: 'Soak após DEV stable; 0 usa soak_hours de promote-hom.json'
         type: number
         default: 0
       resume-automation:
