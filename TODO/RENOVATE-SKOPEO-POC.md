@@ -288,6 +288,6 @@ POC_PROVEN:               <PASS/FAIL>
 | DRY_RUN | PASS: somente Skopeo (1 branch, 2 ocorrências) |
 | EXPECTED_UPDATE | `quay.io/skopeo/stable` `v1.22.2-immutable → v1.22.3-immutable` (lookup de 2026-10-04; o run real refaz o lookup) |
 | TOKEN_STATUS | NOT CONFIGURED: aguardando o owner |
-| PR_SETUP | ver o PR que introduz este arquivo |
+| PR_SETUP | https://github.com/alric-corp/alric-containers-image-base/pull/105 (aberto; aguardando revisão e FULL_VALIDATION) |
 | NEXT_MANUAL_ACTION | Revisar o PR de setup → FULL_VALIDATION → merge manual → criar o PAT → secret `RENOVATE_TOKEN` → pedir a fase 2 |
 | POC_PROVEN | NO |
