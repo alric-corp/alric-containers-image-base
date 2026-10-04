@@ -18,7 +18,7 @@ MELANGE_REPO := melange/packages
 
 # apko/melange sempre rodam via `docker run` (nao como binario nativo extraido)
 # para o Makefile funcionar em qualquer SO/arquitetura de dev (Mac, Linux, WSL).
-DOCKER_MELANGE := docker run --rm -v "$(CURDIR)/melange":/work -w /work cgr.dev/chainguard/melange@sha256:43d6581e5f04b2f63b842782e581c4e06ff9ea23c81f0b3c8b9967034e38d90b
+DOCKER_MELANGE := docker run --rm -v "$(CURDIR)/melange":/work -w /work cgr.dev/chainguard/melange@sha256:15dd85c0e35c099e4142c463d8479da769f319f01ab0f9e6ff427f79d63091f9
 
 
 .PHONY: certificates oci help list keygen bundle build run clean test test-unit test-integration lint lint-local lint-workflows check wolfi-trust
@@ -91,7 +91,7 @@ $(MELANGE_REPO): $(MELANGE_KEY) melange/image-base-ca-certificates.yaml $(wildca
 	$(PYTHON) -B scripts/certificates/prepare_anchors.py verify
 	@mkdir -p $(MELANGE_REPO)/x86_64 $(MELANGE_REPO)/aarch64
 	@set -eu; for BUILD_ARCH in x86_64 aarch64; do \
-		docker run --privileged --rm -v "$(CURDIR)/melange":/work -w /work cgr.dev/chainguard/melange@sha256:43d6581e5f04b2f63b842782e581c4e06ff9ea23c81f0b3c8b9967034e38d90b \
+		docker run --privileged --rm -v "$(CURDIR)/melange":/work -w /work cgr.dev/chainguard/melange@sha256:15dd85c0e35c099e4142c463d8479da769f319f01ab0f9e6ff427f79d63091f9 \
 			build image-base-ca-certificates.yaml --arch "$$BUILD_ARCH" --signing-key .local-keys/melange.rsa --build-date "$$(git show -s --format=%cI HEAD)"; \
 	done
 	@touch $(MELANGE_REPO)
@@ -102,7 +102,7 @@ oci: bundle
 ifndef FRAMEWORK
 	$(error defina FRAMEWORK, ex.: make build FRAMEWORK=go1-26. Rode "make list" para ver as opcoes)
 endif
-	APKO_IMAGE=cgr.dev/chainguard/apko@sha256:37e3aa165456e6c55fcded1e11af7ae9b010af914f0b25015c9a4247ec139c67 $(PYTHON) -B -m scripts.pipeline.artifacts.build_image $(FRAMEWORK) $(FRAMEWORK).oci \
+	APKO_IMAGE=cgr.dev/chainguard/apko@sha256:7fcdcd1ca1fb1e4601fac698458d1b0d6cde7d9e7f0e3cca733aee894889f2e6 $(PYTHON) -B -m scripts.pipeline.artifacts.build_image $(FRAMEWORK) $(FRAMEWORK).oci \
 		--engine docker --repository melange/packages --keyring melange/.local-keys/melange.rsa.pub $(if $(LOCKFILE),--lockfile "$(LOCKFILE)",)
 	$(PYTHON) -B -m scripts.pipeline.artifacts.oci_artifact prepare $(FRAMEWORK).oci
 
