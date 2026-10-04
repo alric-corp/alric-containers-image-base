@@ -33,14 +33,14 @@ CATALOG = ROOT / 'frameworks'
 POLICY = ROOT / 'policies/operations/health.json'
 WORKFLOW = ROOT / '.github/workflows/workflow.yml'
 # Jobs de workflow.yml que recebem lote explícito. O lote DEFAULT/FULL é o
-# catálogo normal menos as exceptions. `P0_04_BATCH` é o perfil temporário
-# `["go1-26", "go1-26-dev"]`: durante o rollout, build e promoção usam esse
+# catálogo normal menos as exceptions. `P0_04_BATCH` é o golden path
+# `["go1-26", "go1-26-dev"]` do LAB (ADR-0008): build e promoção usam esse
 # perfil. Callers explícitos, inclusive validações de impacto compartilhado,
 # continuam podendo usar DEFAULT/FULL; o workflow reutilizável permanece apto
 # a chamadas FULL independentes deste entrypoint.
 BATCH_JOBS = ('validate-pr', 'build-base-images')
-# Temporary rollout profile for the first corporate E2E. It is an execution
-# selection only; the catalog and FULL policy remain unchanged.
+# LAB golden path (ADR-0008). It is an execution selection only; the catalog
+# and FULL policy remain unchanged.
 P0_04_BATCH = ['go1-26', 'go1-26-dev']
 REQUIRED_FIELDS = ('reason', 'owner', 'review_by', 'adr')
 

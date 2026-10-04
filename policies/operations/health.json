@@ -66,9 +66,9 @@
       "go1-26",
       "go1-26-dev"
     ],
-    "reason": "V1 de referencia (P0-04, ADR-0004): build e promocao automaticos ficam restritos a go1-26/go1-26-dev enquanto a expansao aguarda (a) decisoes corporativas do Stage 1 do primeiro E2E corporativo e (b) o zlib corrigido publicar no Wolfi (CVE-2026-85091, ver ADR-0004). Frameworks fora daqui permanecem no catalogo e no lote FULL/DEFAULT; ausencia de publicacao/stable aqui e escopo, nao falha.",
+    "reason": "Modelo operacional do LAB (ADR-0008): go1-26/go1-26-dev e o golden path de build, publicacao e promocao automaticos. PRs com impacto compartilhado continuam com FULL_VALIDATION fail-safe (16 imagens), e mudancas de classe B/C passam por FULL_CERTIFICATION sob demanda (catalog-certification.yml). Frameworks fora daqui permanecem no catalogo e no lote FULL/DEFAULT; ausencia de publicacao/stable aqui e escopo, nao falha.",
     "owner": "@alric-corp/github_xj7_maintainer",
     "review_by": "2026-09-30",
-    "adr": "docs/adr/0004-v1-referencia-go126.md"
+    "adr": "docs/adr/0008-modelo-operacional-lab-golden-path.md"
   }
 }

@@ -1,0 +1,52 @@
+name: Renovate - Dependencies
+
+# Renovate self-hosted do LAB, fase POC (TODO/RENOVATE-SKOPEO-POC.md).
+#
+# - Disparo exclusivamente manual: sem schedule até o POC ser comprovado.
+# - Escopo: só este repositório (sem autodiscover nem onboarding de outros).
+# - O que pode virar PR é decidido por renovate.json (packageRules): no POC,
+#   somente quay.io/skopeo/stable. Merge sempre humano, sem automerge.
+# - Credencial: secret RENOVATE_TOKEN provisionado pelo administrador. O
+#   GITHUB_TOKEN não serve de fallback: PR aberto por ele não dispara o CI
+#   (FULL_VALIDATION) e o token não pode alterar .github/workflows/.
+
+on:
+  workflow_dispatch:
+
+# O job não usa o GITHUB_TOKEN; toda chamada à API sai com RENOVATE_TOKEN.
+permissions: {}
+
+concurrency:
+  group: renovate-dependencies-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  renovate:
+    name: Renovate (image-base only)
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Require externally provisioned RENOVATE_TOKEN
+        env:
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+        run: |
+          if [ -z "${RENOVATE_TOKEN:-}" ]; then
+            echo "::error::Secret RENOVATE_TOKEN ausente. Ele é provisionado manualmente pelo administrador (TODO/RENOVATE-SKOPEO-POC.md); não há fallback para o GITHUB_TOKEN." >&2
+            exit 1
+          fi
+
+      # A imagem do Renovate fica fixada por versão + digest. Sem
+      # renovate-image, a action usa a tag flutuante `44`.
+      - name: Run Renovate
+        uses: renovatebot/github-action@6d26fcf0275dc65624cbc3d51fe78bc773f98321 # v46.3.6
+        env:
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+          RENOVATE_PLATFORM: github
+          RENOVATE_REPOSITORIES: alric-corp/alric-containers-image-base
+          RENOVATE_AUTODISCOVER: "false"
+          RENOVATE_ONBOARDING: "false"
+          RENOVATE_REQUIRE_CONFIG: required
+          LOG_LEVEL: debug
+        with:
+          renovate-image: ghcr.io/renovatebot/renovate:44.74.0@sha256:6d08f288cf914b2ee64cb0922083f8c2246bdb94cc1b4af1eaceb64b5fd48992

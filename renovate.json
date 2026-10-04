@@ -4,10 +4,29 @@
     "custom.regex"
   ],
   "automerge": false,
-  "prConcurrentLimit": 4,
+  "prConcurrentLimit": 1,
+  "branchConcurrentLimit": 1,
+  "prHourlyLimit": 1,
+  "dependencyDashboard": false,
+  "vulnerabilityAlerts": {
+    "enabled": false
+  },
   "timezone": "America/Sao_Paulo",
-  "schedule": [
-    "before 6am on monday"
+  "packageRules": [
+    {
+      "description": "Renovate Skopeo POC (TODO/RENOVATE-SKOPEO-POC.md): nenhuma dependência abre branch/PR por padrão. Os customManagers continuam extraindo e o pin_inventory continua exigindo cobertura.",
+      "matchPackageNames": [
+        "*"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Renovate Skopeo POC: única dependência habilitada. Tag -immutable + digest, sem automerge.",
+      "matchPackageNames": [
+        "quay.io/skopeo/stable"
+      ],
+      "enabled": true
+    }
   ],
   "customManagers": [
     {
@@ -59,6 +78,17 @@
       ],
       "datasourceTemplate": "docker",
       "versioningTemplate": "regex:^qemu-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<build>\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/renovate\\.yml$/"
+      ],
+      "matchStrings": [
+        "(?<depName>ghcr\\.io/renovatebot/renovate):(?<currentValue>\\d+\\.\\d+\\.\\d+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver"
     }
   ]
 }

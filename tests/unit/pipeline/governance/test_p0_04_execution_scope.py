@@ -1,4 +1,4 @@
-"""Guards for the temporary, exact P0-04 execution scope."""
+"""Guards for the exact P0-04 execution scope (LAB golden path, ADR-0008)."""
 
 import json
 from pathlib import Path
