@@ -36,7 +36,7 @@ from scripts.pipeline.runtime.readiness import wait_until_ready
 from scripts.pipeline.runtime import contract_evidence
 
 ROOT = Path(__file__).resolve().parents[3]
-SKOPEO = 'quay.io/skopeo/stable:v1.22.2-immutable@sha256:4a16d57b37617a04b3d643079a477a2848efe892dffcdf0ce56df4262b65f810'
+SKOPEO = 'quay.io/skopeo/stable:v1.22.3-immutable@sha256:c0ee1f4edca5c01cb8d5611124f92f3cc47196ecab68aee5d0f90834e00574d5'
 
 # Contrato de ambiente compartilhado pelos quatro runtimes.
 IMAGE_CA_BUNDLE = '/etc/ssl/certs/ca-certificates.crt'
