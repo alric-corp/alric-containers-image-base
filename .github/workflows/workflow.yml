@@ -46,8 +46,8 @@ on:
   schedule:
     - cron: "23 3 * * *"   # build diário: 00:23 America/Sao_Paulo (03:23 UTC; fora do início da hora)
   workflow_dispatch:
-    # P0-04: o primeiro E2E corporativo tem seleção fixa e auditável.
-    # A capacidade FULL continua disponível nos workflows reutilizáveis;
+    # Golden path do LAB (ADR-0008): seleção fixa e auditável. A
+    # FULL_CERTIFICATION fica em catalog-certification.yml (sob demanda);
     # este entrypoint não aceita ampliar o escopo sem mudança revisada.
 
 # PRs recebem apenas leitura. Escrita/OIDC são concedidos nos jobs autorizados.
