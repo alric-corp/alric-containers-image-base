@@ -24,7 +24,7 @@ publicação e read-back → GO_PROVEN.
 ```mermaid
 flowchart TD
   D["workflow_dispatch<br/>(Renovate - Dependencies, develop)"] --> R["Renovate 44.74.0<br/>renovatebot/github-action@6d26fcf… (v46.3.6)"]
-  T["secret RENOVATE_TOKEN<br/>(fine-grained PAT, provisionado pelo owner)"] --> R
+  T["secret RENOVATE_TOKEN<br/>(PAT amplo, provisionado pelo owner)"] --> R
   R --> S["image-base only<br/>autodiscover=false · onboarding=false"]
   S --> L["lookup: renovate.json da develop<br/>packageRules → só Skopeo enabled"]
   L --> B["branch renovate/quay.io-skopeo-stable-1.x"]
@@ -48,30 +48,38 @@ flowchart TD
 
 ## Token requirements
 
-Fine-grained personal access token. **Não criado nesta tarefa.**
+**Decisão do owner (2026-10-04):** no LAB, o `RENOVATE_TOKEN` é um PAT com
+**acesso amplo**, alinhado ao modelo operacional que o owner já adota no
+ambiente corporativo. **Validar least privilege do token não é objetivo deste
+POC.** O token não é criado nesta tarefa.
 
-| Campo | Valor |
+O escopo do que o Renovate faz é limitado pelos controles do executor, não
+pelo token:
+
+| Controle | Onde |
 |---|---|
-| Resource owner | `alric-corp` |
-| Repository access | Only select repositories → `alric-containers-image-base` |
-| Expiração | Curta, definida pelo owner (POC) |
+| `autodiscover=false` | `renovate.yml` (env) |
+| Repositório explícito `alric-corp/alric-containers-image-base` | `renovate.yml` (env `RENOVATE_REPOSITORIES`) |
+| `automerge=false` | `renovate.json` |
+| Execução manual (`workflow_dispatch`, só `develop`) | `renovate.yml` |
+| Somente Skopeo habilitado | `renovate.json` (`packageRules`) |
 
-Permissões de repositório:
+Requisito funcional (não de privilégio mínimo): o PAT precisa conseguir
+escrever em `.github/workflows/`, onde está uma das ocorrências do Skopeo.
+Num PAT clássico, isso é o escopo `workflow` além de `repo`; num
+fine-grained, a permissão Workflows: Read and write. Sem isso, o push da
+branch `renovate/*` é recusado.
 
-| Permissão | Acesso | Por quê |
-|---|---|---|
-| Metadata | Read | Obrigatória em todo fine-grained PAT |
-| Contents | Read and write | Clonar, criar a branch `renovate/*` e o commit |
-| Pull requests | Read and write | Criar/atualizar o PR |
-| Workflows | Read and write | Alterar `.github/workflows/build-base-images.yml` |
-| Issues | Read and write | Recomendado: o Renovate abre issue de erro de configuração (o Dependency Dashboard está desligado) |
-| Commit statuses | Read and write | Recomendado pela documentação do Renovate para PATs |
-| Dependabot alerts | — | Não necessário: `vulnerabilityAlerts.enabled=false` |
-| Administration, Actions, Secrets, Environments | — | Não conceder |
+Manuseio do segredo:
 
-O conjunto mínimo efetivamente suficiente deve ser **confirmado no primeiro
-run** (EXTERNAL_INPUT_REQUIRED): a org precisa permitir fine-grained PATs e
-pode exigir aprovação do administrador.
+- armazenado **exclusivamente** em GitHub Actions Secrets (`RENOVATE_TOKEN`);
+- nunca impresso, nunca persistido em artifact, nunca versionado;
+- o workflow não sobe artifacts, não ecoa o valor e declara `permissions: {}`;
+- a action repassa o token ao container por variável de ambiente; o GitHub mascara secrets nos logs, e o Renovate sanitiza tokens nos próprios logs (inclusive em `LOG_LEVEL=debug`).
+
+Risco aceito pelo owner: por ser amplo, um vazamento do token teria alcance
+além deste repositório. A mitigação é o manuseio acima, além da revogação
+imediata em caso de suspeita (ver Rollback).
 
 Operação:
 
@@ -224,7 +232,7 @@ Renovate, repo reusable, Wolfi. Também ficam de fora:
 1. Revisar o PR de setup.
 2. Aguardar os checks e a FULL_VALIDATION 16/16.
 3. Merge manual por code owner.
-4. Criar o fine-grained PAT (seção "Token requirements").
+4. Criar o PAT (acesso amplo por decisão do owner, incluindo escrita em workflows; seção "Token requirements").
 5. Salvar como Actions secret `RENOVATE_TOKEN` no repositório.
 6. Pedir a continuação (fase 2): dispatch manual de `Renovate - Dependencies` e observação.
 7. Revisar o PR do Skopeo, conferir a FULL_VALIDATION e fazer merge manual (fase 3).
@@ -254,7 +262,8 @@ STOP na fase 2 se aparecer:
 
 ## Rollback
 
-- **Setup problemático:** reverter somente o PR de setup e revogar o PAT/remover o secret. Nenhuma ação em `stable`, ECR ou AWS.
+- **Setup problemático:** reverter somente o PR de setup e remover o secret. Nenhuma ação em `stable`, ECR ou AWS.
+- **Suspeita de exposição do token:** revogar o PAT imediatamente e remover/rotacionar o secret `RENOVATE_TOKEN`.
 - **PR do Skopeo com falha:** não mergear; fechar o PR (o Renovate não recria um PR fechado para a mesma versão); preservar logs e evidência; diagnosticar.
 - **Nunca** substituir o update manualmente para "fazer o POC passar".
 
@@ -287,7 +296,7 @@ POC_PROVEN:               <PASS/FAIL>
 | CONFIG_VALIDATION | PASS (`--strict`) |
 | DRY_RUN | PASS: somente Skopeo (1 branch, 2 ocorrências) |
 | EXPECTED_UPDATE | `quay.io/skopeo/stable` `v1.22.2-immutable → v1.22.3-immutable` (lookup de 2026-10-04; o run real refaz o lookup) |
-| TOKEN_STATUS | NOT CONFIGURED: aguardando o owner |
+| TOKEN_STATUS | NOT CONFIGURED: aguardando o owner (decisão: PAT amplo; least privilege fora do escopo do POC) |
 | PR_SETUP | https://github.com/alric-corp/alric-containers-image-base/pull/105 (aberto; aguardando revisão e FULL_VALIDATION) |
 | NEXT_MANUAL_ACTION | Revisar o PR de setup → FULL_VALIDATION → merge manual → criar o PAT → secret `RENOVATE_TOKEN` → pedir a fase 2 |
 | POC_PROVEN | NO |
