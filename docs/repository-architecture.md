@@ -123,7 +123,7 @@ para o executor compartilhado. O executor compartilhado não recebe comandos
 livres, regras de negócio ou credenciais AWS como parte de seu contrato; ele
 só aceita `workflow_call`, sem cron, dispatch ou secrets próprios.
 
-Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@909b151ada7b0904e725fef3201a94bde5a1ea72`.
+Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@cc959d200afd7fc1bdc24fb240798b1bcdf5b42b`.
 
 Os dois chamadores usam esse commit. Actions externas e reusable workflows
 exigem SHA completo; imagens de ferramentas usam digest. A origem aprovada
