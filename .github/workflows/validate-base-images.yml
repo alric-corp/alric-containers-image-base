@@ -32,7 +32,7 @@ jobs:
       frameworks: ${{ inputs.frameworks }}
   validate:
     needs: wolfi-trust
-    uses: alric-corp/alric-containers-reusable-workflows/.github/workflows/validate-apko-images.yml@e508aa2e9956e2233440d9f98379043eb4de27ca # reviewed shared workflows
+    uses: alric-corp/alric-containers-reusable-workflows/.github/workflows/validate-apko-images.yml@fd44ef512cf2e3ef9c65d0c005a9aa878ee26a69 # reviewed shared workflows
     with:
       frameworks: ${{ inputs.frameworks }}
       melange-config: image-base-ca-certificates.yaml
