@@ -544,7 +544,7 @@ fixada abaixo. A instalação do Trivy é uma
 composite action comum à validação, promoção e recuperação. Gatilhos, catálogo,
 scripts/testes de domínio e decisões de release permanecem neste repositório.
 
-Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@5c7b2b18e508e35e9db422b6dfee911252b13021`.
+Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@e508aa2e9956e2233440d9f98379043eb4de27ca`.
 
 Veja a [divisão de responsabilidades, contrato e adoção](docs/repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados).
 A [policy de origem revisada](policies/governance/reusable-workflows.json)
