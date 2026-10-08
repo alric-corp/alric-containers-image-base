@@ -641,7 +641,7 @@ histórica permanece limitada ao commit/run em que foi obtida.
 | M09/M12 | Reusable workflows | IMPLEMENTED | SHA atual dos chamadores: 7a9b055a462eeb8552d3404c26538b44e8ccd83f; [origem revisada](policies/governance/reusable-workflows.json), checkout, contratos e referências Trivy conferidos localmente |
 | — | Requisitos de segurança / scanner | EXTERNAL — a confirmar | [P1-06](docs/adr/0003-controles-seguranca-workflows-federados.md); Trivy continua o gate vigente; aplicabilidade de integração adicional não presumida |
 
-Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@5c7b2b18e508e35e9db422b6dfee911252b13021`.
+Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@e508aa2e9956e2233440d9f98379043eb4de27ca`.
 
 A preparação P0-03 permite validar uma origem revisada da biblioteca sem
 substituições automáticas: policy, referências literais dos chamadores/actions,
