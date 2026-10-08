@@ -19,6 +19,11 @@ python -m pip install -r requirements-dev.txt
 make test-unit lint-local
 ```
 
+A projeção offline de SPDX usa PyArrow 21.0.0, também fixado nesse arquivo,
+para escrita/leitura de Parquet. Essa versão dispõe de wheels para Python
+3.9–3.13; não é dependência das imagens ou dos verificadores HGC. O ambiente
+de CI instala o mesmo arquivo de dependências, sem mudança de workflow.
+
 Para integração, instale Bash, OpenSSL com `req -addext`, jq, sha256sum e GNU
 date (`gdate` no macOS). O teste TLS abre uma porta local. Certificados são
 sintéticos e os downloads são substituídos por fixtures; não usa AWS.
