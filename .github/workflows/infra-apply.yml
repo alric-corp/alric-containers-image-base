@@ -70,15 +70,28 @@ jobs:
             -backend-config="region=$TF_BACKEND_REGION" 2>&1 | tee "$RUNNER_TEMP/infra-plan/init-plan.txt"
       - name: Terraform validate
         run: terraform -chdir=infra/ecr validate
+      - name: Require the existing shared state and default workspace
+        run: |
+          set -euo pipefail
+          umask 077
+          terraform -chdir=infra/ecr show -json > "$RUNNER_TEMP/infra-selected-state.json"
+          python3 infra/ecr/verify_state.py \
+            --metadata infra/ecr/.terraform/terraform.tfstate \
+            --state "$RUNNER_TEMP/infra-selected-state.json" \
+            --bucket "$TF_STATE_BUCKET" --key "$TF_STATE_KEY" --region "$TF_BACKEND_REGION" \
+            --workspace "$(terraform -chdir=infra/ecr workspace show)"
       - name: Plan and verify the catalog scope
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/infra-plan"
           terraform -chdir=infra/ecr plan -input=false -no-color -lock-timeout=5m \
-            -var="aws_region=$AWS_REGION" -out="$RUNNER_TEMP/infra-plan/infra.tfplan"
+            -var="aws_region=$AWS_REGION" -var="expected_bucket_owner=$AWS_ACCOUNT_ID" -out="$RUNNER_TEMP/infra-plan/infra.tfplan"
           terraform -chdir=infra/ecr show -no-color "$RUNNER_TEMP/infra-plan/infra.tfplan" > "$RUNNER_TEMP/infra-plan/plan.txt"
           terraform -chdir=infra/ecr show -json "$RUNNER_TEMP/infra-plan/infra.tfplan" > "$RUNNER_TEMP/infra-plan/plan.json"
-          python3 infra/ecr/verify_plan.py "$RUNNER_TEMP/infra-plan/plan.json" --allow-noop
+          python3 infra/ecr/verify_plan.py "$RUNNER_TEMP/infra-plan/plan.json" --mode sbom-adoption --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION"
+          python3 infra/s3/readback.py preflight --plan "$RUNNER_TEMP/infra-plan/plan.json" \
+            --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION" \
+            --report "$RUNNER_TEMP/infra-plan/s3-preflight.json"
       - name: Bind plan to its revision and checksum
         run: |
           set -euo pipefail
@@ -162,11 +175,24 @@ jobs:
             -backend-config="bucket=$TF_STATE_BUCKET" \
             -backend-config="key=$TF_STATE_KEY" \
             -backend-config="region=$TF_BACKEND_REGION" 2>&1 | tee "$RUNNER_TEMP/infra-init.txt"
+      - name: Require the existing shared state and default workspace
+        run: |
+          set -euo pipefail
+          umask 077
+          terraform -chdir=infra/ecr show -json > "$RUNNER_TEMP/infra-selected-state.json"
+          python3 infra/ecr/verify_state.py \
+            --metadata infra/ecr/.terraform/terraform.tfstate \
+            --state "$RUNNER_TEMP/infra-selected-state.json" \
+            --bucket "$TF_STATE_BUCKET" --key "$TF_STATE_KEY" --region "$TF_BACKEND_REGION" \
+            --workspace "$(terraform -chdir=infra/ecr workspace show)"
       - name: Verify exact plan scope before apply
         run: |
           set -euo pipefail
           terraform -chdir=infra/ecr show -json "$RUNNER_TEMP/infra-plan/infra.tfplan" > "$RUNNER_TEMP/verified-plan.json"
-          python3 infra/ecr/verify_plan.py "$RUNNER_TEMP/verified-plan.json" --allow-noop
+          python3 infra/ecr/verify_plan.py "$RUNNER_TEMP/verified-plan.json" --mode sbom-adoption --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION"
+          python3 infra/s3/readback.py preflight --plan "$RUNNER_TEMP/verified-plan.json" \
+            --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION" \
+            --report "$RUNNER_TEMP/s3-preflight-apply.json"
       - name: Apply exact verified plan
         run: |
           set -euo pipefail
@@ -176,22 +202,30 @@ jobs:
         run: |
           set -euo pipefail
           terraform -chdir=infra/ecr plan -input=false -no-color -lock-timeout=5m \
-            -detailed-exitcode -var="aws_region=$AWS_REGION" \
+            -detailed-exitcode -var="aws_region=$AWS_REGION" -var="expected_bucket_owner=$AWS_ACCOUNT_ID" \
             -out="$RUNNER_TEMP/post-apply.tfplan" > "$RUNNER_TEMP/post-apply.txt" 2>&1 || drift_status=$?
           cat "$RUNNER_TEMP/post-apply.txt"
           if [ "${drift_status:-0}" -ne 0 ]; then
-            echo '::error::Post-apply Terraform plan must return no changes; stop the rehearsal.'
+            echo '::error::Post-apply Terraform plan must return no changes; stop the infrastructure operation.'
             exit "${drift_status:-1}"
           fi
           terraform -chdir=infra/ecr show -json "$RUNNER_TEMP/post-apply.tfplan" > "$RUNNER_TEMP/post-apply.json"
-          python3 infra/ecr/verify_plan.py "$RUNNER_TEMP/post-apply.json" --mode noop
-          echo 'POST_RECREATE_TERRAFORM_DRIFT = NONE' >> "$GITHUB_STEP_SUMMARY"
+          python3 infra/ecr/verify_plan.py "$RUNNER_TEMP/post-apply.json" --mode noop --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION"
+          echo 'POST_APPLY_TERRAFORM_DRIFT = NONE' >> "$GITHUB_STEP_SUMMARY"
       - name: Read back AWS against the Infra contract
         run: |
           set -euo pipefail
           python3 infra/readback.py --account-id "$AWS_ACCOUNT_ID" \
-            --region "$AWS_REGION" --expect-empty 2>&1 | tee "$RUNNER_TEMP/infra-readback.json"
-          echo 'GREENFIELD_INFRA_RECREATION = PASS' >> "$GITHUB_STEP_SUMMARY"
+            --region "$AWS_REGION" 2>&1 | tee "$RUNNER_TEMP/infra-readback.json"
+          echo 'OPERATIONAL_ECR_CONFIGURATION = VERIFIED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Read back the SBOM bucket and expose ingestion configuration
+        run: |
+          set -euo pipefail
+          terraform -chdir=infra/ecr output -json > "$RUNNER_TEMP/infra-outputs.json"
+          python3 infra/s3/readback.py readback --outputs "$RUNNER_TEMP/infra-outputs.json" \
+            --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION" \
+            --report "$RUNNER_TEMP/s3-readback.json"
+          terraform -chdir=infra/ecr output -json ingestion_config > "$RUNNER_TEMP/sbom-ingestion-config.json"
       - name: Upload apply verification evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -209,5 +243,8 @@ jobs:
             ${{ runner.temp }}/post-apply.txt
             ${{ runner.temp }}/post-apply.json
             ${{ runner.temp }}/infra-readback.json
+            ${{ runner.temp }}/s3-preflight-apply.json
+            ${{ runner.temp }}/s3-readback.json
+            ${{ runner.temp }}/sbom-ingestion-config.json
           retention-days: 5
           if-no-files-found: error

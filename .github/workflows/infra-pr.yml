@@ -51,6 +51,11 @@ jobs:
           terraform_wrapper: false
       - name: Terraform fmt
         run: terraform fmt -check -recursive -diff infra
+      - name: Test the complete ECR root and S3 child with mocked AWS
+        run: |
+          terraform -chdir=infra/ecr init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=infra/ecr validate
+          terraform -chdir=infra/ecr test -no-color
       - name: Test DEV and HOM boundaries with mocked AWS providers
         run: |
           terraform -chdir=infra/lifecycle init -backend=false -input=false -lockfile=readonly
@@ -102,14 +107,27 @@ jobs:
             -backend-config="region=$TF_BACKEND_REGION" 2>&1 | tee "$RUNNER_TEMP/infra-init.txt"
       - name: Terraform validate
         run: terraform -chdir=infra/ecr validate
+      - name: Require the existing shared state and default workspace
+        run: |
+          set -euo pipefail
+          umask 077
+          terraform -chdir=infra/ecr show -json > "$RUNNER_TEMP/infra-selected-state.json"
+          python3 infra/ecr/verify_state.py \
+            --metadata infra/ecr/.terraform/terraform.tfstate \
+            --state "$RUNNER_TEMP/infra-selected-state.json" \
+            --bucket "$TF_STATE_BUCKET" --key "$TF_STATE_KEY" --region "$TF_BACKEND_REGION" \
+            --workspace "$(terraform -chdir=infra/ecr workspace show)"
       - name: Plan and verify the catalog scope
         run: |
           set -euo pipefail
           terraform -chdir=infra/ecr plan -input=false -no-color -lock-timeout=5m \
-            -var="aws_region=$AWS_REGION" -out="$RUNNER_TEMP/infra.tfplan"
+            -var="aws_region=$AWS_REGION" -var="expected_bucket_owner=$AWS_ACCOUNT_ID" -out="$RUNNER_TEMP/infra.tfplan"
           terraform -chdir=infra/ecr show -no-color "$RUNNER_TEMP/infra.tfplan" > "$RUNNER_TEMP/infra-plan.txt"
           terraform -chdir=infra/ecr show -json "$RUNNER_TEMP/infra.tfplan" > "$RUNNER_TEMP/infra-plan.json"
-          python3 infra/ecr/verify_plan.py "$RUNNER_TEMP/infra-plan.json" --allow-noop
+          python3 infra/ecr/verify_plan.py "$RUNNER_TEMP/infra-plan.json" --mode sbom-adoption --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION"
+          python3 infra/s3/readback.py preflight --plan "$RUNNER_TEMP/infra-plan.json" \
+            --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION" \
+            --report "$RUNNER_TEMP/s3-preflight.json"
       - name: Publish plan summary
         run: |
           {
@@ -128,5 +146,6 @@ jobs:
             ${{ runner.temp }}/infra-init.txt
             ${{ runner.temp }}/infra-plan.txt
             ${{ runner.temp }}/infra-plan.json
+            ${{ runner.temp }}/s3-preflight.json
           retention-days: 5
           if-no-files-found: error
