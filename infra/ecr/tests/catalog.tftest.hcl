@@ -1,12 +1,17 @@
 # Exercise the real module graph with a mocked AWS provider; no LAB state,
 # credentials or backend are used by terraform test.
-mock_provider "aws" {}
+mock_provider "aws" {
+  mock_data "aws_caller_identity" {
+    defaults = { account_id = "123456789012" }
+  }
+}
 
 run "catalog_greenfield" {
   command = plan
 
   variables {
-    aws_region = "sa-east-1"
+    aws_region            = "sa-east-1"
+    expected_bucket_owner = "123456789012"
     additional_tags = {
       ManagedBy = "override-must-not-win"
       Source    = "override-must-not-win"

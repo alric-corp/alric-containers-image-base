@@ -1,6 +1,7 @@
 # Product infrastructure
 
-The factory remains at repository root. `infra/ecr` owns its ECR repositories;
+The factory remains at repository root. `infra/ecr` owns its ECR repositories
+and calls the SBOM analytics child at `infra/s3` in the **same** state;
 `infra/iam` independently bootstraps the Infra identities. Shared image execution
 remains in `alric-corp/alric-containers-reusable-workflows`. The historical
 registry repository and its drift-remediation mechanism are not dependencies.
@@ -10,7 +11,8 @@ registry repository and its drift-remediation mechanism are not dependencies.
 `infra/ecr` reads `../../frameworks/*.yaml`. The current 16 definitions produce
 16 instances of the pinned upstream ECR module 3.2.0. Its enabled resource graph
 contains a repository, lifecycle policy and repository policy per definition:
-48 managed resources. Tests exercise the actual module using an AWS mock, and
+48 ECR managed resources. The six explicitly named S3 resources add to that
+graph without moving ECR addresses. Tests exercise the actual modules using an AWS mock, and
 `verify_plan.py` checks the complete real plan before apply. There are no imports,
 moved blocks or state-migration operations.
 
@@ -70,11 +72,15 @@ identity. Fork PRs never receive AWS. `infra-apply.yml` is dispatch-only, with n
 scheduled apply. It uploads the binary plan and SHA-256 checksum, pins both jobs
 to the same commit, and applies only that exact plan. Its final plan must have
 exit code zero and pass the complete no-op graph check. AWS read-back independently
-checks all 16 repositories and their policies. The rehearsal also requires them
-to be empty; `--expect-empty` is removed only in the later product phase.
+checks all catalog repositories and their policies, including when images exist.
+`--expect-empty` remains an optional greenfield-rehearsal check, not an incremental
+S3 prerequisite. The S3 collision preflight and configuration read-back preserve
+JSON diagnostics and expose the applied protocol-v1 ingestion configuration.
+See [the S3 contract and application prerequisites](s3/README.md).
 
-The first initialization runs through the protected dispatch: its Infra apply
-identity can create the initially empty state. Subsequent PR plans reuse that
+The historical greenfield initialization ran through the protected dispatch.
+This incremental S3 adoption requires that existing ECR state; an empty/wrong
+state is rejected rather than used for recreation. PR plans reuse that
 state with read-only state permissions (plus locking). The provider lockfiles
 include verified Linux amd64 and macOS arm64 checksums, so readonly initialization
 works in both the hosted runner and the LAB operator environment.
