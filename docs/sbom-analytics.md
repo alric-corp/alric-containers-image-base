@@ -249,7 +249,12 @@ DDL do Athena. `ATHENA_EXECUTED = NO`.
 
 ## Integrações restantes
 
-Faltam aquisição autorizada, ingestão S3, escolha de bucket/prefixo e acesso,
+O [protocolo de ingestão por snapshots](sbom-analytics-ingestion.md) adiciona
+planejamento offline, adapter com cliente S3 injetado e testes sem rede. Preserva
+este normalizador e não configura SDK, escreve na AWS ou executa Athena. A seleção
+de um snapshot fechado substitui nesta fase o append global proposto inicialmente.
+
+Faltam aquisição autorizada, integração S3 real, escolha de bucket/prefixo e acesso,
 decisões de retenção e adoção, criação de catálogo/tabelas, deduplicação na
 ingestão e prova hospedada Athena. Os prefixos são placeholders separados
 para raw, Parquet, relatórios e resultados de consultas. O bucket de custódia
