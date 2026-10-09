@@ -9,7 +9,7 @@ lógicas deduplicadas e o inventário de plataforma.
 
 Substitua `<ANALYTICS_BUCKET>` e `<DATASET_PREFIX>` somente numa integração
 autorizada. Não há bucket escolhido/aprovado neste PR, inclusive o de HGC-04.
-A organização futura proposta é:
+A organização inicialmente proposta era:
 
 ```text
 s3://<ANALYTICS_BUCKET>/<DATASET_PREFIX>/
@@ -20,6 +20,15 @@ s3://<ANALYTICS_BUCKET>/<DATASET_PREFIX>/
   reports/<batch_id>/...
   query-results/...
 ```
+
+O [incremento de ingestão](../../docs/sbom-analytics-ingestion.md) implementa
+snapshots fechados e substitui esse append compartilhado nesta fase. Seu plano
+de catalogação renderiza estes mesmos templates para duas LOCATIONs exatas em
+`<prefix>/snapshots/<snapshot_id>/analytics/sbom_observations/` e
+`<prefix>/snapshots/<snapshot_id>/analytics/sbom_packages/`. Exige nomes POC
+externos e confirmação de namespace isolado; não executa DDL ou altera tabelas.
+O marcador final não bloqueia leituras Athena por si só. A catalogação precisa
+selecionar explicitamente um snapshot cujo read-back completo passou.
 
 O batch local inclui raw, relatórios e Parquet; cada `LOCATION` Athena inclui
 **somente** os Parquets da respectiva tabela/versão. A futura ingestão deve
