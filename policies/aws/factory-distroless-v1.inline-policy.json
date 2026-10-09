@@ -118,7 +118,6 @@
         "ecr:GetLifecyclePolicy",
         "ecr:GetRepositoryPolicy",
         "ecr:InitiateLayerUpload",
-        "ecr:ListImageReferrers",
         "ecr:ListImages",
         "ecr:ListTagsForResource",
         "ecr:PutImage",

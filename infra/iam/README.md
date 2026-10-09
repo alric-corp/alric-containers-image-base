@@ -85,62 +85,35 @@ does not authorize deleting its IAM role/policies, its backend, or the shared
 OIDC provider. Record legacy resources and any remaining ownership before
 reporting the registry as ready for archive; do not archive it automatically.
 
-## Central Factory role (v1)
+## Central Factory role: external ownership (v1)
 
-`factory.tf` adds, in this same local bootstrap state, the LAB role
-`itau-github-repo-factory-distroless-v1` (`var.factory_role_name`) and **one**
-inline policy on it, `factory-distroless-v1`. There is no customer-managed
-policy and no attachment. It is additive: the two Infra roles, their inline
-policies, the lifecycle DEV role (`infra/lifecycle`, `DEV.role_name`) and every
-workflow role ARN stay unchanged until a separate configuration cutover. No
-OIDC provider, IAM user, access key or IAM administration permission is created.
+The operational role `itau-github-repo-factory-distroless-v1` and its only inline
+policy `factory-distroless-v1` are **not managed by Terraform**. LAB provisioning
+is an operator step with `Tomas-Instructor`; corporate provisioning belongs to
+the IAM team via a ticket. The reviewed reference documents are
+[`factory-distroless-v1.trust.json`](../../policies/aws/factory-distroless-v1.trust.json)
+and [`factory-distroless-v1.inline-policy.json`](../../policies/aws/factory-distroless-v1.inline-policy.json).
+No workflow applies them. See the [external IAM contract and LAB runbook](../../docs/factory-distroless-v1-iam-runbook.md)
+for exact subjects, permissions, quota checks, collision handling and API read-back.
 
-Trust: `StringEquals` on `aud`, `repository_id`, `repository_owner_id` and the
-two exact subjects `<prefix>:environment:lab-image-base-infra` and
-`<prefix>:environment:DEV`; both Environments allow only `develop`. There is no
-`:pull_request`, branch/ref or wildcard subject, so PR planning keeps no
-privileged AWS access. Sessions last up to 3 hours (10800 s).
+This root keeps only the legacy Infra roles and their inline policies at their
+existing addresses. There are no central-role resources, variables, outputs,
+preconditions or state dependencies. The existing local IAM state, lifecycle
+DEV identity, ECR/S3 state and workflows are preserved. Do not apply this root
+to provision the external identity or use state operations to transfer ownership.
 
-The policy has eleven statements, grouped by responsibility:
+The external policy preserves the reviewed scopes and removes only the invalid
+IAM action `ecr:ListImageReferrers`; the API uses `ecr:BatchGetImage`, which remains
+on the same repository ARNs. It has eleven statements and 4,740 characters
+without formatting whitespace, below the aggregate 10,240-character inline-role
+quota. Athena/Glue and IAM administration are excluded. Effective analytics
+bucket listing remains bucket-wide because the reviewed Terraform HeadBucket
+grant already requires `s3:ListBucket`; the snapshot listing statement does not
+narrow that earlier Allow.
 
-| Responsibility | Statements | Scope |
-| --- | --- | --- |
-| Terraform | `EnsureExactBackendBucket`, `ExactDefaultWorkspaceState`, `ExactDefaultWorkspaceLock`, `ReadOnlyRegionalRepositoryInventory`, `ExactSbomAnalyticsBucket` | The Infra apply statements, referenced verbatim by Sid: backend bucket, state object, `.tflock` (the only deletable object), regional repository inventory and analytics-bucket configuration |
-| ECR | `ExactCatalogEcr`, `RegistryAuthentication` | One statement on the 16-repository catalog with the duplicate-free union (21 actions) of the Terraform repository configuration and the DEV build, read and publication actions; `ecr:GetAuthorizationToken` (`Resource: "*"`, the API has no ARN, bound to the region) |
-| DEV release store | `DevReleaseInventory`, `DevReleaseRecords` | `s3:ListBucket` on `DEV.release_bucket`; `s3:GetObject`/`s3:PutObject` on its objects (proven DEV scope; the bucket policy still requires `If-None-Match` for immutable records). No deletion |
-| SBOM snapshots | `SbomSnapshotObjects`, `SbomSnapshotListing` | `s3:PutObject`, `s3:GetObject`, `s3:GetObjectVersion` on `sbom-analytics/poc-v1/snapshots/*` and prefix-limited `s3:ListBucket`. The bucket policy still requires `If-None-Match: *` on creation. No deletion |
-
-Merging the two ECR statements removed the duplicated actions and repository
-list without changing any grant: the effective permissions equal the union of
-the four customer-managed policies of the previous review.
-`SbomSnapshotListing` states the data-plane scope, but the provider's
-`HeadBucket` needs bucket-level `s3:ListBucket`, already granted by
-`ExactSbomAnalyticsBucket`, so the effective listing of the analytics bucket is
-not limited to the snapshot prefix.
-
-**Size.** IAM allows 10,240 characters, excluding whitespace, for all inline
-policies of one role together. This is the only inline policy of the role and
-uses 4,765 of them. `factory_policy_max_characters` (default and maximum 10240)
-makes `terraform plan` fail before any apply if the document grows past the
-budget. Athena/Glue permissions are planned for this same policy once their
-workgroup, database, tables/views and the snapshot and `query-results/poc-v1/`
-prefixes are approved. If they do not fit, report the blocker: never widen a
-grant or change the architecture to make them fit.
-
-**Tests.** `tests/fixtures/factory-distroless-v1.policy.json` is the reviewed
-effective document. `terraform -chdir=infra/iam test` asserts that the
-evaluated policy equals it and fits the limit. The Python tests in
-`infra/tests` (which CI runs) check the document against the authorized
-permission union, the absence of deletion/administration/Athena/Glue, the size
-and the text of the Terraform source. After a deliberate policy change, regenerate
-the fixture from the plan (`terraform show -json <plan>`, the `policy` of
-`aws_iam_role_policy.factory_distroless_v1`) and review the diff.
-
-Bootstrap is the same operator process as above, from the original local state
-with a new reviewed plan: the central role itself needs exactly two creations,
-`aws_iam_role.factory_distroless_v1` and
-`aws_iam_role_policy.factory_distroless_v1`, with no change or destruction.
-Pending drift on the existing Infra inline policies (for example a console
-change) is reconciled in its own reviewed step, never inside the central-role
-plan. Legacy roles are retired only after the cutover proves every LAB/DEV flow
-on the central role.
+Offline contract tests run with `python3 -B -m unittest discover -s infra/tests -p test_external_iam_contract.py -v`.
+The three existing mocked Terraform tests for the legacy Infra identities stay
+in `tests/boundaries.tftest.hcl`. Neither suite provisions the central role.
+A later PR introduces a separate operational-role configuration reference after
+approved IAM read-back; it must preserve `DEV.role_name` while lifecycle still
+manages that legacy role. No HOM cutover or automatic legacy retirement is included.

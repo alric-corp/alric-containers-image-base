@@ -36,6 +36,7 @@ não nesta árvore.
 | Revisar a signing key Wolfi e sua rotação | [Wolfi signing-key defense-in-depth](wolfi-signing-key.md) |
 | Avaliar raízes, metadados e adoção do Sigstore | [ADR-0002 — Sigstore Trust Model](adr/0002-sigstore-trust-model.md) |
 | Avaliar permissões AWS, templates e aceite IAM | [Contrato IAM](iam-permission-contract.md) |
+| Provisionar a role operacional externa no LAB e conferir seu contrato | [Factory Distroless V1 — IAM externo](factory-distroless-v1-iam-runbook.md) |
 | Consultar as políticas executáveis | [Políticas](../policies/README.md) |
 
 ## Troubleshooting

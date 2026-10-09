@@ -75,33 +75,3 @@ variable "role_name_prefix" {
     error_message = "role_name_prefix must be a literal IAM role-name prefix."
   }
 }
-
-variable "factory_role_name" {
-  description = "Central Factory role assumed through GitHub OIDC; workflows adopt it in a separate cutover."
-  type        = string
-  default     = "itau-github-repo-factory-distroless-v1"
-  validation {
-    condition     = can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.factory_role_name))
-    error_message = "factory_role_name must be an exact IAM role name."
-  }
-}
-
-variable "factory_dev_environment" {
-  description = "Protected GitHub environment of the DEV build/publication flows."
-  type        = string
-  default     = "DEV"
-  validation {
-    condition     = can(regex("^[A-Za-z0-9_.-]+$", var.factory_dev_environment))
-    error_message = "factory_dev_environment must be an exact, nonempty environment name."
-  }
-}
-
-variable "factory_policy_max_characters" {
-  description = "Plan-time budget of the central inline policy, in characters excluding whitespace. AWS caps all inline policies of one role together at 10,240."
-  type        = number
-  default     = 10240
-  validation {
-    condition     = var.factory_policy_max_characters > 0 && var.factory_policy_max_characters <= 10240
-    error_message = "factory_policy_max_characters must be between 1 and the IAM limit of 10,240; never raise it above the AWS quota."
-  }
-}
