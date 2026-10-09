@@ -20,3 +20,13 @@ output "execution_policies" {
   description = "Reviewable resource-scoped permissions; no credentials."
   value       = local.execution_policies
 }
+
+output "factory_role_arn" {
+  description = "Central Factory role; workflows adopt it only in the separate cutover."
+  value       = aws_iam_role.factory_distroless_v1.arn
+}
+
+output "factory_policies" {
+  description = "Reviewable domain policies attached to the central role; no credentials."
+  value       = local.factory_policies
+}

@@ -75,3 +75,23 @@ variable "role_name_prefix" {
     error_message = "role_name_prefix must be a literal IAM role-name prefix."
   }
 }
+
+variable "factory_role_name" {
+  description = "Central Factory role assumed through GitHub OIDC; workflows adopt it in a separate cutover."
+  type        = string
+  default     = "itau-github-repo-factory-distroless-v1"
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.factory_role_name))
+    error_message = "factory_role_name must be an exact IAM role name."
+  }
+}
+
+variable "factory_dev_environment" {
+  description = "Protected GitHub environment of the DEV build/publication flows."
+  type        = string
+  default     = "DEV"
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+$", var.factory_dev_environment))
+    error_message = "factory_dev_environment must be an exact, nonempty environment name."
+  }
+}

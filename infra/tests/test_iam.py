@@ -60,8 +60,11 @@ class IamBoundaryTests(unittest.TestCase):
         self.assertLessEqual(len(json.dumps(BUILD, separators=(",", ":"))), 6144)
 
     def test_bootstrap_manages_only_new_roles_and_inline_policies(self):
-        text = "\n".join(path.read_text() for path in IAM.glob("*.tf"))
+        text = "\n".join(path.read_text() for path in sorted(IAM.glob("*.tf")))
+        # The central role and its domain policies are additive; the Infra roles keep their addresses.
         self.assertEqual(re.findall(r'resource\s+"([^"]+)"\s+"([^"]+)"', text), [
+            ("aws_iam_role", "factory_distroless_v1"), ("aws_iam_policy", "factory_distroless_v1"),
+            ("aws_iam_role_policy_attachment", "factory_distroless_v1"),
             ("aws_iam_role", "infra"), ("aws_iam_role_policy", "infra"),
         ])
         self.assertIn('backend "local" {}', text)
@@ -155,6 +158,90 @@ class IamBoundaryTests(unittest.TestCase):
         self.assertEqual(sids, ["ExactProductIdentity", "ExactCatalogEcr", "EnsureExactBackendBucket",
                                 "ExactDefaultWorkspaceState", "ExactDefaultWorkspaceLock",
                                 "ReadOnlyRegionalRepositoryInventory", "ExactSbomAnalyticsBucket"])
+
+
+class CentralFactoryRoleTests(unittest.TestCase):
+    FACTORY = (IAM / "factory.tf").read_text()
+    LIFECYCLE = (ROOT / "infra/lifecycle/main.tf").read_text()
+    CONFIG = json.loads((ROOT / "policies/pipeline/config.json").read_text())
+
+    def actions(self, text, name):
+        return re.findall(r'"([a-z0-9]+:[A-Za-z]+)"', text.split(f"{name} = [", 1)[1].split("]", 1)[0])
+
+    def test_exact_name_and_three_hour_sessions(self):
+        variables = (IAM / "variables.tf").read_text()
+        self.assertIn('default     = "itau-github-repo-factory-distroless-v1"', variables)
+        self.assertIn("name                 = var.factory_role_name", self.FACTORY)
+        self.assertIn("max_session_duration = 10800", self.FACTORY)
+        self.assertNotIn("factory_role_name", (IAM / "lab.tfvars").read_text())
+
+    def test_trust_accepts_only_two_protected_environments(self):
+        self.assertIn('"${var.github_subject_prefix}:environment:${var.github_apply_environment}"', self.FACTORY)
+        self.assertIn('"${var.github_subject_prefix}:environment:${var.factory_dev_environment}"', self.FACTORY)
+        self.assertIn('default     = "DEV"', (IAM / "variables.tf").read_text())
+        for forbidden in ("pull_request", "StringLike = { \"token", "ref:refs/heads", "repo:*", ":*\"", "AssumeRole\""):
+            self.assertNotIn(forbidden, self.FACTORY)
+        for claim in ("aud", "repository_id", "repository_owner_id", "sub"):
+            self.assertIn(f'"token.actions.githubusercontent.com:{claim}"', self.FACTORY)
+        self.assertEqual(self.FACTORY.count("sts:AssumeRoleWithWebIdentity"), 1)
+        self.assertNotRegex(self.FACTORY, r'resource\s+"aws_iam_(openid_connect_provider|user|access_key)"')
+
+    def test_policies_use_exact_arns(self):
+        resources = re.findall(r'Resource\s*=\s*(\[[^\]]*\]|[a-z_.]+)', self.FACTORY)
+        self.assertEqual(resources, ['["*"]', 'local.repository_arns', '[local.release_bucket_arn]',
+                                     '["${local.release_bucket_arn}/*"]', '[local.sbom_snapshots_arn]',
+                                     '[local.analytics_bucket_arn]'])
+        self.assertRegex(self.FACTORY, r'Action\s*=\s*\["ecr:GetAuthorizationToken"\]\s+Resource\s*=\s*\["\*"\]\s+'
+                                       r'Condition\s*=\s*\{\s*StringEquals = \{ "aws:RequestedRegion" = var.aws_region \}')
+        self.assertIn('sbom_snapshots_arn = "${local.analytics_bucket_arn}/sbom-analytics/poc-v1/snapshots/*"', self.FACTORY)
+        self.assertIn('release_bucket_arn = "arn:aws:s3:::${local.pipeline.DEV.release_bucket}"', self.FACTORY)
+        self.assertEqual(self.CONFIG["DEV"]["release_bucket"], "712107929769-image-base-releases-dev")
+        self.assertIn("infra = local.execution_policies[\"apply\"]", self.FACTORY)
+
+    def test_no_new_destructive_or_administrative_actions(self):
+        actions = set(re.findall(r'"((?:ecr|s3|iam|sts|athena|glue):[A-Za-z*]+)"', self.FACTORY))
+        self.assertFalse({a for a in actions if re.search(r"Delete|\*|^iam:|^athena:|^glue:|PutBucketPolicy|PutBucketVersioning|PutLifecycle|SetRepositoryPolicy", a)})
+        self.assertEqual(set(self.actions(self.FACTORY, "publication_push_actions")),
+                         {"ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage"})
+        self.assertNotIn("BatchDeleteImage", self.FACTORY)
+        self.assertNotIn("DeleteObjectVersion", self.FACTORY)
+
+    def test_publication_reuses_the_proven_dev_actions(self):
+        self.assertEqual(self.actions(self.FACTORY, "publication_read_actions"), re.findall(r'"(ecr:[A-Za-z]+)"', self.LIFECYCLE.split("read_actions = [", 1)[1].split("]", 1)[0]))
+        self.assertEqual(self.actions(self.FACTORY, "publication_push_actions"), re.findall(r'"(ecr:[A-Za-z]+)"', self.LIFECYCLE.split("push_actions = [", 1)[1].split("]", 1)[0]))
+
+    def test_backend_state_and_lock_addresses_are_unchanged(self):
+        main = (IAM / "main.tf").read_text()
+        self.assertIn('state_key  = "alric-containers-image-base/terraform.tfstate"', main)
+        self.assertIn('lock_arn   = "${local.state_arn}.tflock"', main)
+        self.assertEqual(self.CONFIG["infra"]["backend"], {"bucket": "712107929769-alric-containers-image-base-tfstate",
+                                                          "region": "us-east-2", "key": "alric-containers-image-base/terraform.tfstate"})
+        self.assertNotIn("backend", self.FACTORY.split("locals {", 1)[0])
+
+    def test_legacy_roles_and_lifecycle_are_untouched(self):
+        self.assertEqual(self.CONFIG["DEV"]["role_name"], "alric-image-base-factory-dev")
+        self.assertEqual((self.CONFIG["infra"]["plan_role_name"], self.CONFIG["infra"]["apply_role_name"]),
+                         ("alric-github-repo-1360616627-infra-plan", "alric-github-repo-1360616627-infra-apply"))
+        self.assertIn('name                 = local.dev.role_name', self.LIFECYCLE)
+        self.assertIn('resource "aws_iam_role" "dev"', self.LIFECYCLE)
+        self.assertIn('name     = "${var.role_name_prefix}-${var.github_repository_id}-infra-${each.key}"'.replace('name     ', 'name                 '),
+                      (IAM / "main.tf").read_text())
+
+    def test_pull_request_infra_planning_stays_unprivileged(self):
+        self.assertIs(self.CONFIG["infra"]["plan_enabled"], False)
+        workflow = (ROOT / ".github/workflows/infra-pr.yml").read_text()
+        self.assertIn("--scope INFRA_PLAN", workflow)
+        self.assertNotIn("factory-distroless", workflow)
+        self.assertNotIn("pull_request", self.FACTORY)
+
+    def test_workflows_and_hom_are_not_switched_yet(self):
+        for path in (ROOT / ".github/workflows").glob("*.yml"):
+            self.assertNotIn("factory-distroless", path.read_text(), path.name)
+        self.assertNotIn("factory-distroless", (ROOT / "scripts/pipeline/governance/configuration.py").read_text())
+        self.assertEqual(self.CONFIG["HOM"], {"account_id": "248908662184", "region": "sa-east-1",
+                                             "role_name": "alric-image-base-factory-hom",
+                                             "release_bucket": "248908662184-image-base-releases-hom"})
+        self.assertNotIn("HOM", self.FACTORY)
 
 
 if __name__ == "__main__":

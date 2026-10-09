@@ -84,3 +84,39 @@ classification and authorization. Successful destruction of the old ECR state
 does not authorize deleting its IAM role/policies, its backend, or the shared
 OIDC provider. Record legacy resources and any remaining ownership before
 reporting the registry as ready for archive; do not archive it automatically.
+
+## Central Factory role (v1)
+
+`factory.tf` adds, in this same local bootstrap state, the LAB role
+`itau-github-repo-factory-distroless-v1` (`var.factory_role_name`) and four
+customer-managed policies attached to it. It is additive: the two Infra roles,
+their inline policies, the lifecycle DEV role (`infra/lifecycle`,
+`DEV.role_name`) and every workflow role ARN stay unchanged until a separate
+configuration cutover. No OIDC provider, IAM user, access key or IAM
+administration permission is created.
+
+Trust: `StringEquals` on `aud`, `repository_id`, `repository_owner_id` and the
+two exact subjects `<prefix>:environment:lab-image-base-infra` and
+`<prefix>:environment:DEV`; both Environments allow only `develop`. There is no
+`:pull_request`, branch/ref or wildcard subject, so PR planning keeps no
+privileged AWS access. Sessions last up to 3 hours (10800 s).
+
+| Policy suffix | Domain | Scope |
+| --- | --- | --- |
+| `-infra` | A — Terraform | Exactly the Infra apply document above: backend bucket, state object, `.tflock` (the only deletable object), ECR configuration on the 16-repository catalog, regional repository inventory, analytics bucket configuration |
+| `-ecr` | B — build/publication | `ecr:GetAuthorizationToken` (`Resource: "*"`, region-bound, the API has no ARN) and the proven DEV read/push actions on the exact catalog |
+| `-releases` | C — DEV release store | `s3:ListBucket` on `DEV.release_bucket`; `s3:GetObject`/`s3:PutObject` on its objects (proven DEV scope; the bucket policy still requires `If-None-Match` for immutable records). No deletion |
+| `-sbom` | D — SBOM snapshots | `s3:PutObject`, `s3:GetObject`, `s3:GetObjectVersion` on `sbom-analytics/poc-v1/snapshots/*` and prefix-limited `s3:ListBucket`. The bucket policy still requires `If-None-Match: *`. No deletion |
+
+Domain E (Athena/Glue) is planned for this same role but not attached: a
+separate increment will scope it to the approved POC workgroup, database,
+tables/views, the snapshot Parquet prefixes and `query-results/poc-v1/`, after
+those resources and controls are approved. No workgroup, database or SQL is
+created here.
+
+Bootstrap is the same operator process as above, from the original local state
+with a new reviewed plan: only creations of the role, the four policies and the
+four attachments are acceptable. Pending drift on the existing Infra inline
+policies (for example a console change) is reconciled in its own reviewed step,
+never inside the central-role plan. Legacy roles are retired only after the
+cutover proves every LAB/DEV flow on the central role.
