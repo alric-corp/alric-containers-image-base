@@ -47,6 +47,13 @@ pipeline bootstrap contract, outside both Terraform roots.
 
 ## IAM and workflow boundaries
 
+The identities below describe legacy Terraform ownership. Operational DEV and
+protected INFRA_APPLY resolution is prepared separately in
+[Stage B](../docs/factory-central-role-cutover.md), using the external central
+role without changing these resources. The historical Environment migration
+notes below are not a statement of current GitHub Settings; the Stage B document
+records current observations and the required activation decision.
+
 `infra/iam` has a separate local bootstrap state. Cloud/IAM must provide these
 identities before their first pipeline use; the shared OIDC provider is referenced
 and never created or deleted here. No static AWS credentials are stored in GitHub.

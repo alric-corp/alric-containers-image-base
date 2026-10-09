@@ -24,5 +24,8 @@
       "region": "us-east-2",
       "key": "alric-containers-image-base/terraform.tfstate"
     }
+  },
+  "factory": {
+    "operational_role_name": "itau-github-repo-factory-distroless-v1"
   }
 }

@@ -233,10 +233,10 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         self.assertEqual((self.config["infra"]["plan_role_name"], self.config["infra"]["apply_role_name"]),
                          ("alric-github-repo-1360616627-infra-plan", "alric-github-repo-1360616627-infra-apply"))
 
-    def test_workflows_and_resolver_do_not_apply_or_adopt_the_external_contract(self):
+    def test_workflows_use_resolver_without_applying_external_iam_contract(self):
         for path in (ROOT / ".github/workflows").glob("*.yml"):
-            # The manual, STS-only preflight is the sole staged exception;
-            # operational workflows and the resolver still cannot adopt it.
+            # Only the identity preflight pins the ARN directly; operational
+            # workflows keep using the versioned resolver interface.
             # Its full guards/session/identity contract is tested in governance.
             if path.name == "factory-central-role-preflight.yml":
                 self.assertIn("inline-session-policy:", path.read_text())
@@ -245,6 +245,7 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
             self.assertNotIn("factory-distroless", path.read_text(), path.name)
         for path in (ROOT / "scripts").rglob("*.py"):
             self.assertNotIn("factory-distroless-v1", path.read_text(), str(path.relative_to(ROOT)))
+        self.assertEqual(self.config["factory"]["operational_role_name"], ROLE_NAME)
         self.assertIs(self.config["infra"]["plan_enabled"], False)
         self.assertEqual(self.config["HOM"], {
             "account_id": "248908662184", "region": "sa-east-1", "role_name": "alric-image-base-factory-hom",
