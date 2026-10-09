@@ -1,4 +1,9 @@
-# Separate Infra IAM proposal (not applied)
+# Infra IAM permissions for the analytics bucket
+
+Implemented in [`infra/iam/main.tf`](../iam/main.tf) as the
+`ExactSbomAnalyticsBucket` statement of both Infra inline policies. The bootstrap
+IAM state applies it separately (see [`infra/iam/README.md`](../iam/README.md));
+versioned policy is not proof of the applied policy.
 
 The existing LAB apply policy permits S3 administration only on the state bucket.
 It grants nothing on the new analytics bucket. Keep that state/lock policy and
@@ -64,7 +69,7 @@ No data permission or read-back success grants Athena authority. Athena result
 permissions must be scoped separately to `query-results/poc-v1/`; never copy
 the conditional snapshot requirement onto the results area.
 
-No role or policy is created/changed by this document. The IAM increment must be
+This document creates or changes no role or policy. The IAM increment must be
 approved and applied through the existing IAM ownership process before Infra
 dispatch can manage this bucket. The current Environment branch/reviewer gate
 also remains an independent prerequisite.
