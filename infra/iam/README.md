@@ -84,3 +84,36 @@ classification and authorization. Successful destruction of the old ECR state
 does not authorize deleting its IAM role/policies, its backend, or the shared
 OIDC provider. Record legacy resources and any remaining ownership before
 reporting the registry as ready for archive; do not archive it automatically.
+
+## Central Factory role: external ownership (v1)
+
+The operational role `itau-github-repo-factory-distroless-v1` and its only inline
+policy `factory-distroless-v1` are **not managed by Terraform**. LAB provisioning
+is an operator step with `Tomas-Instructor`; corporate provisioning belongs to
+the IAM team via a ticket. The reviewed reference documents are
+[`factory-distroless-v1.trust.json`](../../policies/aws/factory-distroless-v1.trust.json)
+and [`factory-distroless-v1.inline-policy.json`](../../policies/aws/factory-distroless-v1.inline-policy.json).
+No workflow applies them. See the [external IAM contract and LAB runbook](../../docs/factory-distroless-v1-iam-runbook.md)
+for exact subjects, permissions, quota checks, collision handling and API read-back.
+
+This root keeps only the legacy Infra roles and their inline policies at their
+existing addresses. There are no central-role resources, variables, outputs,
+preconditions or state dependencies. The existing local IAM state, lifecycle
+DEV identity, ECR/S3 state and workflows are preserved. Do not apply this root
+to provision the external identity or use state operations to transfer ownership.
+
+The external policy preserves the reviewed scopes and removes only the invalid
+IAM action `ecr:ListImageReferrers`; the API uses `ecr:BatchGetImage`, which remains
+on the same repository ARNs. It has eleven statements and 4,740 characters
+without formatting whitespace, below the aggregate 10,240-character inline-role
+quota. Athena/Glue and IAM administration are excluded. Effective analytics
+bucket listing remains bucket-wide because the reviewed Terraform HeadBucket
+grant already requires `s3:ListBucket`; the snapshot listing statement does not
+narrow that earlier Allow.
+
+Offline contract tests run with `python3 -B -m unittest discover -s infra/tests -p test_external_iam_contract.py -v`.
+The three existing mocked Terraform tests for the legacy Infra identities stay
+in `tests/boundaries.tftest.hcl`. Neither suite provisions the central role.
+A later PR introduces a separate operational-role configuration reference after
+approved IAM read-back; it must preserve `DEV.role_name` while lifecycle still
+manages that legacy role. No HOM cutover or automatic legacy retirement is included.
