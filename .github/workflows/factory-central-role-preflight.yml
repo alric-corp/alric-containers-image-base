@@ -1,0 +1,145 @@
+name: Factory - Central role OIDC preflight
+
+on:
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: factory-central-role-preflight
+  cancel-in-progress: false
+
+jobs:
+  dev:
+    name: OIDC DEV
+    if: github.repository == 'alric-corp/alric-containers-image-base' && github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: DEV
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_ACCOUNT: '712107929769'
+      EXPECTED_ROLE_NAME: itau-github-repo-factory-distroless-v1
+      EXPECTED_ROLE_ID: AROA2LTHQWCU2N3H2OE3L
+      PROOF_ENVIRONMENT: DEV
+      ROLE_SESSION_NAME: factory-preflight-${{ github.run_id }}-${{ github.run_attempt }}-dev
+    steps:
+      - name: Assume the external central role through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::712107929769:role/itau-github-repo-factory-distroless-v1
+          aws-region: us-east-1
+          allowed-account-ids: '712107929769'
+          audience: sts.amazonaws.com
+          role-session-name: ${{ env.ROLE_SESSION_NAME }}
+          role-duration-seconds: 900
+          unset-current-credentials: true
+          use-existing-credentials: false
+          force-skip-oidc: false
+          role-chaining: false
+          translate-env-variables: false
+          output-credentials: false
+          action-timeout-s: 120
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"sts:GetCallerIdentity","Resource":"*"}]}
+      - name: Verify STS identity and record the proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity --region us-east-1 --output json --no-cli-pager > "$RUNNER_TEMP/central-role-identity.json"
+          python3 -B - <<'PYCODE'
+          import json
+          import os
+          from pathlib import Path
+          identity = json.loads((Path(os.environ['RUNNER_TEMP']) / 'central-role-identity.json').read_text())
+          expected_arn = 'arn:aws:sts::' + os.environ['EXPECTED_ACCOUNT'] + ':assumed-role/' + os.environ['EXPECTED_ROLE_NAME'] + '/' + os.environ['ROLE_SESSION_NAME']
+          checks = {
+              'account': identity.get('Account') == os.environ['EXPECTED_ACCOUNT'],
+              'assumed_role_arn': identity.get('Arn') == expected_arn,
+              'role_id_and_session': identity.get('UserId') == os.environ['EXPECTED_ROLE_ID'] + ':' + os.environ['ROLE_SESSION_NAME'],
+          }
+          report = {
+              'schema_version': 1, 'result': 'PASS' if all(checks.values()) else 'FAIL',
+              'repository': os.environ['GITHUB_REPOSITORY'], 'source_sha': os.environ['GITHUB_SHA'],
+              'ref': os.environ['GITHUB_REF'], 'event': os.environ['GITHUB_EVENT_NAME'],
+              'run_id': os.environ['GITHUB_RUN_ID'], 'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'environment': os.environ['PROOF_ENVIRONMENT'], 'region': 'us-east-1',
+              'expected_role_arn': 'arn:aws:iam::' + os.environ['EXPECTED_ACCOUNT'] + ':role/' + os.environ['EXPECTED_ROLE_NAME'],
+              'observed_identity': identity, 'checks': checks,
+              'session_scope': 'STS_GET_CALLER_IDENTITY_ONLY', 'cutover_executed': False,
+          }
+          encoded = json.dumps(report, sort_keys=True)
+          print(encoded)
+          with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
+              summary.write('```json\n' + encoded + '\n```\n')
+          raise SystemExit(0 if all(checks.values()) else 1)
+          PYCODE
+
+  infra:
+    name: OIDC lab-image-base-infra
+    if: github.repository == 'alric-corp/alric-containers-image-base' && github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: lab-image-base-infra
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_ACCOUNT: '712107929769'
+      EXPECTED_ROLE_NAME: itau-github-repo-factory-distroless-v1
+      EXPECTED_ROLE_ID: AROA2LTHQWCU2N3H2OE3L
+      PROOF_ENVIRONMENT: lab-image-base-infra
+      ROLE_SESSION_NAME: factory-preflight-${{ github.run_id }}-${{ github.run_attempt }}-infra
+    steps:
+      - name: Assume the external central role through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::712107929769:role/itau-github-repo-factory-distroless-v1
+          aws-region: us-east-1
+          allowed-account-ids: '712107929769'
+          audience: sts.amazonaws.com
+          role-session-name: ${{ env.ROLE_SESSION_NAME }}
+          role-duration-seconds: 900
+          unset-current-credentials: true
+          use-existing-credentials: false
+          force-skip-oidc: false
+          role-chaining: false
+          translate-env-variables: false
+          output-credentials: false
+          action-timeout-s: 120
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"sts:GetCallerIdentity","Resource":"*"}]}
+      - name: Verify STS identity and record the proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity --region us-east-1 --output json --no-cli-pager > "$RUNNER_TEMP/central-role-identity.json"
+          python3 -B - <<'PYCODE'
+          import json
+          import os
+          from pathlib import Path
+          identity = json.loads((Path(os.environ['RUNNER_TEMP']) / 'central-role-identity.json').read_text())
+          expected_arn = 'arn:aws:sts::' + os.environ['EXPECTED_ACCOUNT'] + ':assumed-role/' + os.environ['EXPECTED_ROLE_NAME'] + '/' + os.environ['ROLE_SESSION_NAME']
+          checks = {
+              'account': identity.get('Account') == os.environ['EXPECTED_ACCOUNT'],
+              'assumed_role_arn': identity.get('Arn') == expected_arn,
+              'role_id_and_session': identity.get('UserId') == os.environ['EXPECTED_ROLE_ID'] + ':' + os.environ['ROLE_SESSION_NAME'],
+          }
+          report = {
+              'schema_version': 1, 'result': 'PASS' if all(checks.values()) else 'FAIL',
+              'repository': os.environ['GITHUB_REPOSITORY'], 'source_sha': os.environ['GITHUB_SHA'],
+              'ref': os.environ['GITHUB_REF'], 'event': os.environ['GITHUB_EVENT_NAME'],
+              'run_id': os.environ['GITHUB_RUN_ID'], 'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'environment': os.environ['PROOF_ENVIRONMENT'], 'region': 'us-east-1',
+              'expected_role_arn': 'arn:aws:iam::' + os.environ['EXPECTED_ACCOUNT'] + ':role/' + os.environ['EXPECTED_ROLE_NAME'],
+              'observed_identity': identity, 'checks': checks,
+              'session_scope': 'STS_GET_CALLER_IDENTITY_ONLY', 'cutover_executed': False,
+          }
+          encoded = json.dumps(report, sort_keys=True)
+          print(encoded)
+          with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
+              summary.write('```json\n' + encoded + '\n```\n')
+          raise SystemExit(0 if all(checks.values()) else 1)
+          PYCODE

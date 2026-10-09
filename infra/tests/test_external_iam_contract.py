@@ -235,6 +235,13 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
 
     def test_workflows_and_resolver_do_not_apply_or_adopt_the_external_contract(self):
         for path in (ROOT / ".github/workflows").glob("*.yml"):
+            # The manual, STS-only preflight is the sole staged exception;
+            # operational workflows and the resolver still cannot adopt it.
+            # Its full guards/session/identity contract is tested in governance.
+            if path.name == "factory-central-role-preflight.yml":
+                self.assertIn("inline-session-policy:", path.read_text())
+                self.assertIn('"Action":"sts:GetCallerIdentity"', path.read_text())
+                continue
             self.assertNotIn("factory-distroless", path.read_text(), path.name)
         for path in (ROOT / "scripts").rglob("*.py"):
             self.assertNotIn("factory-distroless-v1", path.read_text(), str(path.relative_to(ROOT)))

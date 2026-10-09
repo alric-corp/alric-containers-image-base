@@ -136,6 +136,15 @@ class ConfigurationTests(unittest.TestCase):
                 for index, step in enumerate(steps):
                     if step.get('uses', '').startswith('aws-actions/configure-aws-credentials@'):
                         with self.subTest(workflow=path.name, job=name):
+                            if path.name == 'factory-central-role-preflight.yml':
+                                # Stage A tests an independently pinned identity before
+                                # the operational resolver cutover. No vars/secrets source.
+                                self.assertEqual(set(workflow['jobs']), {'dev', 'infra'})
+                                self.assertEqual(step['with']['role-to-assume'],
+                                                 'arn:aws:iam::712107929769:role/itau-github-repo-factory-distroless-v1')
+                                self.assertEqual(step['with']['aws-region'], 'us-east-1')
+                                self.assertEqual(step['with']['allowed-account-ids'], '712107929769')
+                                continue
                             loaders = [s for s in steps[:index] if s.get('id') == 'pipeline']
                             self.assertEqual(len(loaders), 1)
                             self.assertIn('scripts.pipeline.governance.configuration --scope ', loaders[0]['run'])
