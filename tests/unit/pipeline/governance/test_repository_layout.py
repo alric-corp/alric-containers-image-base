@@ -7,10 +7,11 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[4]
-PIPELINE_DOMAINS = {'artifacts', 'catalog', 'consumer_apps', 'governance', 'operations', 'release', 'runtime'}
+PIPELINE_DOMAINS = {'analytics', 'artifacts', 'catalog', 'consumer_apps', 'governance', 'operations', 'release', 'runtime'}
 LEGACY_ADAPTERS = {'runtime_images.py', 'validate_inputs.py', 'oci_artifact.py',
                    'scan_images.py', 'tool_versions.py', 'report_unfixed_cves.py'}
 DEPENDENCIES = {
+    'analytics': {'artifacts'},
     'artifacts': {'governance'}, 'catalog': set(), 'governance': set(),
     'runtime': {'artifacts'}, 'release': {'artifacts'},
     'operations': {'governance', 'runtime'},
@@ -19,6 +20,10 @@ DEPENDENCIES = {
 # Promotion reuses the canonical pair model and input validation without
 # opening release to every implementation module in those domains.
 MODULE_DEPENDENCIES = {
+    # Read-only subject, publication and predicate bindings; no release Store,
+    # lifecycle, signing, custody or promotion dependency is opened.
+    'analytics': {'scripts.pipeline.release.release_manifest',
+                  'scripts.pipeline.release.verify_publication'},
     'release': {'scripts.pipeline.governance.configuration',
                 'scripts.pipeline.runtime.runtime_images',
                 'scripts.pipeline.catalog.validate_inputs',
