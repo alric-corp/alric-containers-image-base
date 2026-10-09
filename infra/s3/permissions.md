@@ -61,8 +61,8 @@ no DeleteBucket, DeleteBucketPolicy, DeleteObject or DeleteObjectVersion is prop
 Any later tag removal or infrastructure change requires its own reviewed scope.
 Source: [the pinned provider](https://github.com/hashicorp/terraform-provider-aws/blob/v6.64.0/internal/service/s3/bucket.go).
 
-Snapshot data permissions are defined in the central Factory role's `-sbom` policy
-(see [`infra/iam/README.md`](../iam/README.md)); before its bootstrap they are not applied.
+Snapshot data permissions are the `SbomSnapshot*` statements of the central Factory role's
+inline policy (see [`infra/iam/README.md`](../iam/README.md)); before its bootstrap they are not applied.
 Separate optional smoke/ingestion permissions, not supplied by this delivery:
 `s3:PutObject`, `s3:GetObject`, `s3:GetObjectVersion` on an authorized isolated
 snapshot/test prefix; `s3:ListBucket` with the relevant prefix restriction. Use

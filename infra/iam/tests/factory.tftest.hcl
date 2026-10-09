@@ -44,67 +44,72 @@ run "central_role_identity_and_trust" {
   }
 }
 
-run "central_role_domain_policies" {
+run "central_role_single_inline_policy" {
   command = plan
 
   assert {
     condition = (
-      toset(keys(aws_iam_policy.factory_distroless_v1)) == toset(["infra", "ecr", "releases", "sbom"]) &&
-      length(aws_iam_role_policy_attachment.factory_distroless_v1) == 4 &&
-      alltrue([for key, policy in aws_iam_policy.factory_distroless_v1 :
-        policy.name == "itau-github-repo-factory-distroless-v1-${key}" &&
-        length(policy.policy) <= 6144 &&
-        aws_iam_role_policy_attachment.factory_distroless_v1[key].role == "itau-github-repo-factory-distroless-v1"
-      ])
+      aws_iam_role_policy.factory_distroless_v1.name == "factory-distroless-v1" &&
+      aws_iam_role_policy.factory_distroless_v1.role == "itau-github-repo-factory-distroless-v1" &&
+      jsondecode(aws_iam_role_policy.factory_distroless_v1.policy).Version == "2012-10-17" &&
+      length(jsondecode(aws_iam_role_policy.factory_distroless_v1.policy).Statement) == 11
     )
-    error_message = "Four exact customer-managed domain policies, within the managed-policy size limit, attached to the central role."
+    error_message = "The central role has one inline policy, factory-distroless-v1, with eleven statements."
   }
 
   assert {
-    condition     = aws_iam_policy.factory_distroless_v1["infra"].policy == aws_iam_role_policy.infra["apply"].policy
-    error_message = "Domain A must be exactly the reviewed Infra apply permissions (backend, state, lock, ECR configuration, analytics bucket)."
+    condition     = length(replace(aws_iam_role_policy.factory_distroless_v1.policy, "/\\s/", "")) <= 10240
+    error_message = "All inline policies of a role together cannot exceed 10,240 characters excluding whitespace; do not widen permissions or change the architecture to make it fit."
   }
 
   assert {
     condition = (
-      jsonencode(jsondecode(aws_iam_policy.factory_distroless_v1["ecr"].policy).Statement[0]) == jsonencode({
-        Sid       = "RegistryAuthentication", Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = ["*"],
-        Condition = { StringEquals = { "aws:RequestedRegion" = "us-east-1" } }
-      }) &&
-      toset(jsondecode(aws_iam_policy.factory_distroless_v1["ecr"].policy).Statement[1].Resource) == toset([
-        for definition in fileset("${path.module}/../../frameworks", "*.yaml") :
-        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-${trimsuffix(definition, ".yaml")}"
-      ]) &&
-      toset(jsondecode(aws_iam_policy.factory_distroless_v1["ecr"].policy).Statement[1].Action) == toset([
-        "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:BatchCheckLayerAvailability", "ecr:DescribeImages",
-        "ecr:DescribeRepositories", "ecr:ListImages", "ecr:ListImageReferrers", "ecr:InitiateLayerUpload",
-        "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage"
-      ]) &&
-      length(jsondecode(aws_iam_policy.factory_distroless_v1["ecr"].policy).Statement) == 2
+      jsonencode(jsondecode(aws_iam_role_policy.factory_distroless_v1.policy)) ==
+      jsonencode(jsondecode(file("${path.module}/tests/fixtures/factory-distroless-v1.policy.json")))
     )
-    error_message = "Domain B: regional registry login plus read/publication on the exact catalog only."
+    error_message = "The evaluated policy must equal the reviewed document tests/fixtures/factory-distroless-v1.policy.json."
   }
 
   assert {
-    condition = jsonencode(jsondecode(aws_iam_policy.factory_distroless_v1["releases"].policy).Statement) == jsonencode([
-      { Sid = "DevReleaseInventory", Effect = "Allow", Action = ["s3:ListBucket"], Resource = ["arn:aws:s3:::712107929769-image-base-releases-dev"] },
-      { Sid = "DevReleaseRecords", Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject"], Resource = ["arn:aws:s3:::712107929769-image-base-releases-dev/*"] },
-    ])
-    error_message = "Domain C: the proven DEV release store scope, without deletion."
+    condition = (
+      jsonencode(slice(jsondecode(aws_iam_role_policy.factory_distroless_v1.policy).Statement, 0, 5)) ==
+      jsonencode(slice(jsondecode(aws_iam_role_policy.infra["apply"].policy).Statement, 1, 6))
+    )
+    error_message = "The Terraform statements must be the Infra apply statements, verbatim."
   }
 
   assert {
-    condition = jsonencode(jsondecode(aws_iam_policy.factory_distroless_v1["sbom"].policy).Statement) == jsonencode([
-      { Sid      = "SbomSnapshotObjects", Effect = "Allow", Action = ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"],
-        Resource = ["arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1/sbom-analytics/poc-v1/snapshots/*"],
-      Condition = { StringEquals = { "aws:RequestedRegion" = "us-east-1" } } },
-      { Sid      = "SbomSnapshotListing", Effect = "Allow", Action = ["s3:ListBucket"],
-        Resource = ["arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1"],
-        Condition = { StringEquals = { "aws:RequestedRegion" = "us-east-1" },
-      StringLike = { "s3:prefix" = ["sbom-analytics/poc-v1/snapshots/*"] } } },
-    ])
-    error_message = "Domain D: snapshot objects and prefix listing only; no deletion."
+    condition = (
+      toset(jsondecode(aws_iam_role_policy.factory_distroless_v1.policy).Statement[5].Action) == toset(concat(
+        jsondecode(aws_iam_role_policy.infra["apply"].policy).Statement[0].Action,
+        [
+          "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:BatchCheckLayerAvailability", "ecr:DescribeImages",
+          "ecr:DescribeRepositories", "ecr:ListImages", "ecr:ListImageReferrers", "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage"
+        ]
+      )) &&
+      length(jsondecode(aws_iam_role_policy.factory_distroless_v1.policy).Statement[5].Action) == length(toset(jsondecode(aws_iam_role_policy.factory_distroless_v1.policy).Statement[5].Action)) &&
+      jsondecode(aws_iam_role_policy.factory_distroless_v1.policy).Statement[5].Resource == jsondecode(aws_iam_role_policy.infra["apply"].policy).Statement[0].Resource &&
+      !contains(keys(jsondecode(aws_iam_role_policy.factory_distroless_v1.policy).Statement[5]), "Condition")
+    )
+    error_message = "The single ECR statement is the duplicate-free union of the Terraform and publication actions on the same 16 repositories."
   }
+}
+
+run "reject_policy_over_the_budget" {
+  command = plan
+  variables {
+    factory_policy_max_characters = 4000
+  }
+  expect_failures = [aws_iam_role_policy.factory_distroless_v1]
+}
+
+run "reject_budget_above_the_iam_quota" {
+  command = plan
+  variables {
+    factory_policy_max_characters = 10241
+  }
+  expect_failures = [var.factory_policy_max_characters]
 }
 
 run "reject_mismatched_pipeline_account" {

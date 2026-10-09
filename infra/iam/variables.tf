@@ -95,3 +95,13 @@ variable "factory_dev_environment" {
     error_message = "factory_dev_environment must be an exact, nonempty environment name."
   }
 }
+
+variable "factory_policy_max_characters" {
+  description = "Plan-time budget of the central inline policy, in characters excluding whitespace. AWS caps all inline policies of one role together at 10,240."
+  type        = number
+  default     = 10240
+  validation {
+    condition     = var.factory_policy_max_characters > 0 && var.factory_policy_max_characters <= 10240
+    error_message = "factory_policy_max_characters must be between 1 and the IAM limit of 10,240; never raise it above the AWS quota."
+  }
+}

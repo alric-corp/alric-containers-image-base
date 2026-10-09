@@ -26,7 +26,7 @@ output "factory_role_arn" {
   value       = aws_iam_role.factory_distroless_v1.arn
 }
 
-output "factory_policies" {
-  description = "Reviewable domain policies attached to the central role; no credentials."
-  value       = local.factory_policies
+output "factory_policy" {
+  description = "Reviewable inline policy of the central role; no credentials."
+  value       = local.factory_policy
 }

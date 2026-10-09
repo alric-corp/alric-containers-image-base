@@ -1,0 +1,226 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EnsureExactBackendBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketVersioning",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetBucketOwnershipControls",
+        "s3:CreateBucket",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketOwnershipControls",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutBucketVersioning"
+      ],
+      "Resource": [
+        "arn:aws:s3:::712107929769-alric-containers-image-base-tfstate"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-2"
+        }
+      }
+    },
+    {
+      "Sid": "ExactDefaultWorkspaceState",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::712107929769-alric-containers-image-base-tfstate/alric-containers-image-base/terraform.tfstate"
+      ]
+    },
+    {
+      "Sid": "ExactDefaultWorkspaceLock",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::712107929769-alric-containers-image-base-tfstate/alric-containers-image-base/terraform.tfstate.tflock"
+      ]
+    },
+    {
+      "Sid": "ReadOnlyRegionalRepositoryInventory",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:DescribeRepositories"
+      ],
+      "Resource": [
+        "*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "ExactSbomAnalyticsBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketAcl",
+        "s3:GetBucketCORS",
+        "s3:GetBucketWebsite",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketLogging",
+        "s3:GetBucketTagging",
+        "s3:ListTagsForResource",
+        "s3:GetBucketRequestPayment",
+        "s3:GetAccelerateConfiguration",
+        "s3:GetReplicationConfiguration",
+        "s3:GetLifecycleConfiguration",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetBucketObjectLockConfiguration",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetBucketOwnershipControls",
+        "s3:GetBucketPolicy",
+        "s3:CreateBucket",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketOwnershipControls",
+        "s3:PutEncryptionConfiguration",
+        "s3:PutBucketVersioning",
+        "s3:PutBucketPolicy",
+        "s3:TagResource",
+        "s3:PutBucketTagging"
+      ],
+      "Resource": [
+        "arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "ExactCatalogEcr",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:CompleteLayerUpload",
+        "ecr:CreateRepository",
+        "ecr:DescribeImages",
+        "ecr:DescribeRepositories",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:GetLifecyclePolicy",
+        "ecr:GetRepositoryPolicy",
+        "ecr:InitiateLayerUpload",
+        "ecr:ListImageReferrers",
+        "ecr:ListImages",
+        "ecr:ListTagsForResource",
+        "ecr:PutImage",
+        "ecr:PutImageScanningConfiguration",
+        "ecr:PutImageTagMutability",
+        "ecr:PutLifecyclePolicy",
+        "ecr:SetRepositoryPolicy",
+        "ecr:TagResource",
+        "ecr:UntagResource",
+        "ecr:UploadLayerPart"
+      ],
+      "Resource": [
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-dotnet10",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-dotnet10-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-go1-25",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-go1-25-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-go1-26",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-go1-26-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-java21",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-java21-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-java25",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-java25-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-nodejs22",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-nodejs22-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-nodejs24",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-nodejs24-dev",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-python3-13",
+        "arn:aws:ecr:us-east-1:712107929769:repository/image-base-python3-14"
+      ]
+    },
+    {
+      "Sid": "RegistryAuthentication",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken"
+      ],
+      "Resource": [
+        "*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "DevReleaseInventory",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::712107929769-image-base-releases-dev"
+      ]
+    },
+    {
+      "Sid": "DevReleaseRecords",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::712107929769-image-base-releases-dev/*"
+      ]
+    },
+    {
+      "Sid": "SbomSnapshotObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:GetObjectVersion"
+      ],
+      "Resource": [
+        "arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1/sbom-analytics/poc-v1/snapshots/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "SbomSnapshotListing",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        },
+        "StringLike": {
+          "s3:prefix": [
+            "sbom-analytics/poc-v1/snapshots/*"
+          ]
+        }
+      }
+    }
+  ]
+}
