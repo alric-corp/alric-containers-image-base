@@ -83,13 +83,35 @@ run "separate_roles_exact_trust_and_permissions" {
   assert {
     condition = alltrue([
       for purpose, policy in aws_iam_role_policy.infra : (
-        length(jsondecode(policy.policy).Statement) == 5 &&
+        length(jsondecode(policy.policy).Statement) == 6 &&
         toset(jsondecode(policy.policy).Statement[4].Action) == toset(["ecr:DescribeRepositories"]) &&
         jsondecode(policy.policy).Statement[4].Resource == ["*"] &&
         jsondecode(policy.policy).Statement[4].Condition.StringEquals["aws:RequestedRegion"] == "us-east-1"
       )
     ])
     error_message = "The only global-resource Infra grant must be regional read-only repository inventory."
+  }
+
+  assert {
+    condition = alltrue([
+      for purpose, policy in aws_iam_role_policy.infra : (
+        jsondecode(policy.policy).Statement[5].Sid == "ExactSbomAnalyticsBucket" &&
+        jsondecode(policy.policy).Statement[5].Effect == "Allow" &&
+        jsondecode(policy.policy).Statement[5].Resource == ["arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1"] &&
+        jsonencode(jsondecode(policy.policy).Statement[5].Condition) == jsonencode({ StringEquals = { "aws:RequestedRegion" = "us-east-1" } }) &&
+        toset(jsondecode(policy.policy).Statement[5].Action) == toset(concat([
+          "s3:ListBucket", "s3:GetBucketLocation", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketWebsite",
+          "s3:GetBucketVersioning", "s3:GetBucketLogging", "s3:GetBucketTagging", "s3:ListTagsForResource",
+          "s3:GetBucketRequestPayment", "s3:GetAccelerateConfiguration", "s3:GetReplicationConfiguration",
+          "s3:GetLifecycleConfiguration", "s3:GetEncryptionConfiguration", "s3:GetBucketObjectLockConfiguration",
+          "s3:GetBucketPublicAccessBlock", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy"
+          ], purpose == "plan" ? [] : [
+          "s3:CreateBucket", "s3:PutBucketPublicAccessBlock", "s3:PutBucketOwnershipControls", "s3:PutEncryptionConfiguration",
+          "s3:PutBucketVersioning", "s3:PutBucketPolicy", "s3:TagResource", "s3:PutBucketTagging"
+        ]))
+      )
+    ])
+    error_message = "The analytics bucket grant must be one exact ARN: reads for plan, reads plus configuration for apply."
   }
 }
 

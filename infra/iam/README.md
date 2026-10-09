@@ -54,6 +54,15 @@ object; neither can delete the state object or bucket. Only the default
 Terraform workspace is supported. The LAB state key is
 `alric-containers-image-base/terraform.tfstate`.
 
+Both roles also have one statement on the SBOM analytics bucket created by
+`module.sbom` in the shared ECR state: the exact ARN
+`arn:aws:s3:::alric-distroless-sbom-<account>-<region>` (LAB:
+`alric-distroless-sbom-712107929769-us-east-1`), restricted to the ECR region.
+The plan role gets only the reads listed in
+[`infra/s3/permissions.md`](../s3/permissions.md); the apply role adds creation
+and configuration (public access block, ownership, encryption, versioning,
+policy, tags). Neither gets object access or any deletion on that bucket.
+
 The backend lives in `us-east-2`, independently of ECR in `us-east-1`. S3's
 legacy `us-east-1` CreateBucket behavior can report success for an already owned
 bucket during a creation race. Backend creation uses another region to ensure
