@@ -1,0 +1,153 @@
+name: SBOM Analytics - LAB Athena POC
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Plan reads S3 only; execute requires separate owner authorization
+        type: choice
+        options: [plan, execute]
+        default: plan
+        required: true
+      round_id:
+        description: Reviewed round identity; reuse on retry, never rotate after an unknown outcome
+        type: string
+        default: lab-sbom-athena-v1
+        required: true
+      authorized_plan_sha256:
+        description: Exact reviewed SQL plan hash (execute only)
+        type: string
+        required: false
+      authorization_reference:
+        description: Owner authorization reference for this plan and at most 18 executions
+        type: string
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: sbom-analytics-athena-lab-poc
+  cancel-in-progress: false
+
+jobs:
+  athena:
+    if: github.repository == 'alric-corp/alric-containers-image-base' && github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
+    environment: DEV
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ROLE_SESSION_NAME: sbom-athena-${{ github.run_id }}-${{ github.run_attempt }}
+      POC_MODE: ${{ inputs.mode }}
+      ROUND_ID: ${{ inputs.round_id }}
+      AUTHORIZED_PLAN_SHA256: ${{ inputs.authorized_plan_sha256 }}
+      AUTHORIZATION_REFERENCE: ${{ inputs.authorization_reference }}
+    steps:
+      - name: Checkout reader and SQL without producer inputs
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            frameworks
+            scripts
+            schemas/sbom-analytics
+            sql/sbom-analytics
+            policies
+      - name: Python compatibility target
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Check intent and install pinned isolated dependencies
+        run: |
+          test ! -e tests/fixtures
+          python3 -B - <<'PY'
+          import os, re
+          assert re.fullmatch('[A-Za-z0-9_-]{1,64}', os.environ['ROUND_ID'])
+          if os.environ['POC_MODE'] == 'execute':
+              assert re.fullmatch('[0-9a-f]{64}', os.environ['AUTHORIZED_PLAN_SHA256'])
+              assert re.fullmatch('[A-Za-z0-9:/._# -]{1,200}', os.environ['AUTHORIZATION_REFERENCE'])
+          else:
+              assert os.environ['POC_MODE'] == 'plan'
+              assert not os.environ['AUTHORIZED_PLAN_SHA256'] and not os.environ['AUTHORIZATION_REFERENCE']
+          PY
+          python3 -m venv "$RUNNER_TEMP/analytics-venv"
+          "$RUNNER_TEMP/analytics-venv/bin/python" -m pip install --quiet -r requirements-sbom-poc.txt
+          "$RUNNER_TEMP/analytics-venv/bin/python" -m pip freeze > "$RUNNER_TEMP/analytics-dependencies.txt"
+      - name: Load versioned operational identity
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV
+      - name: Bound session policy independently from the role policy
+        id: session
+        env:
+          EXPECTED_ROLE: ${{ steps.pipeline.outputs.AWS_ROLE_ARN }}
+        run: |
+          python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.pipeline.analytics import athena_poc, poc
+          expected = poc.config('policies/analytics/lab-poc.json')
+          settings = athena_poc.config('policies/analytics/athena-lab-poc.json')
+          assert expected['expected_role_arn'] == os.environ['EXPECTED_ROLE']
+          policy = json.dumps(athena_poc.session_policy(expected, settings, execute=os.environ['POC_MODE']=='execute'), separators=(',', ':'))
+          assert len(policy) <= 2048
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+              output.write('policy=' + policy + '\n')
+          PY
+      - name: Assume central analytics session through OIDC
+        id: credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: ${{ steps.pipeline.outputs.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.pipeline.outputs.AWS_REGION }}
+          allowed-account-ids: ${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}
+          role-session-name: ${{ env.ROLE_SESSION_NAME }}
+          role-duration-seconds: 3600
+          unset-current-credentials: true
+          use-existing-credentials: false
+          force-skip-oidc: false
+          role-chaining: false
+          translate-env-variables: false
+          output-credentials: false
+          inline-session-policy: ${{ steps.session.outputs.policy }}
+      - name: Recover S3 snapshot and plan or execute the separately authorized SQL
+        run: |
+          set -euo pipefail
+          authorization=()
+          if [ "$POC_MODE" = execute ]; then
+            authorization=(--authorized-plan-sha256 "$AUTHORIZED_PLAN_SHA256" --authorization-reference "$AUTHORIZATION_REFERENCE")
+          fi
+          "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.athena_poc \
+            --config policies/analytics/lab-poc.json --athena-config policies/analytics/athena-lab-poc.json \
+            --session-name "$ROLE_SESSION_NAME" --round-id "$ROUND_ID" \
+            --output "$RUNNER_TEMP/recovered-batch" --report "$RUNNER_TEMP/athena-reports/result.json" \
+            "${authorization[@]}"
+      - name: Preserve execution and authentication context even on failure
+        if: always()
+        env:
+          CREDENTIALS_OUTCOME: ${{ steps.credentials.outcome }}
+        run: |
+          python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          directory = Path(os.environ['RUNNER_TEMP']) / 'athena-reports'
+          directory.mkdir(exist_ok=True)
+          (directory / 'authentication.json').write_text(json.dumps({
+              'stage': 'OIDC', 'outcome': os.environ['CREDENTIALS_OUTCOME'],
+              'source_sha': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'],
+              'attempt': os.environ['GITHUB_RUN_ATTEMPT'], 'actor': os.environ['GITHUB_ACTOR'], 'mode': os.environ['POC_MODE'],
+              'round_id': os.environ['ROUND_ID'], 'original_inputs_available': (Path(os.environ['GITHUB_WORKSPACE']) / 'tests/fixtures').exists(),
+              'cloud_admin_fallback': False}) + '\n')
+          PY
+      - name: Upload diagnostics, frozen SQL and journal including failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-athena-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/athena-reports/
+            ${{ runner.temp }}/analytics-dependencies.txt
+          retention-days: 30
+          if-no-files-found: error

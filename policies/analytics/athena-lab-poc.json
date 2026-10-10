@@ -1,0 +1,14 @@
+{
+  "protocol_version": 1,
+  "catalog": "AwsDataCatalog",
+  "database": "poc_distroless_sbom",
+  "workgroup": "poc_distroless_sbom",
+  "table_prefix": "poc_snapshot",
+  "results_prefix": "query-results/poc-v1/",
+  "execution_limit": 18,
+  "scan_cutoff_bytes": 104857600,
+  "timeout_seconds": 120,
+  "result_reuse": false,
+  "manifest_sha256": "b1c656f31b81f2911965863b3a6179f9e4d9d135489c8badf6261f145e962658",
+  "manifest_version_id": "0Sx_Stm0t2Vi1pT_bjc_etrahxOmyq3z"
+}

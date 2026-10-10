@@ -64,6 +64,11 @@ ECR_ACTIONS = {
     "ecr:PutLifecyclePolicy", "ecr:SetRepositoryPolicy", "ecr:TagResource",
     "ecr:UntagResource", "ecr:UploadLayerPart",
 }
+ATHENA_ACTIONS = {
+    "athena:GetWorkGroup", "athena:StartQueryExecution", "athena:GetQueryExecution",
+    "athena:GetQueryResults", "athena:StopQueryExecution",
+}
+GLUE_ACTIONS = {"glue:GetDatabase", "glue:GetTable", "glue:GetPartitions", "glue:CreateTable"}
 
 
 class ExternalFactoryIamContractTests(unittest.TestCase):
@@ -109,6 +114,7 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
             "ReadOnlyRegionalRepositoryInventory", "ExactSbomAnalyticsBucket",
             "ExactCatalogEcr", "RegistryAuthentication", "DevReleaseInventory",
             "DevReleaseRecords", "SbomSnapshotObjects", "SbomSnapshotListing",
+            "PocAthenaExactWorkgroup", "PocGlueReadAndNewTables", "PocAthenaQueryResults",
         ])
         self.assertEqual(len(self.statements), len(self.policy["Statement"]))
 
@@ -188,18 +194,37 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         })
 
     def test_no_invalid_or_unapproved_actions_and_no_data_deletion(self):
-        approved = BACKEND_ACTIONS | ANALYTICS_BUCKET_ACTIONS | ECR_ACTIONS | {
+        approved = BACKEND_ACTIONS | ANALYTICS_BUCKET_ACTIONS | ECR_ACTIONS | ATHENA_ACTIONS | GLUE_ACTIONS | {
             "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:GetObjectVersion", "ecr:GetAuthorizationToken",
         }
         actions = {action for item in self.policy["Statement"] for action in item["Action"]}
         self.assertEqual(actions, approved)
         self.assertNotIn("ecr:ListImageReferrers", actions)
-        self.assertEqual({action.split(":")[0] for action in actions}, {"ecr", "s3"})
+        self.assertEqual({action.split(":")[0] for action in actions}, {"ecr", "s3", "athena", "glue"})
         self.assertFalse(any("*" in action for action in actions))
         deletion = {(action, resource) for item in self.policy["Statement"]
                     for action in item["Action"] for resource in item["Resource"] if "Delete" in action}
         self.assertEqual(deletion, {("s3:DeleteObject", self.state + ".tflock")})
-        self.assertNotIn("query-results", json.dumps(self.policy))
+        self.assertNotIn("query-results", json.dumps(self.policy["Statement"][:11]))
+
+    def test_athena_complement_keeps_exact_workgroup_catalog_and_five_objects(self):
+        snapshot = "6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6"
+        glue = "arn:aws:glue:us-east-1:712107929769:"
+        self.assert_statement("PocAthenaExactWorkgroup", ATHENA_ACTIONS,
+                              ["arn:aws:athena:us-east-1:712107929769:workgroup/poc_distroless_sbom"])
+        self.assert_statement("PocGlueReadAndNewTables", GLUE_ACTIONS, [
+            glue + "catalog", glue + "database/poc_distroless_sbom",
+            *[glue + "table/poc_distroless_sbom/poc_snapshot_" + snapshot + "_" + name for name in (
+                "sbom_observation_rows_v1", "sbom_package_rows_v1", "sbom_observations_v1",
+                "sbom_packages_v1", "sbom_inventory_v1")],
+        ])
+        self.assert_statement("PocAthenaQueryResults", {"s3:GetObject", "s3:PutObject"},
+                              [self.analytics + "/query-results/poc-v1/*"])
+        delta = json.loads((ROOT / "docs/examples/sbom-lab/athena-policy-delta.json").read_text())
+        self.assertEqual(self.policy["Statement"][11:], delta["Statement"])
+        self.assertFalse({"athena:CreateWorkGroup", "glue:CreateDatabase", "glue:UpdateTable"} & {
+            a for s in self.policy["Statement"] for a in s["Action"]})
+        self.assertEqual(len(json.dumps(self.policy, separators=(",", ":"))), 6277)
 
     def test_single_inline_policy_size_excludes_formatting_only(self):
         compact = json.dumps(self.policy, separators=(",", ":"))

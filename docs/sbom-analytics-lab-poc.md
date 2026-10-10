@@ -95,8 +95,11 @@ protection, future availability, HGC-04 activation or corporate validation is pr
 
 ## Athena complement — proposed, not applied
 
-The current versioned central inline policy has no Athena/Glue/query-results
-writes. Keep the S3 proof independently when this complement is pending.
+The versioned central inline policy now includes the **proposed** Athena complement;
+the observed live 11-statement policy had no Athena/Glue/query-results writes.
+Versioning this contract does not apply it. Keep the S3 proof independently when
+this complement is pending. See [the manual Athena caller](sbom-analytics-athena-lab-poc.md)
+and [external operator runbook](sbom-analytics-athena-iam-runbook.md).
 `docs/examples/sbom-lab/athena-policy-delta.json` proposes three additional
 statements in the **same** external inline policy: the exact POC workgroup, the
 catalog/database/five exact table or view resources, and query-results/poc-v1/
@@ -123,8 +126,8 @@ replace an existing resource. No active table LOCATION is changed. Raw, markers,
 probes and results remain outside the two Parquet LOCATIONs.
 
 Execution budget: 18 statements total (5 DDL, 5 original queries, 2 counts,
-2 DESCRIBEs, inventory count, null/empty-array count, nested type check, struct
-field read-back). One at a time; 120-second operational timeout and cancellation;
+2 DESCRIBEs, inventory count, null/empty-array count, nested type check, full
+nested-value read-back). One at a time; 120-second operational timeout and cancellation;
 reuse a persisted ClientRequestToken for the identical SQL/context/parameters.
 Disable result reuse and verify effective output/engine/reuse status and results
 against the recovered local dataset. Supply ExecutionParameters with correctly
