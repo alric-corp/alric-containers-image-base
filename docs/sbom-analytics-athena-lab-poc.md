@@ -149,16 +149,115 @@ not change; this is not an S3 lifecycle or corporate retention decision.
 
 ## Restart and evidence procedure
 
-The API/CLI can resume from its same reports directory after restoring the exact
-sql-plan.json and execution-journal.json. Validate an artifact's originating
-repository/workflow/event/ref/commit/run/attempt and ZIP/hash before restoring it;
-only data is loaded. Preserve the prior artifact and external authorization.
-Recover into a new output directory. Never delete/recreate catalog resources,
-remove a journal, generate a new token/round or increase 18 to hide a partial run.
-The initial manual workflow does **not** automatically fetch a previous attempt's
-journal. If an initial hosted attempt fails, preserve its artifacts and stop for
-review; an authorized caller must supply the validated journal for resumption.
-Blind workflow reruns encounter catalog conflicts and cannot approve them.
+The integrated caller restores an explicitly approved prior run/attempt/artifact,
+not the latest artifact. Execute requires `resume_source`; plan mode forbids it.
+The `athena_restore` helper performs only GitHub API reads, before OIDC. The
+athena job alone gains `actions: read`; GH_TOKEN is scoped to the restore step.
+It verifies the originating repository ID, workflow, workflow_dispatch/develop,
+source commit and attempt, artifact ID/name/size/digest, and producer upload step.
+A failed originating run is valid evidence, not a reason to select another run.
+
+The incident's externally approved source input is:
+
+```json
+{
+  "run_id": 38080824102,
+  "attempt": 1,
+  "artifact_id": 11679714087,
+  "source_sha": "2702c4010e8d7bff561388bd27e9a6109f878d6d",
+  "zip_sha256": "28d12a47b8488dc4ee83511c91f989272900180152271c69509b655093676edf",
+  "zip_bytes": 50980,
+  "journal_sha256": "714c2e35c113c2f4185892f2431007d0e3ed945e1e5220627528fcc21e71f9ff",
+  "journal_bytes": 2414,
+  "sql_plan_sha256": "ce1c1ab7079db6bbcbdf91c4d6f1ddfbd6ef9806d9cdbe848e34a8ba8259123e",
+  "sql_plan_bytes": 257893
+}
+```
+
+ZIP parsing is bounded to 16 MiB compressed, 32 MiB actual expanded bytes, 64
+members and 512-byte paths, with per-file limits of 16 MiB for journals/source
+ZIPs and 4 MiB otherwise. These are margins over the incident's 50,980-byte ZIP,
+12 members and 399,143 expanded bytes. Both central/local headers, data descriptors,
+CRC, actual decompression length and contiguous listed data are checked. Only
+explicit report names are allowed; links, special files, duplicates, traversal,
+ZIP64, extras/comments, unsupported methods and unlisted/overlapping bytes fail.
+Only journal, SQL plan and authentication metadata are selected as data. Nothing
+from the artifact is executed. Preserve the ZIP and original journal/SQL bytes
+under the private `athena-resume-source` directory; working copies under
+`athena-reports` start byte-identical. The separate resume receipt binds the old
+producer SHA to the corrected executor SHA without rewriting history. An invalid
+or unavailable source stops the job; it never falls back to an empty journal.
+There is no automatic local-evidence fallback. If GitHub evidence expires, an
+explicit reviewed recovery route with these same hashes/provenance is required.
+
+Before any uncertain start, validate the entire journal against the frozen plan,
+authorization, sequential prefix, request/token and unique query IDs. The CLI
+rechecks the restored working bytes before constructing AWS clients. The source
+journal has one SUBMITTED entry, table-0, query
+`f65fa3ea-3d73-4d3d-a2b6-13637500920d`, token
+`80d33f677de36228e9c2d8ed6bf34207f6bd400c2d779fdfcdd42d8e245ca3d8`.
+Reconcile it by GET and table read-back, with no Start and no manual VERIFIED
+edit. All 18 statements remain in the plan: one reserved/submitted, then 17 new
+(4 DDL, 11 SELECT, 2 DESCRIBE). A second pass over a complete journal performs no
+Start calls. Unknown submission outcomes may only retransmit the SAME request
+and token; they do not receive another budget slot. API calls and new starts are
+reported separately from the round's distinct execution IDs and reserved count.
+`api_calls` describes execute_plan; `resource_readback_api_calls` separates the
+before/after catalog reconciliation. Journal `recorded_get_attempts` counts
+observations recorded by this corrected executor, not an invented count for the
+old run whose journal did not retain that field.
+
+After owner-reviewed integration, check whether another hosted attempt advanced
+this round before choosing a source. Reconcile its journal/IDs; do not knowingly
+restore stale history. Use the same round `lab-sbom-athena-v1`, unchanged SQL hash
+and persisted authorization `TomasAlric-PR124-lab-sbom-athena-v1`. That reference
+points to the owner's recorded authorization, not a newly inferred approval.
+The correction does not increase scope or require a duplicate SQL authorization.
+Do not dispatch while preparing this PR. After integration, provide the source
+JSON via `resume_source`, together with the existing execute inputs. New SQL,
+permissions/resources, a different hash or more than 18 distinct executions
+requires a separate decision. No query, catalog object, result or snapshot is
+deleted automatically. Failed/cancelled/TIMED_OUT history requires review; it is
+not silently converted to success on restoration.
+
+### Delimited response reconciliation
+
+Outgoing SQL, context, parameters, round and token stay exact. Execution identity
+compares lexical SQL tokens, ignoring only ASCII whitespace outside tokens;
+case, quoted strings/identifiers, numbers, operators, parentheses and comments
+(including line-comment termination) stay exact. Unsupported syntax fails closed.
+This is deliberately more restrictive than a SQL equivalence engine, and separate
+from the existing limited view comparison. Only the expected AwsDataCatalog may
+be returned as awsdatacatalog; database/workgroup/query ID stay exact.
+
+GetQueryExecution does not promise to return ExecutionParameters. Missing values
+are recorded as NOT_RETURNED, not empty or remotely verified; exact submission
+parameters remain bound by the frozen request/token and verified journal origin,
+then actual results are compared. Returned parameters must match exactly. A
+service Query with substituted literals is not guessed into equivalence with `?`.
+Safe observed response fields and comparison rules are saved before an identity
+failure, together with the diverging field and hashes, without SDK headers,
+credentials, unrestricted error messages or signed URLs.
+
+Only Glue StorageDescriptor.Location may equal the exact expected S3 URI minus
+one terminal slash. Both strings and the rule are preserved. Bucket/key/snapshot
+remain case-sensitive; no parent/sibling URI, `%2F`, `//`, dot segment, query or
+fragment is accepted. SQL keeps its final slash. Column/type/order, partitions,
+Parquet input/output/SerDe and successful round query identity remain required;
+CreatedBy alone does not prove ownership. No UpdateTable/CREATE workaround runs.
+
+Terminal states are reconciled before treating observation age as active-query
+time. SUCCEEDED requires timezone-aware submission/completion timestamps,
+nonnegative coherent total/engine statistics and completion within the original
+120-second deadline, including initial submission time. Millisecond statistics
+and timestamp duration may differ by at most 1 ms of rounding. Missing timing
+is inconclusive; engine time alone cannot prove the deadline. The incident's
+438 ms is TotalExecutionTimeInMillis (engine: 359 ms). The delay until a later GET
+is reported separately and does not cancel an already timely completed query.
+RUNNING/QUEUED keep the original persistent deadline; process intervals also use
+a monotonic clock. Expiration cancels only the identified active query and stops;
+a real terminal overrun is recorded as TIMED_OUT without cancelling completed
+work. Invalid timing, FAILED and CANCELLED cannot yield verification.
 
 Retrieve artifacts into the persistent audit-evidence directory, verify ZIP
 digests with the GitHub API, and reconcile run/attempt/commit/job/STS evidence.

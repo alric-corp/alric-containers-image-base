@@ -7,12 +7,15 @@ This module does not provision resources or change IAM.
 import argparse
 import base64
 from collections import Counter
+from datetime import datetime
 import json
+import math
 import os
 from pathlib import Path
 import re
 import sys
 import time
+from urllib.parse import urlsplit
 
 from scripts.pipeline.analytics import poc, parquet
 from scripts.pipeline.analytics.catalog import catalog_plan
@@ -278,13 +281,196 @@ def query_results(client, execution_id, *, kind, json_columns=()):
     raise IngestionError('ATHENA_RESULT_PAGE_LIMIT')
 
 
-def _execution(client, query_id, submission):
+def execution_tokens(sql):
+    """Lexical equality, not SQL equivalence. Only ASCII whitespace is ignored.
+
+    Case, numbers, punctuation, quoted tokens and comments remain exact. In
+    particular a line comment retains its terminating newline: deleting it can
+    turn the following code into a comment. Unsupported syntax fails closed.
+    This deliberately does not use the limited view grammar below.
+    """
+    check(type(sql) is str and 0 < len(sql.encode()) <= 262144, 'ATHENA_SQL_REPRESENTATION_UNSUPPORTED')
+    tokens, position = [], 0
+    while position < len(sql):
+        start, char = position, sql[position]
+        if char in ' \t\r\n\f':
+            position += 1
+            continue
+        if sql.startswith('--', position):
+            end = sql.find('\n', position)
+            position = len(sql) if end < 0 else end + 1
+        elif sql.startswith('/*', position):
+            end = sql.find('*/', position + 2)
+            check(end >= 0 and '/*' not in sql[position+2:end], 'ATHENA_SQL_REPRESENTATION_UNSUPPORTED')
+            position = end + 2
+        elif char in ("'", '"', '`'):
+            position += 1
+            while position < len(sql):
+                check(sql[position] != '\\', 'ATHENA_SQL_REPRESENTATION_UNSUPPORTED')
+                if sql[position] == char:
+                    position += 1
+                    if position < len(sql) and sql[position] == char:
+                        position += 1
+                        continue
+                    break
+                position += 1
+            else:
+                raise IngestionError('ATHENA_SQL_REPRESENTATION_UNSUPPORTED')
+        elif re.match('[A-Za-z_]', char):
+            position += 1
+            while position < len(sql) and re.match('[A-Za-z_0-9]', sql[position]):
+                position += 1
+        elif char in '0123456789':
+            match = re.match(r'[0-9]+(?:\.[0-9]+)?', sql[position:])
+            position += len(match[0])
+            check(position == len(sql) or not re.match('[A-Za-z_]', sql[position]),
+                  'ATHENA_SQL_REPRESENTATION_UNSUPPORTED')
+        elif sql[position:position+2] in ('<>', '<=', '>=', '!=', '->', '||'):
+            position += 2
+        elif char in '.,()[]<>=+-*/%?:;':
+            position += 1
+        else:
+            raise IngestionError('ATHENA_SQL_REPRESENTATION_UNSUPPORTED', stage='RECONCILE',
+                                 observed={'offset': position, 'sql_sha256': sha256(sql.encode())})
+        tokens.append(sql[start:position])
+    return tokens
+
+
+def _safe_execution(value):
+    # Preserve the explanatory response BEFORE rejecting identity. No SDK
+    # headers, credentials, signed URLs or unrestricted error strings are saved.
+    kept = {k: value[k] for k in ('QueryExecutionId', 'Query', 'WorkGroup', 'QueryExecutionContext',
+                                'ExecutionParameters', 'EngineVersion') if k in value}
+    status, stats = value.get('Status'), value.get('Statistics')
+    kept['Status'] = {k: v for k, v in status.items() if k in ('State', 'SubmissionDateTime', 'CompletionDateTime')} if type(status) is dict else None
+    kept['Statistics'] = {k: v for k, v in stats.items() if k in ('DataScannedInBytes', 'ResultReuseInformation')
+                          or k.endswith('TimeInMillis')} if type(stats) is dict else None
+    result = dict(value.get('ResultConfiguration') or {})
+    location = result.get('OutputLocation')
+    if type(location) is str and (not location.startswith('s3://') or '?' in location or '#' in location):
+        result['OutputLocation'] = {'redacted_sha256': sha256(location.encode())}
+    kept['ResultConfiguration'] = result
+    return json_safe(kept)
+
+
+def _execution(client, query_id, submission, *, observation=None):
     value = _service_call(client, 'get_query_execution', QueryExecutionId=query_id)['QueryExecution']
-    check(value.get('QueryExecutionId') == query_id and value.get('Query') == submission['QueryString']
-          and value.get('WorkGroup') == submission['WorkGroup']
-          and value.get('QueryExecutionContext') == submission['QueryExecutionContext']
-          and value.get('ExecutionParameters', []) == submission.get('ExecutionParameters', []), 'ATHENA_EXECUTION_IDENTITY_DIFFERS')
+    check(type(value) is dict, 'ATHENA_EXECUTION_RESPONSE_INVALID')
+    comparison = dict(sql_rule='EXACT_TOKENS_ASCII_WHITESPACE_ONLY',
+                      catalog_rule='AWS_DEFAULT_CATALOG_CASE_ONLY',
+                      execution_parameters='RETURNED' if 'ExecutionParameters' in value else 'NOT_RETURNED')
+    if observation:
+        observation(_safe_execution(value), comparison)
+
+    def same(field, wanted, got):
+        check(wanted == got, 'ATHENA_EXECUTION_IDENTITY_DIFFERS', stage='RECONCILE', key=query_id,
+              expected={'field': field, 'sha256': sha256(canonical(wanted))},
+              observed={'field': field, 'sha256': sha256(canonical(got)), 'comparison': comparison})
+
+    same('QueryExecutionId', query_id, value.get('QueryExecutionId'))
+    same('WorkGroup', submission['WorkGroup'], value.get('WorkGroup'))
+    same('Query.tokens', execution_tokens(submission['QueryString']), execution_tokens(value.get('Query')))
+    context = value.get('QueryExecutionContext')
+    check(type(context) is dict and set(context) == {'Catalog', 'Database'}, 'ATHENA_EXECUTION_CONTEXT_INVALID')
+    same('Database', submission['QueryExecutionContext']['Database'], context['Database'])
+    catalog = context['Catalog']
+    wanted = submission['QueryExecutionContext']['Catalog']
+    same('Catalog', wanted, 'AwsDataCatalog' if wanted == 'AwsDataCatalog' and catalog == 'awsdatacatalog' else catalog)
+    if 'ExecutionParameters' in value:
+        check(type(value['ExecutionParameters']) is list and all(type(p) is str for p in value['ExecutionParameters']),
+              'ATHENA_EXECUTION_IDENTITY_DIFFERS', observed={'field': 'ExecutionParameters', 'comparison': comparison})
+        same('ExecutionParameters', submission.get('ExecutionParameters', []), value['ExecutionParameters'])
+    # Absence is not evidence of changed parameters. Exact request/token bindings
+    # are checked independently by validate_journal; results are compared later.
     return value
+
+
+def validate_journal(raw, journal, authorization_reference):
+    """Validate the whole prefix before any service call, including an uncertain start."""
+    plan = document(raw, limit=PLAN_LIMIT)
+    plan_fields = {'protocol_version', 'round_id', 'snapshot_id', 'batch_id', 'catalog', 'database', 'workgroup',
+                   'result_configuration', 'execution_limit', 'scan_cutoff_bytes', 'timeout_seconds', 'manifest_sha256',
+                   'manifest_version_id', 'result_reuse', 'table_names', 'statements'}
+    check(set(plan) == plan_fields and type(plan['protocol_version']) is int and plan['protocol_version'] == 1
+          and type(plan['statements']) is list and all(type(s) is dict and set(s) == {
+              'id', 'kind', 'sql', 'sql_sha256', 'parameters', 'expected_rows', 'json_columns'} for s in plan['statements']),
+          'ATHENA_PLAN_SCHEMA_INVALID')
+    ids = ['table-0', 'table-1', 'view-0', 'view-1', 'view-2'] + list(QUERIES) + [
+        'count_observations', 'count_packages', 'inventory_counts', 'null_empty_arrays', 'nested_types',
+        'nested_values', 'describe_observations', 'describe_packages']
+    check(type(plan.get('execution_limit')) is int and plan['execution_limit'] == 18
+          and [s['id'] for s in plan['statements']] == ids
+          and Counter(s['kind'] for s in plan['statements']) == {'DDL': 5, 'SELECT': 11, 'DESCRIBE': 2}
+          and all(type(s['sql']) is str and s['sql_sha256'] == sha256(s['sql'].encode())
+                  and type(s['parameters']) is list and all(type(p) is str for p in s['parameters'])
+                  for s in plan['statements']), 'ATHENA_BUDGET_DIFFERS')
+    check(type(journal) is dict and set(journal) == {'protocol_version', 'plan_sha256', 'authorization_reference', 'executions'}
+          and type(journal['protocol_version']) is int and journal['protocol_version'] == 1
+          and journal['plan_sha256'] == sha256(raw) and journal['authorization_reference'] == authorization_reference
+          and type(journal['executions']) is dict, 'ATHENA_JOURNAL_CONFLICT')
+    entries = journal['executions']
+    check(set(entries) == set(ids[:len(entries)]), 'ATHENA_JOURNAL_SEQUENCE_INVALID')
+    query_ids = set()
+    optional = {'execution', 'remote_observation', 'identity_comparison', 'timing', 'data_scanned_bytes',
+                'results', 'cancellation_observation', 'start_attempts', 'recorded_get_attempts'}
+    for number, statement in enumerate(plan['statements'][:len(entries)]):
+        entry = entries[statement['id']]
+        check(type(entry) is dict and {'request', 'submitted_at', 'state', 'query_id'} <= set(entry)
+              and set(entry) <= {'request', 'submitted_at', 'state', 'query_id'} | optional
+              and canonical(entry['request']) == canonical(request(statement, plan))
+              and type(entry['submitted_at']) in (int, float) and math.isfinite(entry['submitted_at'])
+              and entry['submitted_at'] >= 0, 'ATHENA_JOURNAL_CONFLICT')
+        check(entry['state'] in ('PREPARED', 'SUBMITTED', 'QUEUED', 'RUNNING', 'SUCCEEDED', 'VERIFIED',
+                                'FAILED', 'CANCELLED', 'TIMED_OUT'), 'ATHENA_JOURNAL_CONFLICT')
+        check(number == len(entries)-1 or entry['state'] == 'VERIFIED', 'ATHENA_JOURNAL_SEQUENCE_INVALID')
+        query_id = entry['query_id']
+        check((query_id is None and entry['state'] == 'PREPARED') or
+              (type(query_id) is str and re.fullmatch('[A-Za-z0-9_-]{1,128}', query_id)
+               and query_id not in query_ids and entry['state'] != 'PREPARED'), 'ATHENA_JOURNAL_QUERY_ID_INVALID')
+        if query_id is not None:
+            query_ids.add(query_id)
+        if 'start_attempts' in entry:
+            check(type(entry['start_attempts']) is int and entry['start_attempts'] > 0, 'ATHENA_JOURNAL_CONFLICT')
+        if 'recorded_get_attempts' in entry:
+            check(type(entry['recorded_get_attempts']) is int and entry['recorded_get_attempts'] > 0, 'ATHENA_JOURNAL_CONFLICT')
+        if entry['state'] == 'VERIFIED':
+            check(type(entry.get('data_scanned_bytes')) is int and entry['data_scanned_bytes'] >= 0
+                  and entry.get('execution', {}).get('QueryExecutionId') == query_id
+                  and entry['execution'].get('Status', {}).get('State') == 'SUCCEEDED', 'ATHENA_JOURNAL_CONFLICT')
+    return plan
+
+
+def _epoch(value):
+    try:
+        parsed = value if isinstance(value, datetime) else datetime.fromisoformat(value.replace('Z', '+00:00'))
+        check(isinstance(parsed, datetime) and parsed.tzinfo is not None and parsed.utcoffset() is not None,
+              'ATHENA_TIMING_INVALID')
+        result = parsed.timestamp()
+    except (ValueError, TypeError, AttributeError, OverflowError) as error:
+        raise IngestionError('ATHENA_TIMING_INVALID') from error
+    check(math.isfinite(result), 'ATHENA_TIMING_INVALID')
+    return result
+
+
+def _terminal_timing(value, entry, now, timeout):
+    status, stats = value['Status'], value.get('Statistics', {})
+    check(type(status) is dict and type(stats) is dict, 'ATHENA_TIMING_INVALID')
+    check('SubmissionDateTime' in status and 'CompletionDateTime' in status
+          and 'TotalExecutionTimeInMillis' in stats, 'ATHENA_TIMING_INCONCLUSIVE')
+    start, end = _epoch(status['SubmissionDateTime']), _epoch(status['CompletionDateTime'])
+    total = stats['TotalExecutionTimeInMillis']
+    check(type(total) is int and total >= 0 and entry['submitted_at'] <= start <= end <= now,
+          'ATHENA_TIMING_INVALID')
+    # Timestamp rounding and integer millisecond statistics may differ by <=1 ms.
+    check(abs((end-start)*1000-total) <= 1.001, 'ATHENA_TIMING_INVALID')
+    for name, duration in stats.items():
+        if name.endswith('TimeInMillis'):
+            check(type(duration) is int and 0 <= duration <= total, 'ATHENA_TIMING_INVALID')
+    return dict(aws_duration_seconds=end-start, total_execution_time_ms=total,
+                engine_execution_time_ms=stats.get('EngineExecutionTimeInMillis'),
+                submission_to_completion_seconds=end-entry['submitted_at'],
+                observation_delay_seconds=now-end, original_deadline=entry['submitted_at']+timeout,
+                within_deadline=total < timeout*1000 and end-entry['submitted_at'] < timeout)
 
 
 def _verify_execution(value, plan, *, kind):
@@ -304,7 +490,7 @@ def _verify_execution(value, plan, *, kind):
 
 
 def execute_plan(raw, client, journal_path, *, authorized_sha256, authorization_reference,
-                 clock=time.time, sleep=time.sleep):
+                 clock=time.time, monotonic=time.monotonic, sleep=time.sleep):
     """No cloud client construction. Journal is persisted BEFORE every submission.
 
     A retry/restart reuses each frozen token. Unknown outcomes never get a fresh
@@ -313,19 +499,16 @@ def execute_plan(raw, client, journal_path, *, authorized_sha256, authorization_
     check(type(raw) is bytes and sha256(raw) == hash_id(authorized_sha256)
           and type(authorization_reference) is str and re.fullmatch('[A-Za-z0-9:/._# -]{1,200}', authorization_reference),
           'ATHENA_EXPLICIT_AUTHORIZATION_REQUIRED', stage='AUTHORIZE')
-    plan = document(raw, limit=PLAN_LIMIT)
-    check(type(plan['execution_limit']) is int and len(plan['statements']) == plan['execution_limit'] == 18
-          and len({s['id'] for s in plan['statements']}) == 18
-          and all(s['sql_sha256'] == sha256(s['sql'].encode()) for s in plan['statements'])
-          and Counter(s['kind'] for s in plan['statements']) == {'DDL':5, 'SELECT':11, 'DESCRIBE':2}, 'ATHENA_BUDGET_DIFFERS')
     path = Path(journal_path)
     journal = document(read_local(path, 16 * 1024 * 1024), limit=16 * 1024 * 1024) if path.exists() else dict(
         protocol_version=1, plan_sha256=sha256(raw), authorization_reference=authorization_reference, executions={})
-    check(journal['plan_sha256'] == sha256(raw) and journal['authorization_reference'] == authorization_reference
-          and set(journal['executions']) <= {s['id'] for s in plan['statements']}, 'ATHENA_JOURNAL_CONFLICT')
+    plan = validate_journal(raw, journal, authorization_reference)
+    calls = dict(get_query_execution=0, start_query_execution=0, new_starts=0, idempotent_retransmissions=0)
+    historical_reserved = len(journal['executions'])
     for statement in plan['statements']:
         submission = request(statement, plan)
         entry = journal['executions'].get(statement['id'])
+        new = entry is None
         if entry is None:
             entry = dict(request=submission, submitted_at=clock(), state='PREPARED', query_id=None)
             journal['executions'][statement['id']] = entry
@@ -334,33 +517,58 @@ def execute_plan(raw, client, journal_path, *, authorized_sha256, authorization_
         if entry.get('state') in ('FAILED', 'CANCELLED', 'TIMED_OUT'):
             raise IngestionError('ATHENA_PRIOR_EXECUTION_FAILED', stage='ATHENA', key=entry['query_id'])
         if entry['query_id'] is None:
+            entry['start_attempts'] = entry.get('start_attempts', 0) + 1
+            poc.write_json(path, json_safe(journal))
+            calls['start_query_execution'] += 1
+            calls['new_starts' if new else 'idempotent_retransmissions'] += 1
             response = _service_call(client, 'start_query_execution', **submission)
             query_id = response.get('QueryExecutionId')
             check(type(query_id) is str and re.fullmatch('[A-Za-z0-9_-]{1,128}', query_id), 'ATHENA_QUERY_ID_INVALID')
+            check(query_id not in [e['query_id'] for e in journal['executions'].values() if e is not entry],
+                  'ATHENA_JOURNAL_QUERY_ID_INVALID')
             entry.update(query_id=query_id, state='SUBMITTED')
             poc.write_json(path, json_safe(journal))
         query_id = entry['query_id']
+        anchor, age = monotonic(), clock() - entry['submitted_at']
+        check(math.isfinite(age) and age >= 0, 'ATHENA_CLOCK_INVALID')
+
+        def preserve(observed, comparison):
+            entry.update(remote_observation=observed, identity_comparison=comparison)
+            poc.write_json(path, json_safe(journal))
+
         try:
             while True:
-                value = _execution(client, query_id, submission)
+                calls['get_query_execution'] += 1
+                entry['recorded_get_attempts'] = entry.get('recorded_get_attempts', 0) + 1
+                poc.write_json(path, json_safe(journal))
+                value = _execution(client, query_id, submission, observation=preserve)
                 state = value['Status']['State']
                 check(state in TERMINAL + ('QUEUED', 'RUNNING'), 'ATHENA_STATE_INVALID')
-                elapsed = clock() - entry['submitted_at']
-                check(elapsed >= 0, 'ATHENA_CLOCK_INVALID')
-                if entry.get('state') != 'VERIFIED' and elapsed >= plan['timeout_seconds']:
-                    entry.update(state='TIMED_OUT', execution=value)
-                    poc.write_json(path, json_safe(journal))
-                    if state not in TERMINAL:
-                        _service_call(client, 'stop_query_execution', QueryExecutionId=query_id)
-                        entry['cancellation_observation'] = _execution(client, query_id, submission)
-                        poc.write_json(path, json_safe(journal))
-                    raise IngestionError('ATHENA_QUERY_TIMEOUT', stage='ATHENA', key=query_id)
                 entry.update(state=state, execution=value)
                 poc.write_json(path, json_safe(journal))
                 if state in TERMINAL:
                     check(state == 'SUCCEEDED', 'ATHENA_QUERY_FAILED', stage='ATHENA', key=query_id,
                           observed={'state':state, 'athena_error':value['Status'].get('AthenaError')})
+                    entry['timing'] = _terminal_timing(value, entry, clock(), plan['timeout_seconds'])
+                    if not entry['timing']['within_deadline']:
+                        entry['state'] = 'TIMED_OUT'
+                        poc.write_json(path, json_safe(journal))
+                        raise IngestionError('ATHENA_QUERY_TIMEOUT', stage='ATHENA', key=query_id,
+                                             observed=entry['timing'])
                     break
+                # Active queries keep the ORIGINAL deadline. Monotonic elapsed
+                # prevents a wall-clock adjustment from granting more time.
+                elapsed = max(clock() - entry['submitted_at'], age + monotonic() - anchor)
+                check(math.isfinite(elapsed) and elapsed >= 0, 'ATHENA_CLOCK_INVALID')
+                if elapsed >= plan['timeout_seconds']:
+                    entry['state'] = 'TIMED_OUT'
+                    poc.write_json(path, json_safe(journal))
+                    _service_call(client, 'stop_query_execution', QueryExecutionId=query_id)
+                    calls['get_query_execution'] += 1
+                    entry['recorded_get_attempts'] += 1
+                    entry['cancellation_observation'] = _execution(client, query_id, submission, observation=preserve)
+                    poc.write_json(path, json_safe(journal))
+                    raise IngestionError('ATHENA_QUERY_TIMEOUT', stage='ATHENA', key=query_id)
                 sleep(min(2, max(0, plan['timeout_seconds'] - elapsed)))
             entry['data_scanned_bytes'] = _verify_execution(value, plan, kind=statement['kind'])
             if statement['kind'] != 'DDL':
@@ -382,6 +590,9 @@ def execute_plan(raw, client, journal_path, *, authorized_sha256, authorization_
                 query_executions=len(journal['executions']), total_data_scanned_bytes=sum(
                 e['data_scanned_bytes'] for e in journal['executions'].values()),
                 query_ids={s['id']:journal['executions'][s['id']]['query_id'] for s in plan['statements']},
+                api_calls=calls, distinct_query_execution_ids=len({e['query_id'] for e in journal['executions'].values()}),
+                historically_reserved_requests=historical_reserved,
+                authorized_round_budget=18, remaining_unreserved_executions=18-len(journal['executions']),
                 empty_array_from_parquet='NOT_EXERCISED', cryptographic_authenticity='NOT_REVALIDATED', publication_authority=False)
 
 
@@ -425,9 +636,10 @@ def _view_tokens(sql):
 
 
 def resource_readback(athena, glue, expected, settings, proposal, journal=None, *, require_complete=False,
-                      journal_path=None):
+                      journal_path=None, plan_raw=None, authorization_reference=None):
     """No create/adopt/update. Existing names require this exact round's journal."""
     account = expected['destination']['expected_bucket_owner']
+    calls = dict(get_query_execution=0, idempotent_retransmissions=0)
     group = _service_call(athena, 'get_work_group', WorkGroup=settings['workgroup'])['WorkGroup']
     configuration = group['Configuration']
     check(group['Name'] == settings['workgroup'] and group['State'] == 'ENABLED'
@@ -446,13 +658,20 @@ def resource_readback(athena, glue, expected, settings, proposal, journal=None, 
     # present, must match it. Missing optional metadata is not another catalog.
     check(db.get('Name') == settings['database'] and db.get('CatalogId', account) == account, 'GLUE_DATABASE_IDENTITY_DIFFERS')
     if journal_path is not None and journal:
+        check(plan_raw is not None and authorization_reference, 'ATHENA_JOURNAL_VALIDATION_REQUIRED')
+        validate_journal(plan_raw, journal, authorization_reference)
         # Reconcile a lost response only AFTER live workgroup/database checks.
         # Caller has already matched every saved request to the authorized plan.
         for entry in journal['executions'].values():
             if entry['query_id'] is None:
+                entry['start_attempts'] = entry.get('start_attempts', 0) + 1
+                poc.write_json(journal_path, json_safe(journal))
+                calls['idempotent_retransmissions'] += 1
                 response = _service_call(athena, 'start_query_execution', **entry['request'])
                 query_id = response.get('QueryExecutionId')
                 check(type(query_id) is str and re.fullmatch('[A-Za-z0-9_-]{1,128}', query_id), 'ATHENA_QUERY_ID_INVALID')
+                check(query_id not in [e['query_id'] for e in journal['executions'].values() if e is not entry],
+                      'ATHENA_JOURNAL_QUERY_ID_INVALID')
                 entry.update(query_id=query_id, state='SUBMITTED')
                 poc.write_json(journal_path, json_safe(journal))
     existing = {}
@@ -466,13 +685,22 @@ def resource_readback(athena, glue, expected, settings, proposal, journal=None, 
         key = ('table-' + str(number)) if number < 2 else ('view-' + str(number-2))
         entry = (journal or {}).get('executions', {}).get(key)
         check(entry is not None and entry.get('query_id'), 'ATHENA_CATALOG_NAME_CONFLICT', stage='CATALOG', key=name)
-        observed = _execution(athena, entry['query_id'], entry['request'])
+        def preserve(observed, comparison):
+            entry.update(remote_observation=observed, identity_comparison=comparison)
+            if journal_path is not None:
+                poc.write_json(journal_path, json_safe(journal))
+
+        calls['get_query_execution'] += 1
+        entry['recorded_get_attempts'] = entry.get('recorded_get_attempts', 0) + 1
+        if journal_path is not None:
+            poc.write_json(journal_path, json_safe(journal))
+        observed = _execution(athena, entry['query_id'], entry['request'], observation=preserve)
         check(observed['Status']['State'] == 'SUCCEEDED', 'ATHENA_CATALOG_OWNERSHIP_INCONCLUSIVE', key=name)
         check(table.get('Name') == name and table.get('DatabaseName') == settings['database']
               and table.get('CatalogId', account) == account, 'GLUE_TABLE_IDENTITY_DIFFERS')
         if number < 2:
             table_kind = ('observations', 'packages')[number]
-            check(table['StorageDescriptor']['Location'] == proposal['locations']['sbom_' + table_kind], 'GLUE_LOCATION_CONFLICT')
+            location_rule = location_readback(proposal['locations']['sbom_' + table_kind], table['StorageDescriptor']['Location'])
             wanted = [(c['name'], c['type']) for c in parquet.definition()['tables'][table_kind]]
             types = dict(string='string', int32='int', int64='bigint', boolean='boolean', strings='array<string>',
                          references='array<struct<reference_category:string,reference_type:string,reference_locator:string,comment:string>>')
@@ -480,6 +708,14 @@ def resource_readback(athena, glue, expected, settings, proposal, journal=None, 
             check(type(columns) is list and table.get('PartitionKeys',[]) == [], 'GLUE_COLUMNS_CONFLICT')
             check(table['TableType'] == 'EXTERNAL_TABLE' and [dict(Name=c.get('Name'),Type=c.get('Type')) for c in columns] ==
                   [dict(Name=name, Type=types[kind]) for name, kind in wanted], 'GLUE_COLUMNS_CONFLICT')
+            descriptor = table['StorageDescriptor']
+            check(descriptor.get('InputFormat') == 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+                  and descriptor.get('OutputFormat') == 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+                  and type(descriptor.get('SerdeInfo')) is dict
+                  and descriptor.get('SerdeInfo', {}).get('SerializationLibrary') ==
+                  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe', 'GLUE_FORMAT_CONFLICT')
+            # Keep both representations; this is not an S3 object-byte comparison.
+            table = dict(table, location_comparison=location_rule)
         else:
             check(table.get('TableType') == 'VIRTUAL_VIEW' and type(table.get('ViewOriginalText')) is str,
                   'GLUE_VIEW_CONFLICT')
@@ -494,7 +730,26 @@ def resource_readback(athena, glue, expected, settings, proposal, journal=None, 
                   and view.get('schema') == settings['database'],
                   'GLUE_VIEW_CONFLICT')
         existing[name] = table
-    return dict(workgroup=group, database=db, existing_objects=existing)
+    return dict(workgroup=group, database=db, existing_objects=existing, api_calls=calls)
+
+
+def location_readback(expected, observed):
+    """Only Glue's observed omission of ONE terminal slash is equivalent."""
+    safe_observed = observed if type(observed) is str and observed.startswith('s3://') and '?' not in observed and '#' not in observed else (
+        {'sha256': sha256(canonical(observed))})
+    context = dict(expected=expected, observed=safe_observed)
+    for uri in (expected, observed):
+        check(type(uri) is str, 'GLUE_LOCATION_CONFLICT', **context)
+        parsed = urlsplit(uri)
+        check(parsed.scheme == 's3' and re.fullmatch('[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]', parsed.netloc)
+              and not parsed.query and not parsed.fragment and '%' not in uri and '\\' not in uri
+              and '//' not in parsed.path and all(p not in ('.', '..') for p in parsed.path.split('/')),
+              'GLUE_LOCATION_CONFLICT', **context)
+    check(expected.endswith('/') and '/snapshots/' in expected
+          and re.search(r'/snapshots/[0-9a-f]{64}/analytics/sbom_(?:observations|packages)/$', expected)
+          and observed in (expected, expected[:-1]), 'GLUE_LOCATION_CONFLICT',
+          **context)
+    return dict(expected=expected, observed=observed, rule='EXACT_OR_ONE_FINAL_SLASH_OMITTED')
 
 
 def snapshot_fingerprint(verified):
@@ -538,22 +793,18 @@ def run(s3, sts, athena, glue, expected, settings, session_name, round_id, repor
     journal_path = reports/'execution-journal.json'
     journal = document(read_local(journal_path,16*1024*1024),limit=16*1024*1024) if journal_path.exists() else None
     if journal:
-        check(journal['plan_sha256'] == sha256(raw) and journal['authorization_reference'] == authorization_reference,
-              'ATHENA_JOURNAL_CONFLICT')
-        plan = document(raw, limit=PLAN_LIMIT)
-        check(type(journal['executions']) is dict and set(journal['executions']) <= {s['id'] for s in plan['statements']},
-              'ATHENA_JOURNAL_CONFLICT')
-        for statement in plan['statements']:
-            entry = journal['executions'].get(statement['id'])
-            if entry:
-                check(entry['request'] == request(statement, plan), 'ATHENA_JOURNAL_CONFLICT')
-    resource = resource_readback(athena, glue, expected, settings, proposal, journal, journal_path=journal_path)
+        validate_journal(raw, journal, authorization_reference)
+    resource = resource_readback(athena, glue, expected, settings, proposal, journal, journal_path=journal_path,
+                                 plan_raw=raw, authorization_reference=authorization_reference)
+    before_calls = resource['api_calls']
     poc.write_json(reports/'resources-before.json', json_safe(resource))
     try:
         result = execute_plan(raw, athena, journal_path, authorized_sha256=authorized_sha256,
                               authorization_reference=authorization_reference)
         journal = document(read_local(journal_path,16*1024*1024),limit=16*1024*1024)
-        resource = resource_readback(athena, glue, expected, settings, proposal, journal, require_complete=True)
+        resource = resource_readback(athena, glue, expected, settings, proposal, journal, require_complete=True,
+                                     journal_path=journal_path, plan_raw=raw, authorization_reference=authorization_reference)
+        result['resource_readback_api_calls'] = dict(before=before_calls, after=resource['api_calls'])
         poc.write_json(reports/'resources-after.json', json_safe(resource))
     except Exception as error:
         failure = error.diagnostic() if isinstance(error, IngestionError) else dict(status='ERROR',code=poc.service_code(error))
@@ -605,6 +856,7 @@ def main(argv=None):
     parser.add_argument('--round-id', required=True)
     parser.add_argument('--authorized-plan-sha256')
     parser.add_argument('--authorization-reference')
+    parser.add_argument('--resume-receipt', type=Path)
     try:
         args = parser.parse_args(argv)
     except (IngestionError, argparse.ArgumentError):
@@ -631,9 +883,21 @@ def main(argv=None):
               'REPORT_INSIDE_INPUT')
         check(args.report.name not in ('sql-plan.json','execution-journal.json','snapshot-before.json','snapshot-after.json',
                                       'catalog-proposal.json','identity.json','recovered-inspection.json','resources-before.json',
-                                      'resources-after.json','execution-failure.json'), 'REPORT_RESERVED_PATH')
+                                      'resources-after.json','execution-failure.json','resume-receipt.json','resume-diagnostic.json'),
+              'REPORT_RESERVED_PATH')
         expected, settings = poc.config(args.config), config(args.athena_config)
         check(bool(args.authorized_plan_sha256) == bool(args.authorization_reference), 'ATHENA_EXPLICIT_AUTHORIZATION_REQUIRED')
+        if args.authorized_plan_sha256:
+            # Hosted execute cannot silently start with an empty journal. The
+            # restore happens before OIDC; recheck its working bytes before any
+            # AWS client or resource reconciliation can submit a request.
+            from scripts.pipeline.analytics.athena_restore import validate_working_restore
+            check(args.resume_receipt is not None, 'ATHENA_VERIFIED_RESTORE_REQUIRED')
+            validate_working_restore(args.resume_receipt, args.report.parent, executor_sha=os.environ.get('GITHUB_SHA'),
+                                     plan_sha256=args.authorized_plan_sha256, authorization_reference=args.authorization_reference,
+                                     round_id=args.round_id, snapshot_id=expected['snapshot_id'])
+        else:
+            check(args.resume_receipt is None, 'ATHENA_PLAN_RESTORE_FORBIDDEN')
         clients = aws_clients(expected)
         result = run(*clients, expected, settings, args.session_name, args.round_id, args.report.parent, args.output,
                      authorized_sha256=args.authorized_plan_sha256, authorization_reference=args.authorization_reference)
