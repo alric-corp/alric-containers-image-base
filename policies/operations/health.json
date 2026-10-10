@@ -58,7 +58,8 @@
     "infra-pr-plan-": 5,
     "$comment": "Evid\u00eancias de produto: 30d para auditoria e replay. Infra mant\u00e9m o plano bin\u00e1rio por 1d e evid\u00eancias/planos de PR por 5d, conforme os workflows vigentes. `melange-repo`, `melange-reproduction-reference`, `melange-reproducibility`, `melange-reproducibility-diagnostics-<attempt>`, `build-scans-`, `sbom-` e `runtime-` (30d) e `validated-oci-` (3d, retry sem rebuild) s\u00e3o artifacts que o executor compartilhado sobe -- declarados e testados em alric-containers-reusable-workflows, fora do lint deste reposit\u00f3rio.",
     "release-": 30,
-    "recovery-": 30
+    "recovery-": 30,
+    "sbom-poc-": 30
   },
   "exceptions": {},
   "execution_scope": {
