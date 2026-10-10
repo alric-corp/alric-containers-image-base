@@ -230,3 +230,44 @@ WORKFLOWS_DISPATCHED: NONE
 TERRAFORM_STATE_ACCESSED_OR_COPIED: NO
 CORPORATE_EXPORT: ONLY_IF_AUTHORIZED
 NEXT: TESTAR_ADAPTACAO_NO_LAB_COM_CONTRATOS_SANEADOS
+
+
+Execute o prompt anexado:
+Prompt_segunda_coleta_corporativa_Factory_Distroless.md
+
+Esta é uma coleta complementar à primeira, não uma nova investigação
+completa nem uma sessão de implementação.
+
+Priorize:
+1. Recuperar o RELATORIO-COLETA-CORPORATIVA.md original.
+2. Fixar a baseline do produto, do reusable e das actions realmente consumidas.
+3. Identificar o contrato do executor Terraform e o ponto de integração
+   do verificador de plano.
+4. Coletar evidências disponíveis das dependências do runner e uma amostra
+   mínima de SBOM, pelos canais autorizados.
+
+Trabalhe somente em leitura sobre código, GitHub e AWS.
+Grave os relatórios localmente, em diretório privado fora dos checkouts.
+
+Não execute Terraform, workflow dispatch, instalação de dependências,
+alterações IAM, publicação, promoção ou ingestão S3.
+
+Se uma informação exigir um novo job ou uma permissão indisponível,
+registre a limitação e continue as demais frentes. Não contorne bloqueios.
+
+Diferencie claramente:
+- Código inspecionado na revisão identificada.
+- Comportamento observado em execução.
+- Informação apenas relatada na primeira coleta.
+- Informação não observada ou dependente de decisão.
+
+Preserve os materiais corporativos no ambiente autorizado.
+Uma versão compartilhável deve conter somente conteúdo cuja transferência
+seja permitida, com saneamento quando necessário.
+
+Entregue RELATORIO-COLETA-CORPORATIVA-02.md e os índices de evidência
+previstos no prompt.
+
+Ao terminar, informe o que já permite preparar a adaptação no LAB
+e quais pendências podem ficar para a validação corporativa posterior.
+Não implemente correções durante a coleta.
