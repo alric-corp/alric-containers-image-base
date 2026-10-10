@@ -358,7 +358,9 @@ def _execution(client, query_id, submission, *, observation=None):
     check(type(value) is dict, 'ATHENA_EXECUTION_RESPONSE_INVALID')
     comparison = dict(sql_rule='EXACT_TOKENS_ASCII_WHITESPACE_ONLY',
                       catalog_rule='AWS_DEFAULT_CATALOG_CASE_ONLY',
-                      execution_parameters='RETURNED' if 'ExecutionParameters' in value else 'NOT_RETURNED')
+                      execution_parameters='RETURNED' if 'ExecutionParameters' in value else 'NOT_RETURNED',
+                      request_sql_sha256=sha256(submission['QueryString'].encode()),
+                      observed_sql_sha256=sha256(value['Query'].encode()) if type(value.get('Query')) is str else None)
     if observation:
         observation(_safe_execution(value), comparison)
 
@@ -369,7 +371,17 @@ def _execution(client, query_id, submission, *, observation=None):
 
     same('QueryExecutionId', query_id, value.get('QueryExecutionId'))
     same('WorkGroup', submission['WorkGroup'], value.get('WorkGroup'))
-    same('Query.tokens', execution_tokens(submission['QueryString']), execution_tokens(value.get('Query')))
+    wanted_tokens = execution_tokens(submission['QueryString'])
+    observed_tokens = execution_tokens(value.get('Query'))
+    # Directional response-only exception: one lexical final terminator omitted.
+    # Quoted/comment tokens containing ';' are intact; another statement,
+    # intermediate delimiter, final comment or added terminator cannot match.
+    if wanted_tokens[-1:] == [';'] and wanted_tokens.count(';') == 1 and observed_tokens == wanted_tokens[:-1]:
+        comparison['sql_rule'] = 'TRAILING_TERMINATOR_OMITTED'
+        if observation:
+            observation(_safe_execution(value), comparison)
+    else:
+        same('Query.tokens', wanted_tokens, observed_tokens)
     context = value.get('QueryExecutionContext')
     check(type(context) is dict and set(context) == {'Catalog', 'Database'}, 'ATHENA_EXECUTION_CONTEXT_INVALID')
     same('Database', submission['QueryExecutionContext']['Database'], context['Database'])

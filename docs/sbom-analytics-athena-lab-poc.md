@@ -157,7 +157,10 @@ It verifies the originating repository ID, workflow, workflow_dispatch/develop,
 source commit and attempt, artifact ID/name/size/digest, and producer upload step.
 A failed originating run is valid evidence, not a reason to select another run.
 
-The incident's externally approved source input is:
+The original incident's approved source input below is historical. Run
+38088837347 subsequently advanced the round to six entries; use the explicitly
+identified six-entry source in the next subsection for that resumption, unless
+a later run advanced it again. Never select a source by latest artifact name.
 
 ```json
 {
@@ -205,7 +208,65 @@ reported separately from the round's distinct execution IDs and reserved count.
 `api_calls` describes execute_plan; `resource_readback_api_calls` separates the
 before/after catalog reconciliation. Journal `recorded_get_attempts` counts
 observations recorded by this corrected executor, not an invented count for the
-old run whose journal did not retain that field.
+old run whose journal did not retain that field. The one-entry/17-new accounting
+above describes the first corrected resume, not the current six-entry history.
+
+### Six-entry resume after the final-terminator correction
+
+Run 38088837347 / attempt 1, executor
+`20ee0051018eefe94001b9639fd819c4b898ded7`, reconciled the original table and
+verified the other four DDLs. It then submitted `01_find_images` and stopped
+because Athena omitted its final `;` in the returned Query. The preserved
+journal records five VERIFIED DDLs and one SUBMITTED SELECT with a QUEUED
+observation. That observation does not establish the SELECT's current state.
+
+Approved source for the next resume, conditional on no later run advancing it:
+
+```json
+{
+  "run_id": 38088837347,
+  "attempt": 1,
+  "artifact_id": 11683770809,
+  "source_sha": "20ee0051018eefe94001b9639fd819c4b898ded7",
+  "zip_sha256": "3929469270e781d57f0489b555cfe21c1a4fd85ab5e155f4a9ad0b07c0132232",
+  "zip_bytes": 133908,
+  "journal_sha256": "e4a4410fc7f8149f8e7c3b859f028def03b5cfa3bd3133e7dcc2417bc26d5519",
+  "journal_bytes": 35270,
+  "sql_plan_sha256": "ce1c1ab7079db6bbcbdf91c4d6f1ddfbd6ef9806d9cdbe848e34a8ba8259123e",
+  "sql_plan_bytes": 257893
+}
+```
+
+Select exactly `athena-reports/execution-journal.json` and
+`athena-reports/sql-plan.json`. The same ZIP also contains
+`athena-resume-source/execution-journal.json` (2414 bytes, one entry) and a nested
+historical ZIP. Those are preserved history, not current resume inputs. The
+unchanged restorer selects by full member path and approved hash, never basename,
+ZIP order or the word "original". Keep this producer source_sha unchanged; the
+new integrated executor SHA is recorded separately in the receipt. Originals
+stay byte-identical; only the verified private working copy is updated.
+
+Account for all 18 instructions: six already submitted/reserved, then at most
+12 new (10 SELECT, 2 DESCRIBE). The original SELECT ID is
+`05c1e7d8-7ef4-4208-ab26-56552e29b7ef`, token
+`64ed26cb6d228b79251721bbc4a8df7cb636ea3d52eddba3c4cdffda82f1f03b`.
+Reconcile all six known IDs by GET without Start; verify the five existing
+catalog definitions and compare the SELECT's results by its existing ID before
+any remaining Start. FAILED/CANCELLED, actual timeout or mismatching results
+stop the sequence. JSON key order is canonical serialization, not submit order;
+the frozen plan defines the logical sequence. Keep the same round, authorization,
+SQL, parameters, tokens, destinations and limits. No new DDL or object replacement
+is needed if the catalog read-back matches.
+
+Before the next hosted dispatch, inspect runs/attempts and identified journals
+for further progress. If another run advanced the round, reconcile its provenance
+and hashes explicitly instead of restoring these six entries as current truth.
+After owner-reviewed integration use a new dispatch in develop with resume_source;
+do not rerun the old executor. This preparation performs no dispatch or new SQL.
+The persisted authorization remains applicable to the same plan/budget; it is not
+renewed per attempt. Any SQL/hash, permission, resource or limit change needs a
+separate decision. Final proof still requires all SELECT/DESCRIBE results, all
+five catalog definitions and an unchanged complete S3 snapshot before/after.
 
 After owner-reviewed integration, check whether another hosted attempt advanced
 this round before choosing a source. Reconcile its journal/IDs; do not knowingly
@@ -229,6 +290,17 @@ case, quoted strings/identifiers, numbers, operators, parentheses and comments
 This is deliberately more restrictive than a SQL equivalence engine, and separate
 from the existing limited view comparison. Only the expected AwsDataCatalog may
 be returned as awsdatacatalog; database/workgroup/query ID stay exact.
+
+One directional response-only exception records `TRAILING_TERMINATOR_OMITTED`:
+the authorized token list ends in exactly one standalone `;`, contains no other
+standalone semicolon, and the response equals every preceding token exactly.
+Normal token equality retains `EXACT_TOKENS_ASCII_WHITESPACE_ONLY`. A semicolon
+inside a quoted string/identifier or comment stays within that token. An added
+terminator, two terminators, an intermediate delimiter, another instruction or
+a final comment after the semicolon cannot use this exception. The lexer,
+outgoing QueryString, SQL plan/hash and token preimage remain unchanged. Both
+SQL texts and their separate byte hashes are preserved in the journal observation
+and comparison metadata; these hashes do not replace the authorized plan hash.
 
 GetQueryExecution does not promise to return ExecutionParameters. Missing values
 are recorded as NOT_RETURNED, not empty or remotely verified; exact submission
