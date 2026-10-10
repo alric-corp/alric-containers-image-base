@@ -36,7 +36,7 @@ def match(value, pattern, label):
 def configuration(path=None):
     cfg = json.loads((CONFIG if path is None else Path(path)).read_text(),
                      object_pairs_hook=object_pairs)
-    keys(cfg, ('schema_version', 'repository', 'branch', 'subject_prefix', 'DEV', 'HOM', 'infra'), 'pipeline')
+    keys(cfg, ('schema_version', 'repository', 'branch', 'subject_prefix', 'DEV', 'HOM', 'infra', 'factory'), 'pipeline')
     require(type(cfg['schema_version']) is int and cfg['schema_version'] == 1, 'unsupported pipeline schema')
     match(cfg['repository'], r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', 'repository')
     # Entrypoint branch guards and OIDC Environments are reviewed boundaries.
@@ -53,13 +53,21 @@ def configuration(path=None):
         match(item['release_bucket'], r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', f'{env}.release_bucket')
     require(cfg['DEV']['account_id'] != cfg['HOM']['account_id'], 'DEV and HOM accounts must differ')
     require(cfg['DEV']['release_bucket'] != cfg['HOM']['release_bucket'], 'release buckets must differ')
+    keys(cfg['factory'], ('operational_role_name',), 'factory')
+    match(cfg['factory']['operational_role_name'], r'[A-Za-z0-9+=,.@_-]{1,64}',
+          'factory.operational_role_name')
     infra = cfg['infra']
     keys(infra, ('plan_enabled', 'plan_role_name', 'apply_role_name', 'backend'), 'infra')
     require(type(infra['plan_enabled']) is bool, 'infra.plan_enabled must be boolean')
+    require(infra['plan_enabled'] is False,
+            'privileged PR planning requires a separately reviewed authorization design')
     for field in ('plan_role_name', 'apply_role_name'):
         match(infra[field], r'[A-Za-z0-9+=,.@_-]{1,64}', 'infra.' + field)
     require(len({infra['plan_role_name'], infra['apply_role_name'], cfg['DEV']['role_name']}) == 3,
-            'infra and publication roles must be distinct')
+            'legacy Terraform role names must be distinct')
+    require(cfg['factory']['operational_role_name'] not in
+            {infra['plan_role_name'], infra['apply_role_name'], cfg['DEV']['role_name'], cfg['HOM']['role_name']},
+            'external operational role must remain separate from legacy Terraform identities')
     keys(infra['backend'], ('bucket', 'region', 'key'), 'infra.backend')
     match(infra['backend']['bucket'], r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', 'infra.backend.bucket')
     match(infra['backend']['region'], r'[a-z]{2}-[a-z]+-[0-9]+', 'infra.backend.region')
@@ -96,8 +104,13 @@ def settings(cfg, scope):
     require(scope in ('DEV', 'HOM', 'INFRA_PLAN', 'INFRA_APPLY'), 'unknown pipeline scope')
     item = cfg['DEV' if scope.startswith('INFRA_') else scope]
     role = item['role_name']
-    if scope.startswith('INFRA_'):
-        role = cfg['infra'][scope.removeprefix('INFRA_').lower() + '_role_name']
+    require(cfg['infra']['plan_enabled'] is False,
+            'privileged PR planning requires a separately reviewed authorization design')
+    if scope in ('DEV', 'INFRA_APPLY'):
+        role = cfg['factory']['operational_role_name']
+    elif scope == 'INFRA_PLAN':
+        # Disabled PR checks retain the legacy name, never the central role.
+        role = cfg['infra']['plan_role_name']
     values = {
         'AWS_ACCOUNT_ID': item['account_id'], 'AWS_REGION': item['region'],
         'AWS_ROLE_ARN': f'arn:aws:iam::{item["account_id"]}:role/{role}',
@@ -124,6 +137,8 @@ def main(argv=None):
     cfg = configuration()
     if os.environ.get('GITHUB_REPOSITORY'):
         require(os.environ['GITHUB_REPOSITORY'] == cfg['repository'], 'pipeline repository mismatch')
+    if os.environ.get('GITHUB_EVENT_NAME', '').startswith('pull_request'):
+        require(args.scope == 'INFRA_PLAN', 'privileged role resolution is forbidden for pull requests')
     if args.require_promotion:
         require(args.scope in ('DEV', 'HOM') and promotion_policy(args.scope)['enabled'],
                 f'{args.scope} promotion is disabled in promotion policy')

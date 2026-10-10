@@ -29,10 +29,10 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_each_scope_selects_exact_account_role_and_backend(self):
         expected = {
-            'DEV': ('712107929769', 'us-east-1', 'alric-image-base-factory-dev'),
+            'DEV': ('712107929769', 'us-east-1', 'itau-github-repo-factory-distroless-v1'),
             'HOM': ('248908662184', 'sa-east-1', 'alric-image-base-factory-hom'),
             'INFRA_PLAN': ('712107929769', 'us-east-1', 'alric-github-repo-1360616627-infra-plan'),
-            'INFRA_APPLY': ('712107929769', 'us-east-1', 'alric-github-repo-1360616627-infra-apply'),
+            'INFRA_APPLY': ('712107929769', 'us-east-1', 'itau-github-repo-factory-distroless-v1'),
         }
         for scope, (account, region, role) in expected.items():
             with self.subTest(scope=scope):
@@ -44,6 +44,91 @@ class ConfigurationTests(unittest.TestCase):
                     self.assertEqual(settings['TF_STATE_BUCKET'], '712107929769-alric-containers-image-base-tfstate')
                     self.assertEqual(settings['TF_BACKEND_REGION'], 'us-east-2')
                     self.assertEqual(settings['TF_STATE_KEY'], 'alric-containers-image-base/terraform.tfstate')
+
+    def test_operational_role_configuration_is_required_and_strict(self):
+        for value in (None, {}, {'operational_role_name': True},
+                      {'operational_role_name': 'bad/name'},
+                      {'operational_role_name': 'name\nINJECTED=true'},
+                      {'operational_role_name': 'x' * 65},
+                      {'operational_role_name': self.cfg['DEV']['role_name']},
+                      {'operational_role_name': 'valid', 'role_arn': 'alternative'}):
+            cfg = copy.deepcopy(self.cfg)
+            cfg['factory'] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.load(cfg)
+        cfg = copy.deepcopy(self.cfg)
+        del cfg['factory']
+        with self.assertRaises(ValueError):
+            self.load(cfg)
+
+    def test_enabling_privileged_pr_plan_fails_closed_at_load_and_resolution(self):
+        cfg = copy.deepcopy(self.cfg)
+        cfg['infra']['plan_enabled'] = True
+        with self.assertRaisesRegex(ValueError, 'separately reviewed'):
+            self.load(cfg)
+        for scope in ('INFRA_PLAN', 'INFRA_APPLY', 'DEV'):
+            with self.subTest(scope=scope), self.assertRaisesRegex(ValueError, 'separately reviewed'):
+                config.settings(cfg, scope)
+
+    def test_pull_request_cannot_emit_privileged_settings(self):
+        for event in ('pull_request', 'pull_request_target', 'pull_request_review'):
+            for scope in ('DEV', 'INFRA_APPLY', 'HOM'):
+                output = self.directory / 'output'
+                env = self.directory / 'env'
+                with self.subTest(event=event, scope=scope), patch.dict(os.environ, {
+                        'GITHUB_EVENT_NAME': event, 'GITHUB_OUTPUT': str(output),
+                        'GITHUB_ENV': str(env)}, clear=True), self.assertRaisesRegex(ValueError, 'forbidden'):
+                    config.main(['--scope', scope])
+                self.assertFalse(output.exists())
+                self.assertFalse(env.exists())
+        with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'pull_request'}, clear=True), \
+                contextlib.redirect_stdout(io.StringIO()) as stdout:
+            config.main(['--scope', 'INFRA_PLAN'])
+        result = json.loads(stdout.getvalue())
+        self.assertEqual(result['INFRA_PLAN_ENABLED'], 'false')
+        self.assertNotIn(self.cfg['factory']['operational_role_name'], result['AWS_ROLE_ARN'])
+
+    def test_operational_arn_comes_only_from_versioned_field(self):
+        cfg = copy.deepcopy(self.cfg)
+        cfg['factory']['operational_role_name'] = 'reviewed-external-role'
+        self.load(cfg)
+        with patch.object(config, 'configuration', return_value=cfg), patch.dict(os.environ, {
+                'AWS_ROLE_ARN': 'wrong', 'FACTORY_OPERATIONAL_ROLE_NAME': 'wrong',
+                'GITHUB_EVENT_NAME': 'push'}, clear=True), contextlib.redirect_stdout(io.StringIO()) as stdout:
+            config.main(['--scope', 'DEV'])
+        self.assertEqual(json.loads(stdout.getvalue())['AWS_ROLE_ARN'],
+                         'arn:aws:iam::712107929769:role/reviewed-external-role')
+        self.assertEqual(cfg['DEV']['role_name'], 'alric-image-base-factory-dev')
+        self.assertEqual(config.settings(cfg, 'INFRA_APPLY')['AWS_ROLE_ARN'],
+                         config.settings(cfg, 'DEV')['AWS_ROLE_ARN'])
+
+    def test_protected_infra_plan_and_apply_share_operational_scope(self):
+        doc = yaml.safe_load((config.ROOT / '.github/workflows/infra-apply.yml').read_text())
+        self.assertEqual(doc['concurrency'], {'group': 'image-base-infra-state', 'cancel-in-progress': False})
+        for name in ('plan', 'apply'):
+            job = doc['jobs'][name]
+            self.assertEqual(job['environment'], 'lab-image-base-infra')
+            self.assertEqual(job['if'], "github.ref == 'refs/heads/develop'")
+            loader = next(s for s in job['steps'] if s.get('id') == 'pipeline')
+            self.assertIn('--scope INFRA_APPLY', loader['run'])
+        pr = yaml.safe_load((config.ROOT / '.github/workflows/infra-pr.yml').read_text())
+        self.assertEqual(pr['jobs']['checks']['permissions'], {'contents': 'read'})
+        self.assertIn("needs.checks.outputs.infra_plan_enabled == 'true'", pr['jobs']['plan']['if'])
+
+    def test_app_certification_sessions_remain_read_only(self):
+        doc = yaml.safe_load((config.ROOT / '.github/workflows/app-certification.yml').read_text())
+        expected = {'ecr:GetAuthorizationToken', 'ecr:DescribeImages', 'ecr:DescribeRepositories',
+                    'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchCheckLayerAvailability'}
+        for name in ('inventory', 'applications'):
+            job = doc['jobs'][name]
+            self.assertEqual(job['environment'], 'DEV')
+            action = next(s for s in job['steps'] if s.get('uses', '').startswith('aws-actions/configure-aws-credentials@'))
+            policy = json.loads(action['with']['inline-session-policy'])
+            self.assertEqual({a for s in policy['Statement'] for a in s['Action']}, expected)
+            self.assertTrue(all(s['Effect'] == 'Allow' for s in policy['Statement']))
+        self.assertIn("github.ref == 'refs/heads/develop'", doc['jobs']['inventory']['if'])
+        self.assertIn("github.event_name == 'workflow_dispatch'", doc['jobs']['inventory']['if'])
+        self.assertIn('inventory', doc['jobs']['applications']['needs'])
 
     def test_disabled_promotion_is_not_overridden_by_environment_variables(self):
         policy = dict(config.promotion_policy('HOM'), enabled=False)

@@ -113,14 +113,15 @@ class CentralRolePreflightTests(unittest.TestCase):
             for name in ('scripts/pipeline/governance/configuration.py', 'policies/pipeline/config.json'):
                 self.assertTrue(any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns), name)
 
-    def test_operational_resolution_stays_legacy_until_stage_b(self):
+    def test_preflight_identity_matches_operational_reference_after_stage_b(self):
         cfg = configuration.configuration()
-        self.assertNotIn('factory', cfg)
+        self.assertEqual(cfg['factory']['operational_role_name'], ROLE)
+        self.assertEqual(cfg['DEV']['role_name'], 'alric-image-base-factory-dev')
         self.assertFalse(cfg['infra']['plan_enabled'])
         self.assertEqual(configuration.settings(cfg, 'DEV')['AWS_ROLE_ARN'],
-                         f'arn:aws:iam::{ACCOUNT}:role/alric-image-base-factory-dev')
+                         f'arn:aws:iam::{ACCOUNT}:role/{ROLE}')
         self.assertEqual(configuration.settings(cfg, 'INFRA_APPLY')['AWS_ROLE_ARN'],
-                         f'arn:aws:iam::{ACCOUNT}:role/alric-github-repo-1360616627-infra-apply')
+                         f'arn:aws:iam::{ACCOUNT}:role/{ROLE}')
         self.assertEqual(configuration.settings(cfg, 'HOM')['AWS_ROLE_ARN'],
                          'arn:aws:iam::248908662184:role/alric-image-base-factory-hom')
 
