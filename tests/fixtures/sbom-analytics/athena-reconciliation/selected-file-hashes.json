@@ -1,0 +1,26 @@
+{
+  "authentication.json": {
+    "bytes": 282,
+    "sha256": "90eacf39ec2519098490484646d5bcedadfbbadd03e0d03ed59f25348f9f1a7b"
+  },
+  "execution-journal.json": {
+    "bytes": 2414,
+    "sha256": "714c2e35c113c2f4185892f2431007d0e3ed945e1e5220627528fcc21e71f9ff"
+  },
+  "github-metadata.json": {
+    "bytes": 5506,
+    "sha256": "68b70d0eb95702f9c49144245ca8fa57536d6fc912a5bc41a7714d8a709992e4"
+  },
+  "glue-table.json": {
+    "bytes": 5453,
+    "sha256": "75d5f365b2644e27241b74b05ba3759a5b264fce3d68c57e1907707ba8438f4e"
+  },
+  "query-execution.json": {
+    "bytes": 2879,
+    "sha256": "1f3355dbc2cb311e120e83ef4d22b38aa7c87249af434e8130df5244f216e9f1"
+  },
+  "sql-plan.json": {
+    "bytes": 257893,
+    "sha256": "ce1c1ab7079db6bbcbdf91c4d6f1ddfbd6ef9806d9cdbe848e34a8ba8259123e"
+  }
+}

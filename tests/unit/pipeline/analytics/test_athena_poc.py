@@ -3,6 +3,8 @@ import base64
 from collections import Counter
 from contextlib import redirect_stdout
 import copy
+from datetime import datetime, timezone
+import time
 import io
 import json
 from pathlib import Path
@@ -66,7 +68,7 @@ class Athena:
             return {'QueryExecutionId': self.tokens[token]['id']}
         statement = next(s for s in self.plan['statements'] if a.request(s, self.plan) == kwargs)
         query_id = 'q-' + str(len(self.tokens)+1)
-        entry = dict(id=query_id, request=copy.deepcopy(kwargs), statement=statement)
+        entry = dict(id=query_id, request=copy.deepcopy(kwargs), statement=statement, submitted_at=time.time())
         self.tokens[token] = entry
         self.executions[query_id] = entry
         if statement['kind'] == 'DDL':
@@ -80,7 +82,10 @@ class Athena:
                              references='array<struct<reference_category:string,reference_type:string,reference_locator:string,comment:string>>')
                 value.update(TableType='EXTERNAL_TABLE', StorageDescriptor=dict(
                     Columns=[dict(Name=c['name'],Type=types[c['type']]) for c in parquet.definition()['tables'][table_kind]],
-                    Location=self.expected['destination']['bucket']))
+                    Location=self.expected['destination']['bucket'],
+                    InputFormat='org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat',
+                    OutputFormat='org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat',
+                    SerdeInfo={'SerializationLibrary':'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'}))
                 value['StorageDescriptor']['Location'] = Destination(**self.expected['destination']).uri(self.expected['snapshot_id']) + 'analytics/sbom_' + table_kind + '/'
             else:
                 encoded = canonical(dict(originalSql=statement['sql'].split(' AS\n',1)[1], catalog=self.settings['catalog'], schema=self.settings['database']))
@@ -95,10 +100,12 @@ class Athena:
         entry = self.executions[kwargs['QueryExecutionId']]
         request = entry['request']
         result = dict(QueryExecutionId=entry['id'], Query=request['QueryString'], WorkGroup=request['WorkGroup'],
-                      QueryExecutionContext=request['QueryExecutionContext'], Status={'State': 'RUNNING' if self.running else self.failure or 'SUCCEEDED'},
+                      QueryExecutionContext=request['QueryExecutionContext'], Status={'State': 'RUNNING' if self.running else self.failure or 'SUCCEEDED',
+                              'SubmissionDateTime':datetime.fromtimestamp(entry['submitted_at'], timezone.utc),
+                              'CompletionDateTime':datetime.fromtimestamp(entry['submitted_at'], timezone.utc)},
                       ResultConfiguration=copy.deepcopy(request['ResultConfiguration']),
                       EngineVersion={'EffectiveEngineVersion':'Athena engine version 3'},
-                      Statistics=dict(DataScannedInBytes=100, ResultReuseInformation={'ReusedPreviousResult':False}))
+                      Statistics=dict(TotalExecutionTimeInMillis=0, EngineExecutionTimeInMillis=0, DataScannedInBytes=100, ResultReuseInformation={'ReusedPreviousResult':False}))
         result['ResultConfiguration']['OutputLocation'] += entry['id'] + '.csv'
         if 'ExecutionParameters' in request:
             result['ExecutionParameters'] = request['ExecutionParameters']
@@ -252,7 +259,7 @@ class AthenaPocTests(unittest.TestCase):
 
     def test_timeout_includes_service_wait_and_cancels_one_query_then_stops(self):
         self.athena.running=True
-        ticks=iter((0,121))
+        ticks=iter((0,0,121))
         with self.assertRaisesRegex(IngestionError,'QUERY_TIMEOUT'):
             self.execute(clock=lambda:next(ticks),sleep=lambda _:None)
         self.assertEqual(self.athena.stopped,'q-1');self.assertEqual(len(self.athena.tokens),1)
@@ -313,10 +320,10 @@ class AthenaPocTests(unittest.TestCase):
         with self.assertRaisesRegex(IngestionError,'BUDGET_DIFFERS'):
             a.execute_plan(raw,self.athena,self.journal,authorized_sha256=sha256(raw),authorization_reference='TEST_ONLY owner ref')
         self.assertEqual(self.athena.calls,[])
-        import datetime
-        self.athena.changed=lambda r:r['Status'].update(SubmissionDateTime=datetime.datetime(2026,1,1,tzinfo=datetime.timezone.utc))
         self.execute()
-        self.assertIn('2026-01-01T00:00:00+00:00',self.journal.read_text())
+        saved=json.loads(self.journal.read_bytes())['executions']['table-0']['execution']['Status']
+        self.assertTrue(saved['SubmissionDateTime'].endswith('+00:00'))
+        self.assertEqual(saved['SubmissionDateTime'],saved['CompletionDateTime'])
 
     def test_result_tokens_header_or_column_changes_and_unknown_nested_types_rejected(self):
         original=self.athena.get_query_results
