@@ -1,0 +1,201 @@
+name: SBOM Analytics - LAB S3 POC
+
+on:
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: sbom-analytics-lab-poc
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'alric-corp/alric-containers-image-base' && github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
+    environment: DEV
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ROLE_SESSION_NAME: sbom-poc-${{ github.run_id }}-${{ github.run_attempt }}-publish
+      PROBE_EXECUTION_ID: r${{ github.run_id }}-a${{ github.run_attempt }}
+    steps:
+      - name: Checkout reviewed implementation and public frozen data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Python compatibility target
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Install pinned isolated analytics dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/analytics-venv"
+          "$RUNNER_TEMP/analytics-venv/bin/python" -m pip install --quiet -r requirements-sbom-poc.txt
+          "$RUNNER_TEMP/analytics-venv/bin/python" -m pip freeze > "$RUNNER_TEMP/analytics-dependencies.txt"
+      - name: Verify frozen package before AWS credentials
+        run: |
+          "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.poc prepare \
+            --config policies/analytics/lab-poc.json \
+            --package tests/fixtures/sbom-analytics/lab-frozen-plan.zip \
+            --descriptor tests/fixtures/sbom-analytics/lab-frozen-plan.json \
+            --output "$RUNNER_TEMP/frozen-plan" --report "$RUNNER_TEMP/analytics-reports/preparation.json"
+      - name: Load versioned operational identity
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV
+      - name: Restrict this session to analytics S3
+        id: session
+        env:
+          EXPECTED_ROLE: ${{ steps.pipeline.outputs.AWS_ROLE_ARN }}
+        run: |
+          python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.pipeline.analytics.poc import config, session_policy
+          expected = config('policies/analytics/lab-poc.json')
+          assert expected['expected_role_arn'] == os.environ['EXPECTED_ROLE']
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+              output.write('policy=' + json.dumps(session_policy(expected, writer=True), separators=(',', ':')) + '\n')
+          PY
+      - name: Assume central role through OIDC
+        id: credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: ${{ steps.pipeline.outputs.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.pipeline.outputs.AWS_REGION }}
+          allowed-account-ids: ${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}
+          role-session-name: ${{ env.ROLE_SESSION_NAME }}
+          role-duration-seconds: 900
+          unset-current-credentials: true
+          use-existing-credentials: false
+          force-skip-oidc: false
+          role-chaining: false
+          translate-env-variables: false
+          output-credentials: false
+          inline-session-policy: ${{ steps.session.outputs.policy }}
+      - name: Smoke, publish, read back and retry the same request
+        run: |
+          "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.poc publish \
+            --config policies/analytics/lab-poc.json --plan "$RUNNER_TEMP/frozen-plan" \
+            --session-name "$ROLE_SESSION_NAME" --execution-id "$PROBE_EXECUTION_ID" \
+            --report "$RUNNER_TEMP/analytics-reports/result.json"
+      - name: Preserve diagnostics including authentication failure
+        if: always()
+        env:
+          CREDENTIALS_OUTCOME: ${{ steps.credentials.outcome }}
+        run: |
+          python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          reports = Path(os.environ['RUNNER_TEMP']) / 'analytics-reports'
+          reports.mkdir(exist_ok=True)
+          (reports / 'authentication.json').write_text(json.dumps({'stage': 'OIDC', 'outcome': os.environ['CREDENTIALS_OUTCOME'], 'source_sha': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'], 'attempt': os.environ['GITHUB_RUN_ATTEMPT']}) + '\n')
+          PY
+      - name: Upload publication diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-poc-${{ github.run_id }}-${{ github.run_attempt }}-publish
+          path: |
+            ${{ runner.temp }}/analytics-reports/
+            ${{ runner.temp }}/analytics-dependencies.txt
+          retention-days: 30
+          if-no-files-found: error
+
+  recover:
+    needs: publish
+    if: github.repository == 'alric-corp/alric-containers-image-base' && github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
+    environment: DEV
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ROLE_SESSION_NAME: sbom-poc-${{ github.run_id }}-${{ github.run_attempt }}-recover
+    steps:
+      - name: Checkout reader without original data or plan
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            frameworks
+            scripts
+            schemas/sbom-analytics
+            sql/sbom-analytics
+            policies
+      - name: Python compatibility target
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Isolate reader and confirm original inputs unavailable
+        run: |
+          test ! -e tests/fixtures
+          test ! -e "$RUNNER_TEMP/frozen-plan"
+          python3 -m venv "$RUNNER_TEMP/analytics-venv"
+          "$RUNNER_TEMP/analytics-venv/bin/python" -m pip install --quiet -r requirements-sbom-poc.txt
+          "$RUNNER_TEMP/analytics-venv/bin/python" -m pip freeze > "$RUNNER_TEMP/analytics-dependencies.txt"
+      - name: Load versioned operational identity
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV
+      - name: Restrict reader to S3 read operations
+        id: session
+        env:
+          EXPECTED_ROLE: ${{ steps.pipeline.outputs.AWS_ROLE_ARN }}
+        run: |
+          python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.pipeline.analytics.poc import config, session_policy
+          expected = config('policies/analytics/lab-poc.json')
+          assert expected['expected_role_arn'] == os.environ['EXPECTED_ROLE']
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+              output.write('policy=' + json.dumps(session_policy(expected, writer=False), separators=(',', ':')) + '\n')
+          PY
+      - name: Assume central reader through OIDC
+        id: credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: ${{ steps.pipeline.outputs.AWS_ROLE_ARN }}
+          aws-region: ${{ steps.pipeline.outputs.AWS_REGION }}
+          allowed-account-ids: ${{ steps.pipeline.outputs.AWS_ACCOUNT_ID }}
+          role-session-name: ${{ env.ROLE_SESSION_NAME }}
+          role-duration-seconds: 900
+          unset-current-credentials: true
+          use-existing-credentials: false
+          force-skip-oidc: false
+          role-chaining: false
+          translate-env-variables: false
+          output-credentials: false
+          inline-session-policy: ${{ steps.session.outputs.policy }}
+      - name: Recover exclusively from S3 and verify analytics
+        run: |
+          "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.poc recover \
+            --config policies/analytics/lab-poc.json --session-name "$ROLE_SESSION_NAME" \
+            --output "$RUNNER_TEMP/recovered-batch" --report "$RUNNER_TEMP/analytics-reports/result.json"
+      - name: Preserve reader diagnostics including failure
+        if: always()
+        env:
+          CREDENTIALS_OUTCOME: ${{ steps.credentials.outcome }}
+        run: |
+          python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          reports = Path(os.environ['RUNNER_TEMP']) / 'analytics-reports'
+          reports.mkdir(exist_ok=True)
+          (reports / 'authentication.json').write_text(json.dumps({'stage': 'OIDC', 'outcome': os.environ['CREDENTIALS_OUTCOME'], 'source_sha': os.environ['GITHUB_SHA'], 'original_inputs_available': (Path(os.environ['GITHUB_WORKSPACE']) / 'tests/fixtures').exists() or (Path(os.environ['RUNNER_TEMP']) / 'frozen-plan').exists()}) + '\n')
+          PY
+      - name: Upload independent recovery diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-poc-${{ github.run_id }}-${{ github.run_attempt }}-recover
+          path: |
+            ${{ runner.temp }}/analytics-reports/
+            ${{ runner.temp }}/analytics-dependencies.txt
+          retention-days: 30
+          if-no-files-found: error

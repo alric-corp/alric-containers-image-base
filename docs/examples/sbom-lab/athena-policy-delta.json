@@ -1,0 +1,49 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "PocAthenaExactWorkgroup",
+      "Effect": "Allow",
+      "Action": [
+        "athena:GetWorkGroup",
+        "athena:StartQueryExecution",
+        "athena:GetQueryExecution",
+        "athena:GetQueryResults",
+        "athena:StopQueryExecution"
+      ],
+      "Resource": [
+        "arn:aws:athena:us-east-1:712107929769:workgroup/poc_distroless_sbom"
+      ]
+    },
+    {
+      "Sid": "PocGlueReadAndNewTables",
+      "Effect": "Allow",
+      "Action": [
+        "glue:GetDatabase",
+        "glue:GetTable",
+        "glue:GetPartitions",
+        "glue:CreateTable"
+      ],
+      "Resource": [
+        "arn:aws:glue:us-east-1:712107929769:catalog",
+        "arn:aws:glue:us-east-1:712107929769:database/poc_distroless_sbom",
+        "arn:aws:glue:us-east-1:712107929769:table/poc_distroless_sbom/poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_observation_rows_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/poc_distroless_sbom/poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_package_rows_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/poc_distroless_sbom/poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_observations_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/poc_distroless_sbom/poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_packages_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/poc_distroless_sbom/poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_inventory_v1"
+      ]
+    },
+    {
+      "Sid": "PocAthenaQueryResults",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1/query-results/poc-v1/*"
+      ]
+    }
+  ]
+}

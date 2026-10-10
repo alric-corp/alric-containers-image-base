@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "package_sha256": "a713e5e34d1419a9971719fe6ced95c87c1514631984b4512a784411a621b785",
+  "package_bytes": 643439,
+  "plan_sha256": "4e901c7ab8d6ce001576387caa5797806161ad154871994d9b58ab28bec1d03c",
+  "origin": {
+    "profile": "PUBLIC_HISTORICAL_ANALYTICS_INPUT",
+    "producer_run": 37806495087,
+    "producer_attempt": 1,
+    "producer_source_sha": "4c1783e8c2a36e0f79f453b2f080a23a0eeea0d3",
+    "existing_plan_preserved": true,
+    "publication_authority": false
+  }
+}
