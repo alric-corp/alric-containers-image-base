@@ -1,0 +1,849 @@
+{
+  "sbom_observation_rows_v1": {
+    "Name": "poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_observation_rows_v1",
+    "DatabaseName": "poc_distroless_sbom",
+    "Owner": "hadoop",
+    "CreateTime": "2026-10-10T16:42:30-03:00",
+    "UpdateTime": "2026-10-10T16:42:30-03:00",
+    "LastAccessTime": "1969-12-31T21:00:00-03:00",
+    "Retention": 0,
+    "StorageDescriptor": {
+      "Columns": [
+        {
+          "Name": "observation_id",
+          "Type": "string"
+        },
+        {
+          "Name": "sbom_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "predicate_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "repository",
+          "Type": "string"
+        },
+        {
+          "Name": "source_sha",
+          "Type": "string"
+        },
+        {
+          "Name": "framework",
+          "Type": "string"
+        },
+        {
+          "Name": "image_repository",
+          "Type": "string"
+        },
+        {
+          "Name": "event",
+          "Type": "string"
+        },
+        {
+          "Name": "ref",
+          "Type": "string"
+        },
+        {
+          "Name": "image_index_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "subject_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "sbom_scope",
+          "Type": "string"
+        },
+        {
+          "Name": "document_namespace",
+          "Type": "string"
+        },
+        {
+          "Name": "spdx_version",
+          "Type": "string"
+        },
+        {
+          "Name": "normalizer_version",
+          "Type": "string"
+        },
+        {
+          "Name": "raw_spdx_path",
+          "Type": "string"
+        },
+        {
+          "Name": "integrity_check",
+          "Type": "string"
+        },
+        {
+          "Name": "subject_check",
+          "Type": "string"
+        },
+        {
+          "Name": "hosted_verification_status",
+          "Type": "string"
+        },
+        {
+          "Name": "cryptographic_authenticity",
+          "Type": "string"
+        },
+        {
+          "Name": "document_platform",
+          "Type": "string"
+        },
+        {
+          "Name": "source_path",
+          "Type": "string"
+        },
+        {
+          "Name": "source_timestamp",
+          "Type": "string"
+        },
+        {
+          "Name": "source_timestamp_origin",
+          "Type": "string"
+        },
+        {
+          "Name": "spdx_created",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "published_index_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "hosted_verification_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_check",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_check",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_check",
+          "Type": "string"
+        },
+        {
+          "Name": "run_id",
+          "Type": "bigint"
+        },
+        {
+          "Name": "run_attempt",
+          "Type": "bigint"
+        },
+        {
+          "Name": "artifact_id",
+          "Type": "bigint"
+        },
+        {
+          "Name": "schema_version",
+          "Type": "int"
+        },
+        {
+          "Name": "package_count",
+          "Type": "int"
+        },
+        {
+          "Name": "relationship_count",
+          "Type": "int"
+        },
+        {
+          "Name": "publication_authority",
+          "Type": "boolean"
+        }
+      ],
+      "Location": "s3://alric-distroless-sbom-712107929769-us-east-1/sbom-analytics/poc-v1/snapshots/6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6/analytics/sbom_observations",
+      "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+      "OutputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+      "Compressed": false,
+      "NumberOfBuckets": -1,
+      "SerdeInfo": {
+        "SerializationLibrary": "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+        "Parameters": {
+          "serialization.format": "1"
+        }
+      },
+      "BucketColumns": [],
+      "SortColumns": [],
+      "Parameters": {},
+      "SkewedInfo": {
+        "SkewedColumnNames": [],
+        "SkewedColumnValues": [],
+        "SkewedColumnValueLocationMaps": {}
+      },
+      "StoredAsSubDirectories": false
+    },
+    "PartitionKeys": [],
+    "TableType": "EXTERNAL_TABLE",
+    "Parameters": {
+      "EXTERNAL": "TRUE",
+      "transient_lastDdlTime": "1791661350"
+    },
+    "CreatedBy": "arn:aws:sts::712107929769:assumed-role/itau-github-repo-factory-distroless-v1/sbom-athena-38080824102-1",
+    "IsRegisteredWithLakeFormation": false,
+    "CatalogId": "712107929769",
+    "VersionId": "0",
+    "IsMultiDialectView": false
+  },
+  "sbom_package_rows_v1": {
+    "Name": "poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_package_rows_v1",
+    "DatabaseName": "poc_distroless_sbom",
+    "Owner": "hadoop",
+    "CreateTime": "2026-10-10T18:46:12-03:00",
+    "UpdateTime": "2026-10-10T18:46:12-03:00",
+    "LastAccessTime": "1969-12-31T21:00:00-03:00",
+    "Retention": 0,
+    "StorageDescriptor": {
+      "Columns": [
+        {
+          "Name": "schema_version",
+          "Type": "int"
+        },
+        {
+          "Name": "normalizer_version",
+          "Type": "string"
+        },
+        {
+          "Name": "sbom_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "package_spdx_id",
+          "Type": "string"
+        },
+        {
+          "Name": "package_name",
+          "Type": "string"
+        },
+        {
+          "Name": "package_version",
+          "Type": "string"
+        },
+        {
+          "Name": "purls",
+          "Type": "array<string>"
+        },
+        {
+          "Name": "external_references",
+          "Type": "array<struct<reference_category:string,reference_type:string,reference_locator:string,comment:string>>"
+        },
+        {
+          "Name": "license_declared",
+          "Type": "string"
+        },
+        {
+          "Name": "license_concluded",
+          "Type": "string"
+        },
+        {
+          "Name": "supplier",
+          "Type": "string"
+        },
+        {
+          "Name": "download_location",
+          "Type": "string"
+        },
+        {
+          "Name": "primary_package_purpose",
+          "Type": "string"
+        },
+        {
+          "Name": "is_document_subject",
+          "Type": "boolean"
+        }
+      ],
+      "Location": "s3://alric-distroless-sbom-712107929769-us-east-1/sbom-analytics/poc-v1/snapshots/6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6/analytics/sbom_packages",
+      "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+      "OutputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+      "Compressed": false,
+      "NumberOfBuckets": -1,
+      "SerdeInfo": {
+        "SerializationLibrary": "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+        "Parameters": {
+          "serialization.format": "1"
+        }
+      },
+      "BucketColumns": [],
+      "SortColumns": [],
+      "Parameters": {},
+      "SkewedInfo": {
+        "SkewedColumnNames": [],
+        "SkewedColumnValues": [],
+        "SkewedColumnValueLocationMaps": {}
+      },
+      "StoredAsSubDirectories": false
+    },
+    "PartitionKeys": [],
+    "TableType": "EXTERNAL_TABLE",
+    "Parameters": {
+      "EXTERNAL": "TRUE",
+      "transient_lastDdlTime": "1791668772"
+    },
+    "CreatedBy": "arn:aws:sts::712107929769:assumed-role/itau-github-repo-factory-distroless-v1/sbom-athena-38088837347-1",
+    "IsRegisteredWithLakeFormation": false,
+    "CatalogId": "712107929769",
+    "VersionId": "0",
+    "IsMultiDialectView": false
+  },
+  "sbom_observations_v1": {
+    "Name": "poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_observations_v1",
+    "DatabaseName": "poc_distroless_sbom",
+    "CreateTime": "2026-10-10T18:46:14-03:00",
+    "UpdateTime": "2026-10-10T18:46:14-03:00",
+    "Retention": 0,
+    "StorageDescriptor": {
+      "Columns": [
+        {
+          "Name": "observation_id",
+          "Type": "string"
+        },
+        {
+          "Name": "sbom_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "predicate_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "repository",
+          "Type": "string"
+        },
+        {
+          "Name": "source_sha",
+          "Type": "string"
+        },
+        {
+          "Name": "framework",
+          "Type": "string"
+        },
+        {
+          "Name": "image_repository",
+          "Type": "string"
+        },
+        {
+          "Name": "event",
+          "Type": "string"
+        },
+        {
+          "Name": "ref",
+          "Type": "string"
+        },
+        {
+          "Name": "image_index_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "subject_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "sbom_scope",
+          "Type": "string"
+        },
+        {
+          "Name": "document_namespace",
+          "Type": "string"
+        },
+        {
+          "Name": "spdx_version",
+          "Type": "string"
+        },
+        {
+          "Name": "normalizer_version",
+          "Type": "string"
+        },
+        {
+          "Name": "raw_spdx_path",
+          "Type": "string"
+        },
+        {
+          "Name": "integrity_check",
+          "Type": "string"
+        },
+        {
+          "Name": "subject_check",
+          "Type": "string"
+        },
+        {
+          "Name": "hosted_verification_status",
+          "Type": "string"
+        },
+        {
+          "Name": "cryptographic_authenticity",
+          "Type": "string"
+        },
+        {
+          "Name": "document_platform",
+          "Type": "string"
+        },
+        {
+          "Name": "source_path",
+          "Type": "string"
+        },
+        {
+          "Name": "source_timestamp",
+          "Type": "string"
+        },
+        {
+          "Name": "source_timestamp_origin",
+          "Type": "string"
+        },
+        {
+          "Name": "spdx_created",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "published_index_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "hosted_verification_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_check",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_check",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_check",
+          "Type": "string"
+        },
+        {
+          "Name": "run_id",
+          "Type": "bigint"
+        },
+        {
+          "Name": "run_attempt",
+          "Type": "bigint"
+        },
+        {
+          "Name": "artifact_id",
+          "Type": "bigint"
+        },
+        {
+          "Name": "schema_version",
+          "Type": "int"
+        },
+        {
+          "Name": "package_count",
+          "Type": "int"
+        },
+        {
+          "Name": "relationship_count",
+          "Type": "int"
+        },
+        {
+          "Name": "publication_authority",
+          "Type": "boolean"
+        }
+      ],
+      "Location": "",
+      "Compressed": false,
+      "NumberOfBuckets": 0,
+      "SerdeInfo": {},
+      "SortColumns": [],
+      "StoredAsSubDirectories": false
+    },
+    "ViewOriginalText": "/* Presto View: eyJvcmlnaW5hbFNxbCI6IlNFTEVDVCBESVNUSU5DVFxuICBvYnNlcnZhdGlvbl9pZFxuLCBzYm9tX3NoYTI1NlxuLCBwcmVkaWNhdGVfZGlnZXN0XG4sIHJlcG9zaXRvcnlcbiwgc291cmNlX3NoYVxuLCBmcmFtZXdvcmtcbiwgaW1hZ2VfcmVwb3NpdG9yeVxuLCBldmVudFxuLCByZWZcbiwgaW1hZ2VfaW5kZXhfZGlnZXN0XG4sIHN1YmplY3RfZGlnZXN0XG4sIHNib21fc2NvcGVcbiwgZG9jdW1lbnRfbmFtZXNwYWNlXG4sIHNwZHhfdmVyc2lvblxuLCBub3JtYWxpemVyX3ZlcnNpb25cbiwgcmF3X3NwZHhfcGF0aFxuLCBpbnRlZ3JpdHlfY2hlY2tcbiwgc3ViamVjdF9jaGVja1xuLCBob3N0ZWRfdmVyaWZpY2F0aW9uX3N0YXR1c1xuLCBjcnlwdG9ncmFwaGljX2F1dGhlbnRpY2l0eVxuLCBkb2N1bWVudF9wbGF0Zm9ybVxuLCBzb3VyY2VfcGF0aFxuLCBzb3VyY2VfdGltZXN0YW1wXG4sIHNvdXJjZV90aW1lc3RhbXBfb3JpZ2luXG4sIHNwZHhfY3JlYXRlZFxuLCB2YWxpZGF0aW9uX3JlY29yZF9zaGEyNTZcbiwgdmFsaWRhdGlvbl9yZWNvcmRfcmVmZXJlbmNlXG4sIHB1YmxpY2F0aW9uX3JlY29yZF9zaGEyNTZcbiwgcHVibGljYXRpb25fcmVjb3JkX3JlZmVyZW5jZVxuLCBwdWJsaXNoZWRfaW5kZXhfc2hhMjU2XG4sIGNhbmRpZGF0ZV9pZGVudGl0eV9zaGEyNTZcbiwgY2FuZGlkYXRlX2lkZW50aXR5X3JlZmVyZW5jZVxuLCBob3N0ZWRfdmVyaWZpY2F0aW9uX3JlZmVyZW5jZVxuLCB2YWxpZGF0aW9uX3JlY29yZF9jaGVja1xuLCBwdWJsaWNhdGlvbl9yZWNvcmRfY2hlY2tcbiwgY2FuZGlkYXRlX2lkZW50aXR5X2NoZWNrXG4sIHJ1bl9pZFxuLCBydW5fYXR0ZW1wdFxuLCBhcnRpZmFjdF9pZFxuLCBzY2hlbWFfdmVyc2lvblxuLCBwYWNrYWdlX2NvdW50XG4sIHJlbGF0aW9uc2hpcF9jb3VudFxuLCBwdWJsaWNhdGlvbl9hdXRob3JpdHlcbkZST01cbiAgcG9jX2Rpc3Ryb2xlc3Nfc2JvbS5wb2Nfc25hcHNob3RfNmFlMGQ1YTQ2M2EyMDk2MWU0NDMxY2I4NmQ3ZDk2OWZmMjE1N2JmMjU0MjhhMjJkZDA4YWExMTk2MzI1NDhiNl9zYm9tX29ic2VydmF0aW9uX3Jvd3NfdjFcbiIsImNhdGFsb2ciOiJhd3NkYXRhY2F0YWxvZyIsInNjaGVtYSI6InBvY19kaXN0cm9sZXNzX3Nib20iLCJjb2x1bW5zIjpbeyJuYW1lIjoib2JzZXJ2YXRpb25faWQiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InNib21fc2hhMjU2IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJwcmVkaWNhdGVfZGlnZXN0IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJyZXBvc2l0b3J5IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJzb3VyY2Vfc2hhIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJmcmFtZXdvcmsiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImltYWdlX3JlcG9zaXRvcnkiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImV2ZW50IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJyZWYiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImltYWdlX2luZGV4X2RpZ2VzdCIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoic3ViamVjdF9kaWdlc3QiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InNib21fc2NvcGUiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImRvY3VtZW50X25hbWVzcGFjZSIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoic3BkeF92ZXJzaW9uIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJub3JtYWxpemVyX3ZlcnNpb24iLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InJhd19zcGR4X3BhdGgiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImludGVncml0eV9jaGVjayIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoic3ViamVjdF9jaGVjayIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoiaG9zdGVkX3ZlcmlmaWNhdGlvbl9zdGF0dXMiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImNyeXB0b2dyYXBoaWNfYXV0aGVudGljaXR5IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJkb2N1bWVudF9wbGF0Zm9ybSIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoic291cmNlX3BhdGgiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InNvdXJjZV90aW1lc3RhbXAiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InNvdXJjZV90aW1lc3RhbXBfb3JpZ2luIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJzcGR4X2NyZWF0ZWQiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InZhbGlkYXRpb25fcmVjb3JkX3NoYTI1NiIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoidmFsaWRhdGlvbl9yZWNvcmRfcmVmZXJlbmNlIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJwdWJsaWNhdGlvbl9yZWNvcmRfc2hhMjU2IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJwdWJsaWNhdGlvbl9yZWNvcmRfcmVmZXJlbmNlIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJwdWJsaXNoZWRfaW5kZXhfc2hhMjU2IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJjYW5kaWRhdGVfaWRlbnRpdHlfc2hhMjU2IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJjYW5kaWRhdGVfaWRlbnRpdHlfcmVmZXJlbmNlIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJob3N0ZWRfdmVyaWZpY2F0aW9uX3JlZmVyZW5jZSIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoidmFsaWRhdGlvbl9yZWNvcmRfY2hlY2siLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InB1YmxpY2F0aW9uX3JlY29yZF9jaGVjayIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoiY2FuZGlkYXRlX2lkZW50aXR5X2NoZWNrIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJydW5faWQiLCJ0eXBlIjoiYmlnaW50In0seyJuYW1lIjoicnVuX2F0dGVtcHQiLCJ0eXBlIjoiYmlnaW50In0seyJuYW1lIjoiYXJ0aWZhY3RfaWQiLCJ0eXBlIjoiYmlnaW50In0seyJuYW1lIjoic2NoZW1hX3ZlcnNpb24iLCJ0eXBlIjoiaW50ZWdlciJ9LHsibmFtZSI6InBhY2thZ2VfY291bnQiLCJ0eXBlIjoiaW50ZWdlciJ9LHsibmFtZSI6InJlbGF0aW9uc2hpcF9jb3VudCIsInR5cGUiOiJpbnRlZ2VyIn0seyJuYW1lIjoicHVibGljYXRpb25fYXV0aG9yaXR5IiwidHlwZSI6ImJvb2xlYW4ifV0sIm93bmVyIjoiNzEyMTA3OTI5NzY5IiwicnVuQXNJbnZva2VyIjpmYWxzZSwicHJvcGVydGllcyI6e30sImlzUHJvdGVjdGVkIjpmYWxzZSwiaXNNdWx0aURpYWxlY3QiOmZhbHNlfQ== */",
+    "ViewExpandedText": "/* Presto View */",
+    "TableType": "VIRTUAL_VIEW",
+    "Parameters": {
+      "presto_view": "true",
+      "comment": "Presto View"
+    },
+    "CreatedBy": "arn:aws:sts::712107929769:assumed-role/itau-github-repo-factory-distroless-v1/sbom-athena-38088837347-1",
+    "IsRegisteredWithLakeFormation": false,
+    "CatalogId": "712107929769",
+    "VersionId": "0",
+    "IsMultiDialectView": false
+  },
+  "sbom_packages_v1": {
+    "Name": "poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_packages_v1",
+    "DatabaseName": "poc_distroless_sbom",
+    "CreateTime": "2026-10-10T18:46:17-03:00",
+    "UpdateTime": "2026-10-10T18:46:17-03:00",
+    "Retention": 0,
+    "StorageDescriptor": {
+      "Columns": [
+        {
+          "Name": "schema_version",
+          "Type": "int"
+        },
+        {
+          "Name": "normalizer_version",
+          "Type": "string"
+        },
+        {
+          "Name": "sbom_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "package_spdx_id",
+          "Type": "string"
+        },
+        {
+          "Name": "package_name",
+          "Type": "string"
+        },
+        {
+          "Name": "package_version",
+          "Type": "string"
+        },
+        {
+          "Name": "purls",
+          "Type": "array<string>"
+        },
+        {
+          "Name": "external_references",
+          "Type": "array<struct<reference_category:string,reference_type:string,reference_locator:string,comment:string>>"
+        },
+        {
+          "Name": "license_declared",
+          "Type": "string"
+        },
+        {
+          "Name": "license_concluded",
+          "Type": "string"
+        },
+        {
+          "Name": "supplier",
+          "Type": "string"
+        },
+        {
+          "Name": "download_location",
+          "Type": "string"
+        },
+        {
+          "Name": "primary_package_purpose",
+          "Type": "string"
+        },
+        {
+          "Name": "is_document_subject",
+          "Type": "boolean"
+        }
+      ],
+      "Location": "",
+      "Compressed": false,
+      "NumberOfBuckets": 0,
+      "SerdeInfo": {},
+      "SortColumns": [],
+      "StoredAsSubDirectories": false
+    },
+    "ViewOriginalText": "/* Presto View: eyJvcmlnaW5hbFNxbCI6IlNFTEVDVCBESVNUSU5DVFxuICBzY2hlbWFfdmVyc2lvblxuLCBub3JtYWxpemVyX3ZlcnNpb25cbiwgc2JvbV9zaGEyNTZcbiwgcGFja2FnZV9zcGR4X2lkXG4sIHBhY2thZ2VfbmFtZVxuLCBwYWNrYWdlX3ZlcnNpb25cbiwgcHVybHNcbiwgZXh0ZXJuYWxfcmVmZXJlbmNlc1xuLCBsaWNlbnNlX2RlY2xhcmVkXG4sIGxpY2Vuc2VfY29uY2x1ZGVkXG4sIHN1cHBsaWVyXG4sIGRvd25sb2FkX2xvY2F0aW9uXG4sIHByaW1hcnlfcGFja2FnZV9wdXJwb3NlXG4sIGlzX2RvY3VtZW50X3N1YmplY3RcbkZST01cbiAgcG9jX2Rpc3Ryb2xlc3Nfc2JvbS5wb2Nfc25hcHNob3RfNmFlMGQ1YTQ2M2EyMDk2MWU0NDMxY2I4NmQ3ZDk2OWZmMjE1N2JmMjU0MjhhMjJkZDA4YWExMTk2MzI1NDhiNl9zYm9tX3BhY2thZ2Vfcm93c192MVxuIiwiY2F0YWxvZyI6ImF3c2RhdGFjYXRhbG9nIiwic2NoZW1hIjoicG9jX2Rpc3Ryb2xlc3Nfc2JvbSIsImNvbHVtbnMiOlt7Im5hbWUiOiJzY2hlbWFfdmVyc2lvbiIsInR5cGUiOiJpbnRlZ2VyIn0seyJuYW1lIjoibm9ybWFsaXplcl92ZXJzaW9uIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJzYm9tX3NoYTI1NiIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoicGFja2FnZV9zcGR4X2lkIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJwYWNrYWdlX25hbWUiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InBhY2thZ2VfdmVyc2lvbiIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoicHVybHMiLCJ0eXBlIjoiYXJyYXkodmFyY2hhcikifSx7Im5hbWUiOiJleHRlcm5hbF9yZWZlcmVuY2VzIiwidHlwZSI6ImFycmF5KHJvdyhcInJlZmVyZW5jZV9jYXRlZ29yeVwiIHZhcmNoYXIsXCJyZWZlcmVuY2VfdHlwZVwiIHZhcmNoYXIsXCJyZWZlcmVuY2VfbG9jYXRvclwiIHZhcmNoYXIsXCJjb21tZW50XCIgdmFyY2hhcikpIn0seyJuYW1lIjoibGljZW5zZV9kZWNsYXJlZCIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoibGljZW5zZV9jb25jbHVkZWQiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InN1cHBsaWVyIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJkb3dubG9hZF9sb2NhdGlvbiIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoicHJpbWFyeV9wYWNrYWdlX3B1cnBvc2UiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImlzX2RvY3VtZW50X3N1YmplY3QiLCJ0eXBlIjoiYm9vbGVhbiJ9XSwib3duZXIiOiI3MTIxMDc5Mjk3NjkiLCJydW5Bc0ludm9rZXIiOmZhbHNlLCJwcm9wZXJ0aWVzIjp7fSwiaXNQcm90ZWN0ZWQiOmZhbHNlLCJpc011bHRpRGlhbGVjdCI6ZmFsc2V9 */",
+    "ViewExpandedText": "/* Presto View */",
+    "TableType": "VIRTUAL_VIEW",
+    "Parameters": {
+      "presto_view": "true",
+      "comment": "Presto View"
+    },
+    "CreatedBy": "arn:aws:sts::712107929769:assumed-role/itau-github-repo-factory-distroless-v1/sbom-athena-38088837347-1",
+    "IsRegisteredWithLakeFormation": false,
+    "CatalogId": "712107929769",
+    "VersionId": "0",
+    "IsMultiDialectView": false
+  },
+  "sbom_inventory_v1": {
+    "Name": "poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_inventory_v1",
+    "DatabaseName": "poc_distroless_sbom",
+    "CreateTime": "2026-10-10T18:46:19-03:00",
+    "UpdateTime": "2026-10-10T18:46:19-03:00",
+    "Retention": 0,
+    "StorageDescriptor": {
+      "Columns": [
+        {
+          "Name": "observation_id",
+          "Type": "string"
+        },
+        {
+          "Name": "sbom_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "predicate_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "repository",
+          "Type": "string"
+        },
+        {
+          "Name": "source_sha",
+          "Type": "string"
+        },
+        {
+          "Name": "framework",
+          "Type": "string"
+        },
+        {
+          "Name": "image_repository",
+          "Type": "string"
+        },
+        {
+          "Name": "event",
+          "Type": "string"
+        },
+        {
+          "Name": "ref",
+          "Type": "string"
+        },
+        {
+          "Name": "image_index_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "subject_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "sbom_scope",
+          "Type": "string"
+        },
+        {
+          "Name": "document_namespace",
+          "Type": "string"
+        },
+        {
+          "Name": "spdx_version",
+          "Type": "string"
+        },
+        {
+          "Name": "normalizer_version",
+          "Type": "string"
+        },
+        {
+          "Name": "raw_spdx_path",
+          "Type": "string"
+        },
+        {
+          "Name": "integrity_check",
+          "Type": "string"
+        },
+        {
+          "Name": "subject_check",
+          "Type": "string"
+        },
+        {
+          "Name": "hosted_verification_status",
+          "Type": "string"
+        },
+        {
+          "Name": "cryptographic_authenticity",
+          "Type": "string"
+        },
+        {
+          "Name": "document_platform",
+          "Type": "string"
+        },
+        {
+          "Name": "source_path",
+          "Type": "string"
+        },
+        {
+          "Name": "source_timestamp",
+          "Type": "string"
+        },
+        {
+          "Name": "source_timestamp_origin",
+          "Type": "string"
+        },
+        {
+          "Name": "spdx_created",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "published_index_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "hosted_verification_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_check",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_check",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_check",
+          "Type": "string"
+        },
+        {
+          "Name": "run_id",
+          "Type": "bigint"
+        },
+        {
+          "Name": "run_attempt",
+          "Type": "bigint"
+        },
+        {
+          "Name": "artifact_id",
+          "Type": "bigint"
+        },
+        {
+          "Name": "schema_version",
+          "Type": "int"
+        },
+        {
+          "Name": "package_count",
+          "Type": "int"
+        },
+        {
+          "Name": "relationship_count",
+          "Type": "int"
+        },
+        {
+          "Name": "publication_authority",
+          "Type": "boolean"
+        },
+        {
+          "Name": "package_spdx_id",
+          "Type": "string"
+        },
+        {
+          "Name": "package_name",
+          "Type": "string"
+        },
+        {
+          "Name": "package_version",
+          "Type": "string"
+        },
+        {
+          "Name": "purls",
+          "Type": "array<string>"
+        },
+        {
+          "Name": "external_references",
+          "Type": "array<struct<reference_category:string,reference_type:string,reference_locator:string,comment:string>>"
+        },
+        {
+          "Name": "license_declared",
+          "Type": "string"
+        },
+        {
+          "Name": "license_concluded",
+          "Type": "string"
+        },
+        {
+          "Name": "supplier",
+          "Type": "string"
+        },
+        {
+          "Name": "download_location",
+          "Type": "string"
+        },
+        {
+          "Name": "primary_package_purpose",
+          "Type": "string"
+        },
+        {
+          "Name": "is_document_subject",
+          "Type": "boolean"
+        }
+      ],
+      "Location": "",
+      "Compressed": false,
+      "NumberOfBuckets": 0,
+      "SerdeInfo": {},
+      "SortColumns": [],
+      "StoredAsSubDirectories": false
+    },
+    "ViewOriginalText": "/* Presto View: eyJvcmlnaW5hbFNxbCI6IlNFTEVDVFxuICBvLm9ic2VydmF0aW9uX2lkXG4sIG8uc2JvbV9zaGEyNTZcbiwgby5wcmVkaWNhdGVfZGlnZXN0XG4sIG8ucmVwb3NpdG9yeVxuLCBvLnNvdXJjZV9zaGFcbiwgby5mcmFtZXdvcmtcbiwgby5pbWFnZV9yZXBvc2l0b3J5XG4sIG8uZXZlbnRcbiwgby5yZWZcbiwgby5pbWFnZV9pbmRleF9kaWdlc3Rcbiwgby5zdWJqZWN0X2RpZ2VzdFxuLCBvLnNib21fc2NvcGVcbiwgby5kb2N1bWVudF9uYW1lc3BhY2Vcbiwgby5zcGR4X3ZlcnNpb25cbiwgby5ub3JtYWxpemVyX3ZlcnNpb25cbiwgby5yYXdfc3BkeF9wYXRoXG4sIG8uaW50ZWdyaXR5X2NoZWNrXG4sIG8uc3ViamVjdF9jaGVja1xuLCBvLmhvc3RlZF92ZXJpZmljYXRpb25fc3RhdHVzXG4sIG8uY3J5cHRvZ3JhcGhpY19hdXRoZW50aWNpdHlcbiwgby5kb2N1bWVudF9wbGF0Zm9ybVxuLCBvLnNvdXJjZV9wYXRoXG4sIG8uc291cmNlX3RpbWVzdGFtcFxuLCBvLnNvdXJjZV90aW1lc3RhbXBfb3JpZ2luXG4sIG8uc3BkeF9jcmVhdGVkXG4sIG8udmFsaWRhdGlvbl9yZWNvcmRfc2hhMjU2XG4sIG8udmFsaWRhdGlvbl9yZWNvcmRfcmVmZXJlbmNlXG4sIG8ucHVibGljYXRpb25fcmVjb3JkX3NoYTI1NlxuLCBvLnB1YmxpY2F0aW9uX3JlY29yZF9yZWZlcmVuY2Vcbiwgby5wdWJsaXNoZWRfaW5kZXhfc2hhMjU2XG4sIG8uY2FuZGlkYXRlX2lkZW50aXR5X3NoYTI1NlxuLCBvLmNhbmRpZGF0ZV9pZGVudGl0eV9yZWZlcmVuY2Vcbiwgby5ob3N0ZWRfdmVyaWZpY2F0aW9uX3JlZmVyZW5jZVxuLCBvLnZhbGlkYXRpb25fcmVjb3JkX2NoZWNrXG4sIG8ucHVibGljYXRpb25fcmVjb3JkX2NoZWNrXG4sIG8uY2FuZGlkYXRlX2lkZW50aXR5X2NoZWNrXG4sIG8ucnVuX2lkXG4sIG8ucnVuX2F0dGVtcHRcbiwgby5hcnRpZmFjdF9pZFxuLCBvLnNjaGVtYV92ZXJzaW9uXG4sIG8ucGFja2FnZV9jb3VudFxuLCBvLnJlbGF0aW9uc2hpcF9jb3VudFxuLCBvLnB1YmxpY2F0aW9uX2F1dGhvcml0eVxuLCBwLnBhY2thZ2Vfc3BkeF9pZFxuLCBwLnBhY2thZ2VfbmFtZVxuLCBwLnBhY2thZ2VfdmVyc2lvblxuLCBwLnB1cmxzXG4sIHAuZXh0ZXJuYWxfcmVmZXJlbmNlc1xuLCBwLmxpY2Vuc2VfZGVjbGFyZWRcbiwgcC5saWNlbnNlX2NvbmNsdWRlZFxuLCBwLnN1cHBsaWVyXG4sIHAuZG93bmxvYWRfbG9jYXRpb25cbiwgcC5wcmltYXJ5X3BhY2thZ2VfcHVycG9zZVxuLCBwLmlzX2RvY3VtZW50X3N1YmplY3RcbkZST01cbiAgKHBvY19kaXN0cm9sZXNzX3Nib20ucG9jX3NuYXBzaG90XzZhZTBkNWE0NjNhMjA5NjFlNDQzMWNiODZkN2Q5NjlmZjIxNTdiZjI1NDI4YTIyZGQwOGFhMTE5NjMyNTQ4YjZfc2JvbV9vYnNlcnZhdGlvbnNfdjEgb1xuSU5ORVIgSk9JTiBwb2NfZGlzdHJvbGVzc19zYm9tLnBvY19zbmFwc2hvdF82YWUwZDVhNDYzYTIwOTYxZTQ0MzFjYjg2ZDdkOTY5ZmYyMTU3YmYyNTQyOGEyMmRkMDhhYTExOTYzMjU0OGI2X3Nib21fcGFja2FnZXNfdjEgcCBPTiAoby5zYm9tX3NoYTI1NiA9IHAuc2JvbV9zaGEyNTYpKVxuV0hFUkUgKChvLnNib21fc2NvcGUgPSAncGxhdGZvcm0nKSBBTkQgKHAuaXNfZG9jdW1lbnRfc3ViamVjdCA9IGZhbHNlKSlcbiIsImNhdGFsb2ciOiJhd3NkYXRhY2F0YWxvZyIsInNjaGVtYSI6InBvY19kaXN0cm9sZXNzX3Nib20iLCJjb2x1bW5zIjpbeyJuYW1lIjoib2JzZXJ2YXRpb25faWQiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InNib21fc2hhMjU2IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJwcmVkaWNhdGVfZGlnZXN0IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJyZXBvc2l0b3J5IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJzb3VyY2Vfc2hhIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJmcmFtZXdvcmsiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImltYWdlX3JlcG9zaXRvcnkiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImV2ZW50IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJyZWYiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImltYWdlX2luZGV4X2RpZ2VzdCIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoic3ViamVjdF9kaWdlc3QiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InNib21fc2NvcGUiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImRvY3VtZW50X25hbWVzcGFjZSIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoic3BkeF92ZXJzaW9uIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJub3JtYWxpemVyX3ZlcnNpb24iLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InJhd19zcGR4X3BhdGgiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImludGVncml0eV9jaGVjayIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoic3ViamVjdF9jaGVjayIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoiaG9zdGVkX3ZlcmlmaWNhdGlvbl9zdGF0dXMiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImNyeXB0b2dyYXBoaWNfYXV0aGVudGljaXR5IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJkb2N1bWVudF9wbGF0Zm9ybSIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoic291cmNlX3BhdGgiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InNvdXJjZV90aW1lc3RhbXAiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InNvdXJjZV90aW1lc3RhbXBfb3JpZ2luIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJzcGR4X2NyZWF0ZWQiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InZhbGlkYXRpb25fcmVjb3JkX3NoYTI1NiIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoidmFsaWRhdGlvbl9yZWNvcmRfcmVmZXJlbmNlIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJwdWJsaWNhdGlvbl9yZWNvcmRfc2hhMjU2IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJwdWJsaWNhdGlvbl9yZWNvcmRfcmVmZXJlbmNlIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJwdWJsaXNoZWRfaW5kZXhfc2hhMjU2IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJjYW5kaWRhdGVfaWRlbnRpdHlfc2hhMjU2IiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJjYW5kaWRhdGVfaWRlbnRpdHlfcmVmZXJlbmNlIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJob3N0ZWRfdmVyaWZpY2F0aW9uX3JlZmVyZW5jZSIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoidmFsaWRhdGlvbl9yZWNvcmRfY2hlY2siLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InB1YmxpY2F0aW9uX3JlY29yZF9jaGVjayIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoiY2FuZGlkYXRlX2lkZW50aXR5X2NoZWNrIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJydW5faWQiLCJ0eXBlIjoiYmlnaW50In0seyJuYW1lIjoicnVuX2F0dGVtcHQiLCJ0eXBlIjoiYmlnaW50In0seyJuYW1lIjoiYXJ0aWZhY3RfaWQiLCJ0eXBlIjoiYmlnaW50In0seyJuYW1lIjoic2NoZW1hX3ZlcnNpb24iLCJ0eXBlIjoiaW50ZWdlciJ9LHsibmFtZSI6InBhY2thZ2VfY291bnQiLCJ0eXBlIjoiaW50ZWdlciJ9LHsibmFtZSI6InJlbGF0aW9uc2hpcF9jb3VudCIsInR5cGUiOiJpbnRlZ2VyIn0seyJuYW1lIjoicHVibGljYXRpb25fYXV0aG9yaXR5IiwidHlwZSI6ImJvb2xlYW4ifSx7Im5hbWUiOiJwYWNrYWdlX3NwZHhfaWQiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6InBhY2thZ2VfbmFtZSIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoicGFja2FnZV92ZXJzaW9uIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJwdXJscyIsInR5cGUiOiJhcnJheSh2YXJjaGFyKSJ9LHsibmFtZSI6ImV4dGVybmFsX3JlZmVyZW5jZXMiLCJ0eXBlIjoiYXJyYXkocm93KFwicmVmZXJlbmNlX2NhdGVnb3J5XCIgdmFyY2hhcixcInJlZmVyZW5jZV90eXBlXCIgdmFyY2hhcixcInJlZmVyZW5jZV9sb2NhdG9yXCIgdmFyY2hhcixcImNvbW1lbnRcIiB2YXJjaGFyKSkifSx7Im5hbWUiOiJsaWNlbnNlX2RlY2xhcmVkIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJsaWNlbnNlX2NvbmNsdWRlZCIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoic3VwcGxpZXIiLCJ0eXBlIjoidmFyY2hhciJ9LHsibmFtZSI6ImRvd25sb2FkX2xvY2F0aW9uIiwidHlwZSI6InZhcmNoYXIifSx7Im5hbWUiOiJwcmltYXJ5X3BhY2thZ2VfcHVycG9zZSIsInR5cGUiOiJ2YXJjaGFyIn0seyJuYW1lIjoiaXNfZG9jdW1lbnRfc3ViamVjdCIsInR5cGUiOiJib29sZWFuIn1dLCJvd25lciI6IjcxMjEwNzkyOTc2OSIsInJ1bkFzSW52b2tlciI6ZmFsc2UsInByb3BlcnRpZXMiOnt9LCJpc1Byb3RlY3RlZCI6ZmFsc2UsImlzTXVsdGlEaWFsZWN0IjpmYWxzZX0= */",
+    "ViewExpandedText": "/* Presto View */",
+    "TableType": "VIRTUAL_VIEW",
+    "Parameters": {
+      "presto_view": "true",
+      "comment": "Presto View"
+    },
+    "CreatedBy": "arn:aws:sts::712107929769:assumed-role/itau-github-repo-factory-distroless-v1/sbom-athena-38088837347-1",
+    "IsRegisteredWithLakeFormation": false,
+    "CatalogId": "712107929769",
+    "VersionId": "0",
+    "IsMultiDialectView": false
+  }
+}
