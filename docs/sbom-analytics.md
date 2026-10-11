@@ -69,10 +69,11 @@ Três documentos opcionais por imagem permitem conferir vínculos existentes:
 Esses JSONs e o índice remoto local são preservados com seus bytes originais.
 A referência é proveniência declarada pelo chamador. Não se modifica
 `candidate.json`, `manifest.json` v1 ou qualquer Store da Factory. O código
-reutiliza, sem alterar, `oci_artifact.sboms`, `verify_publication` e o checksum
-canônico de `release_manifest`. Não exige o layout OCI completo. O checksum
-canônico (`predicate_digest`) é distinto de `sbom_sha256`, que identifica os
-bytes originais, inclusive whitespace.
+reutiliza, sem alterar, `oci_artifact.sboms` e `verify_publication`. O checksum
+canônico fica em `spdx.checksum`, com o mesmo cálculo de `release_manifest.checksum`,
+para que o normalizador não importe a plataforma de release. Não exige o layout
+OCI completo. O checksum canônico (`predicate_digest`) é distinto de
+`sbom_sha256`, que identifica os bytes originais, inclusive whitespace.
 
 `hosted_verification` pode registrar `status` (`NOT_PROVIDED`,
 `REPORTED_SUCCESS` ou `REPORTED_FAILURE`) e `reference`. É somente resultado
@@ -80,6 +81,49 @@ reportado. Os checks de vínculos usam `MATCHED`/`NOT_PROVIDED`; o hash usa
 `MATCHED_EXTERNAL_SHA256` ou `SHA256_COMPUTED`. Todas as observações mantêm
 `cryptographic_authenticity = NOT_REVALIDATED` e `publication_authority = false`.
 Não há revalidação offline de assinatura Cosign/Sigstore nesta operação.
+
+## Entrada a partir dos artifacts de build
+
+`artifact_input` monta o contexto acima a partir dos artifacts
+`sbom-<framework>-<attempt>` do build. Esses artifacts contêm:
+- `sbom/sbom-index.spdx.json`, `sbom/sbom-x86_64.spdx.json` e `sbom/sbom-aarch64.spdx.json`;
+- `apko.lock.json`, `build-inputs.json` e `validated-index.json`.
+
+Aceita o ZIP baixado da API ou um diretório já extraído:
+
+```sh
+python -B -m scripts.pipeline.analytics.artifact_input \
+  --selection /scratch/input/selection.json --work /scratch/staged
+python -B -m scripts.pipeline.analytics.normalize \
+  --input /scratch/staged/context.json --output /scratch/analytics
+```
+
+A seleção não tem defaults. Ela traz:
+- `schema_version: 1`;
+- `origin`, com a mesma forma descrita acima;
+- `image_registry`, apenas o host, sem esquema;
+- `repository_prefix`;
+- um item por artifact com `framework`, `name` e `path`, mais `artifact_id` e
+  `expected_index_digest` opcionais.
+
+O registry e o prefixo vêm da configuração do chamador. O repositório da imagem
+é `<image_registry>/<repository_prefix><framework>`.
+
+O adaptador:
+- lê só bytes, sem executar membros, links ou caminhos inseguros;
+- exige os seis membros acima;
+- confere `name == sbom-<framework>-<run_attempt>`;
+- confere `build-inputs.json`: `revision` igual a `source_sha` e
+  `lock_sha256` igual ao hash de `apko.lock.json`.
+
+Os demais vínculos continuam no normalizador. Os hashes e subjects de cada SPDX,
+assim como `validated-index.json` como registro `validation`, são conferidos
+pelo código existente.
+
+Membros extras do artifact não são lidos como entrada. Eles aparecem, com
+tamanho e hash, como `unconsumed` em `staging-receipt.json`. A saída é um
+diretório novo com os bytes verificados e `context.json`. Esta etapa não
+consulta GitHub, não constrói SDK e não escreve fora desse diretório.
 
 ## Documentos e pacotes
 

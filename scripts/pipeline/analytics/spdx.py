@@ -34,6 +34,11 @@ def sha256(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+def checksum(value):
+    """Digest of the canonical parsed document, as release_manifest.checksum computes it."""
+    return 'sha256:' + sha256(canonical(value))
+
+
 def fields(value, required, optional=(), label='object'):
     require(type(value) is dict and set(required) <= set(value)
             and set(value) <= set(required) | set(optional), label + ': missing/unknown fields')
