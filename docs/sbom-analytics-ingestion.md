@@ -186,7 +186,7 @@ plan = load_plan("/scratch/frozen-upload-plan")
 adapter = S3Adapter(authorized_low_level_client, plan.destination, plan.limits)
 result = publish_reported(plan, adapter, "/scratch/diagnostics/ingestion.json")
 # Somente se result["complete"] for True; catalog_plan refaz read-back obrigatório.
-proposal = catalog_plan(adapter, plan.snapshot_id, database="poc_sbom", table_prefix="poc_snapshot")
+proposal = catalog_plan(adapter, plan.snapshot_id, database="sbom_analytics", table_prefix="sbom_snapshot")
 # Nunca executa DDL. Recuperação não usa caminhos do produtor:
 recover_snapshot(adapter, plan.snapshot_id, "/scratch/new-recovered-batch")
 ```

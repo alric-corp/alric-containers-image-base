@@ -6,15 +6,25 @@ lockfile. Plan/apply execute only from `infra/ecr`; the existing ECR addresses,
 S3 backend, key, default workspace and native locking remain unchanged.
 
 The LAB configuration supplies account `712107929769` and region `us-east-1`.
-The root derives `alric-distroless-sbom-712107929769-us-east-1` from that expected
+The root derives `alric-distroless-sbom-analytics-712107929769-us-east-1` from that expected
 account/region; `sbom_bucket_name` can select an explicitly authorized name.
 The child has no LAB account or region literals. Its caller account precondition
 compares the provider session with the independently supplied expected owner.
 The backend remains in `us-east-2`; its region is not the bucket/provider region.
 
+## Replaced POC bucket (transitional)
+
+The LAB reset of 2026-10-11 replaced `alric-distroless-sbom-712107929769-us-east-1`
+(prefixes `sbom-analytics/poc-v1`, `query-results/poc-v1/`). While transitional
+it stays at its original addresses `module.sbom.<type>.sbom`, served by
+`infra/s3-legacy`, whose only difference is `force_destroy = true` and
+`prevent_destroy = false`. The next revision removes that block and Terraform
+destroys the old bucket with every version. This module never relaxes either
+safeguard. See [the reset runbook](../../docs/sbom-analytics-lab-reset.md).
+
 ## Six resources and controls
 
-All six addresses are `module.sbom.<type>.sbom`, with types:
+All six addresses are `module.sbom_analytics.<type>.sbom`, with types:
 
 - `aws_s3_bucket`
 - `aws_s3_bucket_public_access_block`
@@ -30,12 +40,12 @@ are no ACL, lifecycle/expiration, Object Lock, replication, logging or KMS
 resources. The pinned provider/lockfile is not upgraded.
 
 Policy has three Deny statements and no Allow: TLS is required for the bucket
-and its objects; object creation at `sbom-analytics/poc-v1/snapshots/*` requires
+and its objects; object creation at `sbom-analytics/v1/snapshots/*` requires
 `If-None-Match: *`. The documented `s3:ObjectCreationOperation` condition limits
 those header rules to object creation, including multipart completion. The
 integrated adapter still uses only simple conditional PutObject. Missing headers
 and a different condition are denied. CopyObject to that area is incompatible
-with this policy. These statements do not cover `query-results/poc-v1/`;
+with this policy. These statements do not cover `query-results/sbom-analytics-v1/`;
 Athena result writes need their own future IAM authorization.
 
 References: [S3 conditional-write enforcement](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html),
@@ -99,7 +109,7 @@ result in JSON, including failed/inconclusive checks, before nonzero exit.
 See [GetBucketLocation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLocation.html).
 
 `terraform -chdir=infra/ecr output -json ingestion_config` exposes the exact
-protocol-v1 configuration consumed by #115, with prefix `sbom-analytics/poc-v1`
+protocol-v1 configuration consumed by #115, with prefix `sbom-analytics/v1`
 (the adapter appends `/snapshots/<snapshot_id>/`). Bucket name/ARN/region/owner,
 tags and both reserved prefixes are also root outputs, with no credentials.
 Outputs do not authorize upload, catalog creation or Athena queries.

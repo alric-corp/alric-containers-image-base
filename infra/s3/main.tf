@@ -1,9 +1,9 @@
 locals {
   # Known before creation, so the plan gate can inspect the complete policy.
   bucket_arn       = "arn:aws:s3:::${var.bucket_name}"
-  ingestion_prefix = "sbom-analytics/poc-v1"
+  ingestion_prefix = "sbom-analytics/v1"
   snapshots_prefix = "${local.ingestion_prefix}/snapshots/"
-  results_prefix   = "query-results/poc-v1/"
+  results_prefix   = "query-results/sbom-analytics-v1/"
   bucket_policy = {
     Version = "2012-10-17"
     Statement = [

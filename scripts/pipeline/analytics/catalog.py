@@ -1,4 +1,4 @@
-"""Render an isolated POC catalog proposal only after remote snapshot read-back."""
+"""Render the LAB catalog proposal only after remote snapshot read-back."""
 from pathlib import Path
 import re
 
@@ -6,12 +6,15 @@ from scripts.pipeline.analytics.ingestion_types import check
 from scripts.pipeline.analytics.snapshot import read_snapshot
 
 SQL = Path(__file__).resolve().parents[3] / 'sql/sbom-analytics'
+# The only LAB namespace (reset 2026-10-11): exact names, never a pattern. The
+# closed POC round's names are not accepted by the hosted configuration.
+NAMESPACE = dict(database='sbom_analytics', workgroup='sbom_analytics', table_prefix='sbom_snapshot',
+                 results_prefix='query-results/sbom-analytics-v1/')
 
 
 def catalog_plan(adapter, snapshot_id, *, database, table_prefix):
-    # These names are external decisions; no default database or active names.
-    for name in (database, table_prefix):
-        check(type(name) is str and re.fullmatch('poc_[a-z0-9_]{1,32}', name), 'ISOLATED_POC_NAMESPACE_REQUIRED', stage='CATALOG')
+    check(type(database) is str and type(table_prefix) is str and database == NAMESPACE['database']
+          and table_prefix == NAMESPACE['table_prefix'], 'SBOM_ANALYTICS_NAMESPACE_REQUIRED', stage='CATALOG')
     verified = read_snapshot(adapter, snapshot_id)
     plan = verified.plan
     names = ('sbom_observation_rows_v1','sbom_package_rows_v1','sbom_observations_v1','sbom_packages_v1','sbom_inventory_v1')

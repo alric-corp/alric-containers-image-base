@@ -13,7 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import AwsCli, AwsError, BackendError, PUBLIC_ACCESS_BLOCK, validate_inputs
 from ecr.verify_plan import verify, PROVENANCE
 from readback import semantic_policy
-from s3.contract import bucket_policy, SNAPSHOTS_PREFIX, RESULTS_PREFIX, unique_json
+from s3.contract import ADDRESSES, bucket_policy, DATA_PREFIX, SNAPSHOTS_PREFIX, RESULTS_PREFIX, unique_json
+
+BUCKET_ADDRESS = next(address for address, kind in ADDRESSES.items() if kind == 'aws_s3_bucket')
 
 
 def observed_region(response):
@@ -30,7 +32,7 @@ def preflight(plan, account, region, *, aws=None, bucket_name=None):
     if aws.call('sts', 'get-caller-identity').get('Account') != account:
         raise BackendError('ACCOUNT_MISMATCH', 'Session differs from independently configured account')
     creation = next(c['change']['actions'] for c in plan['resource_changes']
-                    if c['address'] == 'module.sbom.aws_s3_bucket.sbom') == ['create']
+                    if c['address'] == BUCKET_ADDRESS) == ['create']
     try:
         aws.call('s3api', 'head-bucket', bucket=bucket, expected_bucket_owner=account)
     except AwsError as exc:
@@ -54,7 +56,7 @@ def readback(outputs, account, region, *, aws=None):
     bucket = values.get('bucket_name')
     validate_inputs(bucket, region, account)
     expected_config = {'protocol_version': 1, 'destination': {
-        'bucket': bucket, 'prefix': 'sbom-analytics/poc-v1', 'region': region,
+        'bucket': bucket, 'prefix': DATA_PREFIX, 'region': region,
         'expected_bucket_owner': account}}
     if (values.get('expected_bucket_owner') != account or values.get('bucket_region') != region
             or values.get('bucket_arn') != f'arn:aws:s3:::{bucket}'

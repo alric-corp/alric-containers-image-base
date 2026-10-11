@@ -1,7 +1,8 @@
 """Offline S3 policy and address contract; no SDK, credentials or network."""
 
-SNAPSHOTS_PREFIX = 'sbom-analytics/poc-v1/snapshots/'
-RESULTS_PREFIX = 'query-results/poc-v1/'
+DATA_PREFIX = 'sbom-analytics/v1'
+SNAPSHOTS_PREFIX = DATA_PREFIX + '/snapshots/'
+RESULTS_PREFIX = 'query-results/sbom-analytics-v1/'
 RESOURCE_TYPES = (
     'aws_s3_bucket',
     'aws_s3_bucket_public_access_block',
@@ -10,12 +11,28 @@ RESOURCE_TYPES = (
     'aws_s3_bucket_versioning',
     'aws_s3_bucket_policy',
 )
-ADDRESSES = {f'module.sbom.{kind}.sbom': kind for kind in RESOURCE_TYPES}
+MODULE = 'sbom_analytics'
+ADDRESSES = {f'module.{MODULE}.{kind}.sbom': kind for kind in RESOURCE_TYPES}
+
+# Replaced POC bucket (LAB reset 2026-10-11). It keeps its original state
+# address only while it is transitional, then may only be destroyed.
+LEGACY_MODULE = 'sbom'
+LEGACY_SOURCE = '../s3-legacy'
+LEGACY_ADDRESSES = {f'module.{LEGACY_MODULE}.{kind}.sbom': kind for kind in RESOURCE_TYPES}
+LEGACY_SNAPSHOTS_PREFIX = 'sbom-analytics/poc-v1/snapshots/'
 
 
-def bucket_policy(bucket):
+def bucket_name(account, region):
+    return f'alric-distroless-sbom-analytics-{account}-{region}'
+
+
+def legacy_bucket_name(account, region):
+    return f'alric-distroless-sbom-{account}-{region}'
+
+
+def bucket_policy(bucket, snapshots_prefix=SNAPSHOTS_PREFIX):
     arn = f'arn:aws:s3:::{bucket}'
-    protected = f'{arn}/{SNAPSHOTS_PREFIX}*'
+    protected = f'{arn}/{snapshots_prefix}*'
     return {
         'Version': '2012-10-17',
         'Statement': [

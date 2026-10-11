@@ -16,6 +16,7 @@ from scripts.pipeline.analytics import athena_restore as r, athena_poc as a
 from scripts.pipeline.analytics.ingestion_types import IngestionError
 from scripts.pipeline.analytics.spdx import canonical, sha256
 from tests.unit.pipeline.analytics import test_athena_reconciliation as support
+from tests.unit.pipeline.analytics.test_athena_poc import HISTORICAL, historical_profile
 
 ROOT, FIXTURE, AUTH, PLAN_HASH = support.ROOT, support.FIXTURE, support.AUTH, support.PLAN_HASH
 
@@ -48,6 +49,8 @@ class GitHub:
 
 
 class AthenaRestoreTests(unittest.TestCase):
+    setUpClass = classmethod(historical_profile)  # Replays the closed POC round.
+
     def setUp(self):
         tmp=tempfile.TemporaryDirectory();self.addCleanup(tmp.cleanup);self.root=Path(tmp.name)
         self.members=[('athena-reports/'+name,(FIXTURE/name).read_bytes()) for name in (
@@ -215,13 +218,13 @@ class AthenaRestoreTests(unittest.TestCase):
             with patch('sys.stdout',new_callable=io.StringIO):self.assertEqual(r.main(argv),1)
         self.assertEqual(json.loads(report.read_bytes())['code'],'RESUME_INVALID');self.assertNotIn('SECRET',report.read_text())
         with patch.object(a,'aws_clients') as clients,patch('sys.stdout',new_callable=io.StringIO):
-            self.assertEqual(a.main(['--config',str(ROOT/'policies/analytics/lab-poc.json'),'--athena-config',str(ROOT/'policies/analytics/athena-lab-poc.json'),
+            self.assertEqual(a.main(['--config',str(HISTORICAL/'lab-poc.json'),'--athena-config',str(HISTORICAL/'athena-lab-poc.json'),
                 '--report',str(self.root/'reports/execute.json'),'--output',str(self.root/'recovered'),'--session-name','test',
                 '--round-id','lab-sbom-athena-v1','--authorized-plan-sha256',PLAN_HASH,'--authorization-reference',AUTH]),1)
             clients.assert_not_called()
 
     def test_workflow_restore_before_oidc_and_real_reports_path_and_no_fallback(self):
-        value=yaml.load((ROOT/'.github/workflows/sbom-analytics-athena-lab-poc.yml').read_text(),Loader=yaml.BaseLoader)
+        value=yaml.load((ROOT/'.github/workflows/sbom-analytics-athena.yml').read_text(),Loader=yaml.BaseLoader)
         job=value['jobs']['athena'];steps=job['steps']
         self.assertEqual(job['permissions'],{'contents':'read','actions':'read','id-token':'write'})
         restore=next(i for i,s in enumerate(steps) if s['name']=='Restore exact prior journal before AWS authentication')
@@ -231,7 +234,8 @@ class AthenaRestoreTests(unittest.TestCase):
         self.assertIn('GH_TOKEN',steps[restore]['env']);self.assertNotIn('GH_TOKEN',job.get('env',{}))
         self.assertIn('--reports "$RUNNER_TEMP/athena-reports"',steps[restore]['run'])
         self.assertIn('--resume-receipt "$RUNNER_TEMP/athena-reports/resume-receipt.json"',steps[execution]['run'])
-        self.assertIn('assert os.environ[\'RESUME_SOURCE\']',steps[2]['run'])
+        self.assertIn("assert bool(os.environ['RESUME_SOURCE']) != (os.environ['FRESH_ROUND'] == 'true')",steps[2]['run'])
+        self.assertEqual(steps[restore]['if'],"inputs.mode == 'execute' && inputs.fresh_round != true")
         self.assertEqual(set(value['on']),{'workflow_dispatch'})
         self.assertIn('athena-resume-source',steps[-1]['with']['path'])
 

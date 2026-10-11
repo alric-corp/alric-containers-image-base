@@ -70,7 +70,7 @@ Separate optional smoke/ingestion permissions, not supplied by this delivery:
 snapshot/test prefix; `s3:ListBucket` with the relevant prefix restriction. Use
 conditional object creation and retain test objects for a cleanup decision.
 No data permission or read-back success grants Athena authority. Athena result
-permissions must be scoped separately to `query-results/poc-v1/`; never copy
+permissions must be scoped separately to `query-results/sbom-analytics-v1/`; never copy
 the conditional snapshot requirement onto the results area.
 
 This document creates or changes no role or policy. The IAM increment must be

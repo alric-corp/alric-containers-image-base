@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from infra.ecr import verify_state
 from infra.s3 import readback
-from infra.s3.contract import bucket_policy, ADDRESSES, SNAPSHOTS_PREFIX, RESULTS_PREFIX
+from infra.s3.contract import bucket_policy, ADDRESSES, DATA_PREFIX, SNAPSHOTS_PREFIX, RESULTS_PREFIX
 from infra.tests.test_ecr_plan import valid_plan, verify, verifier, ACCOUNT, REGION, BUCKET, ROOT
 from infra.tests.test_workflows import load_workflow, shell, step_index
 from scripts.pipeline.analytics.ingestion_types import Destination
@@ -21,7 +21,7 @@ def s3_change(plan, kind):
 
 
 def outputs():
-    config = dict(protocol_version=1, destination=dict(bucket=BUCKET, prefix='sbom-analytics/poc-v1',
+    config = dict(protocol_version=1, destination=dict(bucket=BUCKET, prefix=DATA_PREFIX,
                   region=REGION, expected_bucket_owner=ACCOUNT))
     return {k: {'value': v} for k, v in dict(bucket_name=BUCKET, bucket_arn=f'arn:aws:s3:::{BUCKET}',
         bucket_region=REGION, expected_bucket_owner=ACCOUNT, snapshots_prefix=SNAPSHOTS_PREFIX,
@@ -43,7 +43,7 @@ class PlanTests(unittest.TestCase):
         values = p['planned_values']['root_module']['child_modules'][-1]['resources']
         next(r for r in values if r['type'] == kind)['values'].pop('bucket')
         verify(p)
-        cfg = p['configuration']['root_module']['module_calls']['sbom']['module']['resources']
+        cfg = p['configuration']['root_module']['module_calls']['sbom_analytics']['module']['resources']
         next(r for r in cfg if r['address'] == kind + '.sbom')['expressions']['bucket']['references'] = ['aws_s3_bucket.other.id']
         with self.assertRaisesRegex(verifier.PlanError, 'dependency'):
             verify(p)
@@ -61,7 +61,7 @@ class PlanTests(unittest.TestCase):
         p = valid_plan(); kind = 'aws_s3_bucket_server_side_encryption_configuration'
         c = s3_change(p, kind)['change']
         c['after_unknown'] = {'rule': [{'apply_server_side_encryption_by_default': [{'kms_master_key_id': True}], 'blocked_encryption_types': True}]}
-        cfg = next(r for r in p['configuration']['root_module']['module_calls']['sbom']['module']['resources'] if r['address'] == kind + '.sbom')
+        cfg = next(r for r in p['configuration']['root_module']['module_calls']['sbom_analytics']['module']['resources'] if r['address'] == kind + '.sbom')
         with self.assertRaisesRegex(verifier.PlanError, 'empty configuration'):
             verify(p)
         cfg['expressions']['rule'] = [{'apply_server_side_encryption_by_default': [{'kms_master_key_id': {'constant_value': ''}, 'sse_algorithm': {'constant_value': 'AES256'}}]}]
@@ -75,7 +75,7 @@ class PlanTests(unittest.TestCase):
         c = s3_change(p, 'aws_s3_bucket')['change']
         c['before']['grant'] = c['after']['grant'] = [{'permissions': ['FULL_CONTROL'], 'type': 'CanonicalUser', 'id': 'owner'}]
         verify(p, mode='noop')
-        cfg = next(r for r in p['configuration']['root_module']['module_calls']['sbom']['module']['resources'] if r['address'] == 'aws_s3_bucket.sbom')
+        cfg = next(r for r in p['configuration']['root_module']['module_calls']['sbom_analytics']['module']['resources'] if r['address'] == 'aws_s3_bucket.sbom')
         cfg['expressions']['grant'] = {'constant_value': c['after']['grant']}
         with self.assertRaisesRegex(verifier.PlanError, 'forbidden S3 grant'):
             verify(p)
@@ -132,7 +132,7 @@ class PlanTests(unittest.TestCase):
     def test_wrong_bucket_region_and_root_source_are_rejected(self):
         self.reject_after('aws_s3_bucket', 'bucket', 'unrelated-bucket')
         self.reject_after('aws_s3_bucket', 'region', 'us-east-2')
-        p = valid_plan(); p['configuration']['root_module']['module_calls']['sbom']['source'] = '../sbom-analytics'
+        p = valid_plan(); p['configuration']['root_module']['module_calls']['sbom_analytics']['source'] = '../sbom-analytics'
         with self.assertRaisesRegex(verifier.PlanError, 'root/module source'):
             verify(p)
 
@@ -149,7 +149,7 @@ class PlanTests(unittest.TestCase):
                 verify(p)
 
     def test_extra_acl_resource_and_wrong_s3_address_rejected(self):
-        for address in ('module.sbom.aws_s3_bucket_acl.sbom', 'module.other.aws_s3_bucket.sbom'):
+        for address in ('module.sbom_analytics.aws_s3_bucket_acl.sbom', 'module.other.aws_s3_bucket.sbom'):
             p = valid_plan(); s3_change(p, 'aws_s3_bucket')['address'] = address
             with self.assertRaisesRegex(verifier.PlanError, 'graph mismatch'):
                 verify(p)
@@ -170,7 +170,7 @@ class PlanTests(unittest.TestCase):
 
     def test_policy_must_follow_all_four_security_controls(self):
         p = valid_plan()
-        cfg = p['configuration']['root_module']['module_calls']['sbom']['module']['resources']
+        cfg = p['configuration']['root_module']['module_calls']['sbom_analytics']['module']['resources']
         next(r for r in cfg if r['address'] == 'aws_s3_bucket_policy.sbom')['depends_on'].pop()
         with self.assertRaisesRegex(verifier.PlanError, 'all four'):
             verify(p)
@@ -325,7 +325,7 @@ class ReadbackTests(unittest.TestCase):
         self.assertEqual(len(f.calls), 1)
 
     def test_invalid_output_does_not_contact_aws(self):
-        f = FakeAws(); o = outputs(); o['ingestion_config']['value']['destination']['prefix'] = 'query-results/poc-v1'
+        f = FakeAws(); o = outputs(); o['ingestion_config']['value']['destination']['prefix'] = 'query-results/sbom-analytics-v1'
         with self.assertRaises(readback.BackendError):
             readback.readback(o, ACCOUNT, REGION, aws=f)
         self.assertEqual(f.calls, [])

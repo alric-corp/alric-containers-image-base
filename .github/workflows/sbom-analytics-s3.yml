@@ -1,4 +1,4 @@
-name: SBOM Analytics - LAB S3 POC
+name: Distroless SBOM Analytics - S3 snapshot
 
 on:
   workflow_dispatch: {}
@@ -6,7 +6,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: sbom-analytics-lab-poc
+  group: sbom-analytics-lab
   cancel-in-progress: false
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      ROLE_SESSION_NAME: sbom-poc-${{ github.run_id }}-${{ github.run_attempt }}-publish
+      ROLE_SESSION_NAME: sbom-analytics-${{ github.run_id }}-${{ github.run_attempt }}-publish
       PROBE_EXECUTION_ID: r${{ github.run_id }}-a${{ github.run_attempt }}
     steps:
       - name: Checkout reviewed implementation and public frozen data
@@ -39,9 +39,9 @@ jobs:
       - name: Verify frozen package before AWS credentials
         run: |
           "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.poc prepare \
-            --config policies/analytics/lab-poc.json \
-            --package tests/fixtures/sbom-analytics/lab-frozen-plan.zip \
-            --descriptor tests/fixtures/sbom-analytics/lab-frozen-plan.json \
+            --config policies/analytics/s3.json \
+            --package tests/fixtures/sbom-analytics/frozen-plan-v1.zip \
+            --descriptor tests/fixtures/sbom-analytics/frozen-plan-v1.json \
             --output "$RUNNER_TEMP/frozen-plan" --report "$RUNNER_TEMP/analytics-reports/preparation.json"
       - name: Load versioned operational identity
         id: pipeline
@@ -55,7 +55,7 @@ jobs:
           import json, os
           from pathlib import Path
           from scripts.pipeline.analytics.poc import config, session_policy
-          expected = config('policies/analytics/lab-poc.json')
+          expected = config('policies/analytics/s3.json')
           assert expected['expected_role_arn'] == os.environ['EXPECTED_ROLE']
           with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
               output.write('policy=' + json.dumps(session_policy(expected, writer=True), separators=(',', ':')) + '\n')
@@ -79,7 +79,7 @@ jobs:
       - name: Smoke, publish, read back and retry the same request
         run: |
           "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.poc publish \
-            --config policies/analytics/lab-poc.json --plan "$RUNNER_TEMP/frozen-plan" \
+            --config policies/analytics/s3.json --plan "$RUNNER_TEMP/frozen-plan" \
             --session-name "$ROLE_SESSION_NAME" --execution-id "$PROBE_EXECUTION_ID" \
             --report "$RUNNER_TEMP/analytics-reports/result.json"
       - name: Preserve diagnostics including authentication failure
@@ -98,7 +98,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: sbom-poc-${{ github.run_id }}-${{ github.run_attempt }}-publish
+          name: sbom-analytics-s3-${{ github.run_id }}-${{ github.run_attempt }}-publish
           path: |
             ${{ runner.temp }}/analytics-reports/
             ${{ runner.temp }}/analytics-dependencies.txt
@@ -115,7 +115,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      ROLE_SESSION_NAME: sbom-poc-${{ github.run_id }}-${{ github.run_attempt }}-recover
+      ROLE_SESSION_NAME: sbom-analytics-${{ github.run_id }}-${{ github.run_attempt }}-recover
     steps:
       - name: Checkout reader without original data or plan
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -151,7 +151,7 @@ jobs:
           import json, os
           from pathlib import Path
           from scripts.pipeline.analytics.poc import config, session_policy
-          expected = config('policies/analytics/lab-poc.json')
+          expected = config('policies/analytics/s3.json')
           assert expected['expected_role_arn'] == os.environ['EXPECTED_ROLE']
           with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
               output.write('policy=' + json.dumps(session_policy(expected, writer=False), separators=(',', ':')) + '\n')
@@ -175,7 +175,7 @@ jobs:
       - name: Recover exclusively from S3 and verify analytics
         run: |
           "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.poc recover \
-            --config policies/analytics/lab-poc.json --session-name "$ROLE_SESSION_NAME" \
+            --config policies/analytics/s3.json --session-name "$ROLE_SESSION_NAME" \
             --output "$RUNNER_TEMP/recovered-batch" --report "$RUNNER_TEMP/analytics-reports/result.json"
       - name: Preserve reader diagnostics including failure
         if: always()
@@ -193,7 +193,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: sbom-poc-${{ github.run_id }}-${{ github.run_attempt }}-recover
+          name: sbom-analytics-s3-${{ github.run_id }}-${{ github.run_attempt }}-recover
           path: |
             ${{ runner.temp }}/analytics-reports/
             ${{ runner.temp }}/analytics-dependencies.txt

@@ -29,9 +29,10 @@ aws iam list-role-policies --role-name itau-github-repo-factory-distroless-v1
 aws iam list-attached-role-policies --role-name itau-github-repo-factory-distroless-v1
 ```
 
-Preserve these JSONs and semantic hashes without credentials. The live inline
-policy must equal the first eleven statements of the reviewed 14-statement file,
-or already equal the complete approved document. Compare the full statement
+Preserve these JSONs and semantic hashes without credentials. For the LAB
+reset (2026-10-11) the live policy must equal the previous approved document
+(the closed POC grants) or already equal the complete document under review;
+see [the reset runbook](sbom-analytics-lab-reset.md). Compare the full statement
 objects, not just Sids. Trust must equal the versioned trust JSON. Any other
 configuration is a conflict requiring review. Reconcile both lists to exactly
 one expected inline policy / zero managed policies.
@@ -49,10 +50,10 @@ aws accessanalyzer validate-policy --region us-east-1 --policy-type RESOURCE_POL
 Paginate when nextToken exists. Preserve findings and explicit review. Known trust
 findings concern audience claim type and branch restrictions; unchanged warnings
 are not automatically accepted. Unknown/errors/impediments stop the update.
-Compute compact JSON length and SHA-256; expected proposed length is 6277 ASCII
-characters, below 10240. The original eleven statements must remain intact and
-the last three must equal docs/examples/sbom-lab/athena-policy-delta.json. This
-delta is not a complete policy and must never be passed alone to PutRolePolicy.
+Compute compact JSON length and SHA-256 and compare with the value asserted by
+`infra/tests/test_external_iam_contract.py` (always below 10240). Statements 12-14
+must equal docs/examples/sbom-lab/athena-policy-delta.json. This delta is not a
+complete policy and must never be passed alone to PutRolePolicy.
 
 Only after those checkpoints and scoped authorization, update the same policy:
 
@@ -76,9 +77,9 @@ tfstate publicly, initialize a second root/state, import or mutate state.
 ```sh
 aws athena list-data-catalogs --region us-east-1
 aws athena list-work-groups --region us-east-1
-aws athena get-work-group --region us-east-1 --work-group poc_distroless_sbom
+aws athena get-work-group --region us-east-1 --work-group sbom_analytics
 aws glue get-database --region us-east-1 --catalog-id 712107929769 \
-  --name poc_distroless_sbom
+  --name sbom_analytics
 aws glue get-data-catalog-encryption-settings --region us-east-1 \
   --catalog-id 712107929769
 aws lakeformation get-data-lake-settings --region us-east-1 --catalog-id 712107929769
@@ -106,7 +107,7 @@ aws glue create-database --region us-east-1 \
 ```
 
 Read both back. Require SQL engine 3, workgroup enabled, enforced output
-`s3://alric-distroless-sbom-712107929769-us-east-1/query-results/poc-v1/`, SSE_S3,
+`s3://alric-distroless-sbom-analytics-712107929769-us-east-1/query-results/sbom-analytics-v1/`, SSE_S3,
 expected results bucket owner 712107929769, 104857600-byte cutoff, metrics=false
 and RequesterPays=false. Record external LAB ownership, timestamp, administrator,
 authorization and responses. If only one creation succeeds, preserve the partial

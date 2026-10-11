@@ -23,7 +23,7 @@ from scripts.pipeline.analytics.ingestion_types import IngestionError, check, ha
 from scripts.pipeline.analytics.spdx import canonical, document, read_local, sha256
 
 REPOSITORY = 'alric-corp/alric-containers-image-base'
-WORKFLOW = '.github/workflows/sbom-analytics-athena-lab-poc.yml'
+WORKFLOW = '.github/workflows/sbom-analytics-athena.yml'
 REPOSITORY_ID = 1360616627
 ZIP_LIMIT = 16 * 1024 * 1024
 EXPANSION_LIMIT = 32 * 1024 * 1024

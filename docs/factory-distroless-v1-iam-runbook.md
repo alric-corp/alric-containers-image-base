@@ -46,7 +46,7 @@ preservada nos mesmos ARNs. Não foi adicionada permissão compensatória.
 | Terraform | `EnsureExactBackendBucket`, `ExactDefaultWorkspaceState`, `ExactDefaultWorkspaceLock`, `ReadOnlyRegionalRepositoryInventory`, `ExactSbomAnalyticsBucket` | Backend LAB em `us-east-2`, state e lock exatos do workspace default; inventário regional ECR e administração do bucket SBOM exato |
 | ECR | `ExactCatalogEcr`, `RegistryAuthentication` | Vinte ações de infraestrutura/leitura/publicação no catálogo exato; token de registry limitado a `us-east-1` |
 | Release Store DEV | `DevReleaseInventory`, `DevReleaseRecords` | Listagem do bucket DEV e GetObject/PutObject dos registros; sem exclusão |
-| SBOM Analytics | `SbomSnapshotObjects`, `SbomSnapshotListing` | PutObject/GetObject/GetObjectVersion em `sbom-analytics/poc-v1/snapshots/*`; statement de listagem com esse prefixo |
+| SBOM Analytics | `SbomSnapshotObjects`, `SbomSnapshotListing` | PutObject/GetObject/GetObjectVersion em `sbom-analytics/v1/snapshots/*` do bucket `alric-distroless-sbom-analytics-<conta>-<região>`; statement de listagem com esse prefixo |
 
 O único DeleteObject permitido é o `.tflock` exato. Não há permissões IAM
 administrativas, Athena, Glue, KMS ou acesso ao prefixo de resultados de queries.

@@ -2,7 +2,7 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "PocAthenaExactWorkgroup",
+      "Sid": "SbomAnalyticsAthenaWorkgroup",
       "Effect": "Allow",
       "Action": [
         "athena:GetWorkGroup",
@@ -12,11 +12,11 @@
         "athena:StopQueryExecution"
       ],
       "Resource": [
-        "arn:aws:athena:us-east-1:712107929769:workgroup/poc_distroless_sbom"
+        "arn:aws:athena:us-east-1:712107929769:workgroup/sbom_analytics"
       ]
     },
     {
-      "Sid": "PocGlueReadAndNewTables",
+      "Sid": "SbomAnalyticsGlueReadAndNewTables",
       "Effect": "Allow",
       "Action": [
         "glue:GetDatabase",
@@ -26,23 +26,23 @@
       ],
       "Resource": [
         "arn:aws:glue:us-east-1:712107929769:catalog",
-        "arn:aws:glue:us-east-1:712107929769:database/poc_distroless_sbom",
-        "arn:aws:glue:us-east-1:712107929769:table/poc_distroless_sbom/poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_observation_rows_v1",
-        "arn:aws:glue:us-east-1:712107929769:table/poc_distroless_sbom/poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_package_rows_v1",
-        "arn:aws:glue:us-east-1:712107929769:table/poc_distroless_sbom/poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_observations_v1",
-        "arn:aws:glue:us-east-1:712107929769:table/poc_distroless_sbom/poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_packages_v1",
-        "arn:aws:glue:us-east-1:712107929769:table/poc_distroless_sbom/poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_inventory_v1"
+        "arn:aws:glue:us-east-1:712107929769:database/sbom_analytics",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b_sbom_observation_rows_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b_sbom_package_rows_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b_sbom_observations_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b_sbom_packages_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b_sbom_inventory_v1"
       ]
     },
     {
-      "Sid": "PocAthenaQueryResults",
+      "Sid": "SbomAnalyticsQueryResults",
       "Effect": "Allow",
       "Action": [
         "s3:GetObject",
         "s3:PutObject"
       ],
       "Resource": [
-        "arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1/query-results/poc-v1/*"
+        "arn:aws:s3:::alric-distroless-sbom-analytics-712107929769-us-east-1/query-results/sbom-analytics-v1/*"
       ]
     }
   ]

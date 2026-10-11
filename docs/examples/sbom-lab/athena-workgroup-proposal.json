@@ -1,6 +1,6 @@
 {
-  "Name": "poc_distroless_sbom",
-  "Description": "Isolated SBOM Analytics LAB POC; no automatic pipeline ingestion",
+  "Name": "sbom_analytics",
+  "Description": "Distroless SBOM Analytics LAB; manual analytics only, no automatic pipeline ingestion",
   "Configuration": {
     "EnforceWorkGroupConfiguration": true,
     "BytesScannedCutoffPerQuery": 104857600,
@@ -10,7 +10,7 @@
       "SelectedEngineVersion": "Athena engine version 3"
     },
     "ResultConfiguration": {
-      "OutputLocation": "s3://alric-distroless-sbom-712107929769-us-east-1/query-results/poc-v1/",
+      "OutputLocation": "s3://alric-distroless-sbom-analytics-712107929769-us-east-1/query-results/sbom-analytics-v1/",
       "ExpectedBucketOwner": "712107929769",
       "EncryptionConfiguration": {
         "EncryptionOption": "SSE_S3"

@@ -59,9 +59,9 @@ class PocTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
-        self.expected = poc.config(ROOT/'policies/analytics/lab-poc.json')
-        self.package = ROOT/'tests/fixtures/sbom-analytics/lab-frozen-plan.zip'
-        self.descriptor = ROOT/'tests/fixtures/sbom-analytics/lab-frozen-plan.json'
+        self.expected = poc.config(ROOT/'policies/analytics/s3.json')
+        self.package = ROOT/'tests/fixtures/sbom-analytics/frozen-plan-v1.zip'
+        self.descriptor = ROOT/'tests/fixtures/sbom-analytics/frozen-plan-v1.json'
         self.client = Client()
         role = self.expected['expected_role_arn']
         account = role.split(':')[4]
@@ -169,13 +169,13 @@ class PocTests(unittest.TestCase):
             self.assertEqual('s3:PutObject' in actions,writer)
             self.assertFalse(any(a.startswith(('iam:','ecr:')) or 'Delete' in a or a=='s3:*' for a in actions))
             objects=next(s for s in policy['Statement'] if 's3:GetObject' in s['Action'])
-            self.assertTrue(objects['Resource'].endswith('/sbom-analytics/poc-v1/snapshots/*'))
+            self.assertTrue(objects['Resource'].endswith('/sbom-analytics/v1/snapshots/*'))
             self.assertNotIn('query-results',json.dumps(policy));self.assertNotIn('tfstate',json.dumps(policy))
 
     def test_failure_cli_json_does_not_expose_sdk_message_or_discover_credentials(self):
         report=self.root/'report.json'
         with patch.object(poc,'aws_clients',side_effect=ServiceError(403,'AccessDenied')),redirect_stdout(io.StringIO()):
-            status=poc.main(['recover','--config',str(ROOT/'policies/analytics/lab-poc.json'),'--report',str(report),'--output',str(self.root/'out'),'--session-name',self.session])
+            status=poc.main(['recover','--config',str(ROOT/'policies/analytics/s3.json'),'--report',str(report),'--output',str(self.root/'out'),'--session-name',self.session])
         self.assertEqual(status,1);self.assertEqual(json.loads(report.read_bytes())['code'],'AccessDenied')
         self.assertNotIn('SECRET',report.read_text())
         with patch.dict('os.environ',{},clear=True),self.assertRaisesRegex(IngestionError,'TEMPORARY_CREDENTIALS_REQUIRED'):
@@ -194,7 +194,7 @@ class PocTests(unittest.TestCase):
         self.assertEqual(status,1);self.assertEqual(self.package.read_bytes(),original)
 
     def test_reader_workflow_manual_guards_and_sparse_inputs(self):
-        doc=yaml.safe_load((ROOT/'.github/workflows/sbom-analytics-lab-poc.yml').read_text())
+        doc=yaml.safe_load((ROOT/'.github/workflows/sbom-analytics-s3.yml').read_text())
         self.assertEqual(doc.get('on',doc.get(True)),{'workflow_dispatch':{}})
         self.assertEqual(doc['permissions'],{})
         for name,job in doc['jobs'].items():

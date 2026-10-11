@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 import yaml
 
-from scripts.pipeline.analytics import athena_poc as a, poc, parquet
+from scripts.pipeline.analytics import athena_poc as a, athena_restore, catalog, poc, parquet
 from scripts.pipeline.analytics.catalog import catalog_plan
 from scripts.pipeline.analytics.ingestion_types import Destination, IngestionError
 from scripts.pipeline.analytics.s3_ingestion import S3Adapter
@@ -24,6 +24,21 @@ from scripts.pipeline.analytics.spdx import canonical, sha256
 from tests.unit.pipeline.analytics.s3_support import FakeS3, ServiceError
 
 ROOT = Path(__file__).resolve().parents[4]
+# Replay profile of the CLOSED POC round (lab-sbom-athena-v1). Its preserved
+# journals, Glue tables and run metadata name the old namespace, prefix and
+# workflow; these tests re-check that history. The hosted configuration only
+# accepts the active namespace (see test_sbom_analytics_reset).
+HISTORICAL = ROOT / 'tests/fixtures/sbom-analytics/historical-poc-round'
+HISTORICAL_NAMESPACE = dict(database='poc_distroless_sbom', workgroup='poc_distroless_sbom',
+                            table_prefix='poc_snapshot', results_prefix='query-results/poc-v1/')
+HISTORICAL_WORKFLOW = '.github/workflows/sbom-analytics-athena-lab-poc.yml'
+
+
+def historical_profile(cls):
+    for patcher in (patch.dict(catalog.NAMESPACE, HISTORICAL_NAMESPACE),
+                    patch.object(athena_restore, 'WORKFLOW', HISTORICAL_WORKFLOW)):
+        patcher.start()
+        cls.addClassCleanup(patcher.stop)
 
 
 class Glue:
@@ -146,8 +161,9 @@ class AthenaPocTests(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.tmp.cleanup)
         cls.source = Path(cls.tmp.name)
-        cls.expected = poc.config(ROOT/'policies/analytics/lab-poc.json')
-        cls.settings = a.config(ROOT/'policies/analytics/athena-lab-poc.json')
+        historical_profile(cls)
+        cls.expected = poc.config(HISTORICAL/'lab-poc.json')
+        cls.settings = a.config(HISTORICAL/'athena-lab-poc.json')
         poc.unpack(ROOT/'tests/fixtures/sbom-analytics/lab-frozen-plan.zip',ROOT/'tests/fixtures/sbom-analytics/lab-frozen-plan.json',cls.source/'plan',cls.expected)
         cls.payload = load_plan(cls.source/'plan')
 
@@ -431,7 +447,7 @@ class AthenaPocTests(unittest.TestCase):
             a.aws_clients(self.expected)
         report=self.root/'diagnostic/result.json'
         with patch.object(a,'aws_clients',side_effect=ServiceError(403,'AccessDenied')),redirect_stdout(io.StringIO()):
-            status=a.main(['--config',str(ROOT/'policies/analytics/lab-poc.json'),'--athena-config',str(ROOT/'policies/analytics/athena-lab-poc.json'),
+            status=a.main(['--config',str(HISTORICAL/'lab-poc.json'),'--athena-config',str(HISTORICAL/'athena-lab-poc.json'),
                            '--report',str(report),'--output',str(self.root/'out'),'--session-name',self.session,'--round-id','test-round'])
         self.assertEqual(status,1);self.assertEqual(json.loads(report.read_bytes())['code'],'AccessDenied')
         self.assertEqual(json.loads(report.read_bytes())['snapshot_id'],self.expected['snapshot_id'])
@@ -444,7 +460,7 @@ class AthenaPocTests(unittest.TestCase):
         self.assertNotIn('SECRET',report.read_text())
 
     def test_manual_workflow_guards_session_and_evidence_not_cloud_admin(self):
-        text=(ROOT/'.github/workflows/sbom-analytics-athena-lab-poc.yml').read_text()
+        text=(ROOT/'.github/workflows/sbom-analytics-athena.yml').read_text()
         workflow=yaml.load(text,Loader=yaml.BaseLoader)
         self.assertEqual(set(workflow['on']),{'workflow_dispatch'})
         job=workflow['jobs']['athena']

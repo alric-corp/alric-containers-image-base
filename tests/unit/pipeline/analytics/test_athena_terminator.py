@@ -405,8 +405,8 @@ class AthenaSixEntryResumeTests(unittest.TestCase):
 
     def test_missing_or_changed_restored_journal_fails_before_aws_client_construction(self):
         self.restore()
-        argv = ['--config', str(ROOT / 'policies/analytics/lab-poc.json'),
-                '--athena-config', str(ROOT / 'policies/analytics/athena-lab-poc.json'),
+        argv = ['--config', str(support.HISTORICAL / 'lab-poc.json'),
+                '--athena-config', str(support.HISTORICAL / 'athena-lab-poc.json'),
                 '--session-name', 'TEST_ONLY', '--round-id', 'lab-sbom-athena-v1',
                 '--authorized-plan-sha256', PLAN_HASH, '--authorization-reference', AUTH,
                 '--resume-receipt', str(self.reports / 'resume-receipt.json'),

@@ -16,7 +16,7 @@ SPEC.loader.exec_module(verifier)
 
 ACCOUNT = "123456789012"
 REGION = "us-east-1"
-BUCKET = f"alric-distroless-sbom-{ACCOUNT}-{REGION}"
+BUCKET = f"alric-distroless-sbom-analytics-{ACCOUNT}-{REGION}"
 
 
 def verify(plan, **kwargs):
@@ -74,7 +74,7 @@ def valid_plan(action="create"):
     resources, configuration = [], []
     for kind, values in values_by_type.items():
         values.update(region=REGION, bucket=BUCKET)
-        address = f"module.sbom.{kind}.sbom"
+        address = f"module.sbom_analytics.{kind}.sbom"
         resource = {"address": address, "mode": "managed", "type": kind, "provider_name": verifier.PROVIDER}
         changes.append({**resource, "change": {"actions": [action], "before": copy.deepcopy(values) if action == "no-op" else None, "after": copy.deepcopy(values)}})
         resources.append({**resource, "values": copy.deepcopy(values)})
@@ -82,10 +82,10 @@ def valid_plan(action="create"):
         if kind == "aws_s3_bucket_policy":
             config["depends_on"] = [k + ".sbom" for k in values_by_type if k not in ("aws_s3_bucket", "aws_s3_bucket_policy")]
         configuration.append(config)
-    children.append({"address": "module.sbom", "resources": resources})
+    children.append({"address": "module.sbom_analytics", "resources": resources})
     return {
         "variables": {"aws_region": {"value": REGION}, "expected_bucket_owner": {"value": ACCOUNT}},
-        "configuration": {"root_module": {"module_calls": {"ecr": {"source": "terraform-aws-modules/ecr/aws", "version_constraint": "3.2.0"}, "sbom": {"source": "../s3", "module": {"resources": configuration}}}}},
+        "configuration": {"root_module": {"module_calls": {"ecr": {"source": "terraform-aws-modules/ecr/aws", "version_constraint": "3.2.0"}, "sbom_analytics": {"source": "../s3", "module": {"resources": configuration}}}}},
         "prior_state": {"values": {"root_module": {"child_modules": copy.deepcopy(children) if action == "no-op" else ecr_prior}}},
         "format_version": "1.2", "complete": True, "errored": False,
         "resource_changes": changes, "planned_values": {"root_module": {"child_modules": children}},

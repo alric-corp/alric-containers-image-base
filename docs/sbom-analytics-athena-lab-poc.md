@@ -1,5 +1,10 @@
 # Manual Athena complement for the LAB snapshot
 
+> **Histórico (POC encerrada em 2026-10-11).** Este documento registra a POC
+> S3 + Athena e suas provas (runs `38031426478` e `38117928589`). Os nomes `poc`
+> abaixo não estão mais ativos. Nomes, workflows e operação atuais:
+> [Distroless SBOM Analytics — reset do LAB](sbom-analytics-lab-reset.md).
+
 This increment prepares a caller and the external IAM contract. It does not
 apply IAM, provision resources, dispatch a query or report an Athena hosted proof.
 The separate S3 proof remains run **38031426478 / attempt 1**, code

@@ -18,7 +18,7 @@ import time
 from urllib.parse import urlsplit
 
 from scripts.pipeline.analytics import poc, parquet
-from scripts.pipeline.analytics.catalog import catalog_plan
+from scripts.pipeline.analytics.catalog import catalog_plan, NAMESPACE
 from scripts.pipeline.analytics.demo import QUERIES
 from scripts.pipeline.analytics.ingestion_types import Destination, IngestionError, check, hash_id
 from scripts.pipeline.analytics.normalize import read_completed
@@ -46,8 +46,8 @@ def config(path):
     check(type(value['protocol_version']) is int and value['protocol_version'] == 1, 'ATHENA_CONFIG_VERSION')
     check(value['catalog'] == 'AwsDataCatalog', 'ATHENA_DEFAULT_CATALOG_REQUIRED')
     for key in ('database', 'workgroup', 'table_prefix'):
-        check(type(value[key]) is str and re.fullmatch('poc_[a-z0-9_]{1,32}', value[key]), 'ATHENA_POC_NAMESPACE_REQUIRED')
-    check(value['results_prefix'] == 'query-results/poc-v1/', 'ATHENA_RESULTS_PREFIX_DIFFERS')
+        check(type(value[key]) is str and value[key] == NAMESPACE[key], 'ATHENA_SBOM_ANALYTICS_NAMESPACE_REQUIRED')
+    check(value['results_prefix'] == NAMESPACE['results_prefix'], 'ATHENA_RESULTS_PREFIX_DIFFERS')
     for key, expected in (('execution_limit', 18), ('scan_cutoff_bytes', 104857600), ('timeout_seconds', 120)):
         check(type(value[key]) is int and value[key] == expected, 'ATHENA_LIMIT_DIFFERS')
     check(value['result_reuse'] is False, 'ATHENA_RESULT_REUSE_FORBIDDEN')
@@ -1143,6 +1143,7 @@ def main(argv=None):
     parser.add_argument('--authorized-plan-sha256')
     parser.add_argument('--authorization-reference')
     parser.add_argument('--resume-receipt', type=Path)
+    parser.add_argument('--fresh-round', action='store_true')
     try:
         args = parser.parse_args(argv)
     except (IngestionError, argparse.ArgumentError):
@@ -1173,7 +1174,14 @@ def main(argv=None):
               'REPORT_RESERVED_PATH')
         expected, settings = poc.config(args.config), config(args.athena_config)
         check(bool(args.authorized_plan_sha256) == bool(args.authorization_reference), 'ATHENA_EXPLICIT_AUTHORIZATION_REQUIRED')
-        if args.authorized_plan_sha256:
+        if args.authorized_plan_sha256 and args.fresh_round:
+            # Only an explicitly new round starts with an empty journal: no
+            # restored or local history here, and resource_readback rejects the
+            # start if any of the five catalog names already exists.
+            journal = args.report.parent / 'execution-journal.json'
+            check(args.resume_receipt is None and not journal.exists() and not journal.is_symlink(),
+                  'ATHENA_FRESH_ROUND_HISTORY_PRESENT')
+        elif args.authorized_plan_sha256:
             # Hosted execute cannot silently start with an empty journal. The
             # restore happens before OIDC; recheck its working bytes before any
             # AWS client or resource reconciliation can submit a request.
@@ -1183,7 +1191,7 @@ def main(argv=None):
                                      plan_sha256=args.authorized_plan_sha256, authorization_reference=args.authorization_reference,
                                      round_id=args.round_id, snapshot_id=expected['snapshot_id'])
         else:
-            check(args.resume_receipt is None, 'ATHENA_PLAN_RESTORE_FORBIDDEN')
+            check(args.resume_receipt is None and not args.fresh_round, 'ATHENA_PLAN_RESTORE_FORBIDDEN')
         clients = aws_clients(expected)
         result = run(*clients, expected, settings, args.session_name, args.round_id, args.report.parent, args.output,
                      authorized_sha256=args.authorized_plan_sha256, authorization_reference=args.authorization_reference)
