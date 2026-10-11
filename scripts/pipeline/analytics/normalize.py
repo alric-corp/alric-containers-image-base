@@ -10,12 +10,11 @@ import tempfile
 
 from scripts.pipeline.analytics import parquet
 from scripts.pipeline.analytics.spdx import (
-    AnalyticsError, DOCUMENTS, LIMITS, NORMALIZER_VERSION, SCHEMA_VERSION, canonical,
+    AnalyticsError, DOCUMENTS, LIMITS, NORMALIZER_VERSION, SCHEMA_VERSION, canonical, checksum,
     digest, document, fields, integer, packages, read_local, require, sha256, text, timestamp,
 )
 from scripts.pipeline.artifacts.image_reference import require_digest_reference
 from scripts.pipeline.artifacts.oci_artifact import sboms
-from scripts.pipeline.release.release_manifest import checksum
 from scripts.pipeline.release.verify_publication import verify_publication
 
 
