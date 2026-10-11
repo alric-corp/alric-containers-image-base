@@ -116,14 +116,16 @@ class Athena:
     def get_query_results(self, **kwargs):
         statement = self.executions[kwargs['QueryExecutionId']]['statement']
         rows = statement['expected_rows']
-        if rows is None:
-            rows = [{'col_name':'schema_version\tint\t'}]
-        keys = list(rows[0])
-        numeric = {'observation_count','package_record_count','component_records','total','purls_null','purls_empty',
-                   'references_null','references_empty','distinct_image_platforms','run_id','run_attempt','artifact_id'}
-        info = [dict(Name=k, Label=k, Type='bigint' if k in numeric else 'varchar') for k in keys]
-        converted = [[{} if row[k] is None else {'VarCharValue': canonical(row[k]).decode() if k in statement['json_columns']
-                      else str(row[k])} for k in keys] for row in rows]
+        if rows is None:  # DESCRIBE, shaped like the real capture: three string columns, one text cell per row.
+            info = [dict(Name=k, Label=k, Type='string') for k in ('col_name', 'data_type', 'comment')]
+            converted = [[{'VarCharValue': 'schema_version'.ljust(20) + '\t' + 'int'.ljust(20) + '\t' + ' ' * 20}]]
+        else:
+            keys = list(rows[0])
+            numeric = {'observation_count','package_record_count','component_records','total','purls_null','purls_empty',
+                       'references_null','references_empty','distinct_image_platforms','run_id','run_attempt','artifact_id'}
+            info = [dict(Name=k, Label=k, Type='bigint' if k in numeric else 'varchar') for k in keys]
+            converted = [[{} if row[k] is None else {'VarCharValue': canonical(row[k]).decode() if k in statement['json_columns']
+                          else str(row[k])} for k in keys] for row in rows]
         if statement['kind'] == 'SELECT':
             converted.insert(0, [{'VarCharValue':k} for k in keys])
         start = int(kwargs.get('NextToken','0'))

@@ -1,0 +1,349 @@
+[
+ {
+  "ResultSet": {
+   "Rows": [
+    {
+     "Data": [
+      {
+       "VarCharValue": "observation_id      \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "sbom_sha256         \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "predicate_digest    \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "repository          \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "source_sha          \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "framework           \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "image_repository    \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "event               \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "ref                 \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "image_index_digest  \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "subject_digest      \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "sbom_scope          \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "document_namespace  \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "spdx_version        \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "normalizer_version  \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "raw_spdx_path       \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "integrity_check     \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "subject_check       \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "hosted_verification_status\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "cryptographic_authenticity\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "document_platform   \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "source_path         \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "source_timestamp    \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "source_timestamp_origin\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "spdx_created        \tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "validation_record_sha256\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "validation_record_reference\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "publication_record_sha256\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "publication_record_reference\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "published_index_sha256\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "candidate_identity_sha256\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "candidate_identity_reference\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "hosted_verification_reference\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "validation_record_check\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "publication_record_check\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "candidate_identity_check\tstring              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "run_id              \tbigint              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "run_attempt         \tbigint              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "artifact_id         \tbigint              \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "schema_version      \tint                 \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "package_count       \tint                 \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "relationship_count  \tint                 \t                    "
+      }
+     ]
+    },
+    {
+     "Data": [
+      {
+       "VarCharValue": "publication_authority\tboolean             \t                    "
+      }
+     ]
+    }
+   ],
+   "ResultSetMetadata": {
+    "ColumnInfo": [
+     {
+      "CatalogName": "hive",
+      "SchemaName": "",
+      "TableName": "",
+      "Name": "col_name",
+      "Label": "col_name",
+      "Type": "string",
+      "Precision": 0,
+      "Scale": 0,
+      "Nullable": "UNKNOWN",
+      "CaseSensitive": false
+     },
+     {
+      "CatalogName": "hive",
+      "SchemaName": "",
+      "TableName": "",
+      "Name": "data_type",
+      "Label": "data_type",
+      "Type": "string",
+      "Precision": 0,
+      "Scale": 0,
+      "Nullable": "UNKNOWN",
+      "CaseSensitive": false
+     },
+     {
+      "CatalogName": "hive",
+      "SchemaName": "",
+      "TableName": "",
+      "Name": "comment",
+      "Label": "comment",
+      "Type": "string",
+      "Precision": 0,
+      "Scale": 0,
+      "Nullable": "UNKNOWN",
+      "CaseSensitive": false
+     }
+    ]
+   }
+  }
+ }
+]
