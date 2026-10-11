@@ -123,11 +123,12 @@ retries. The 100 MiB enforced per-query cutoff is not a global cost ceiling.
 Every succeeded query is reconciled against SQL/parameters/context/workgroup,
 effective engine/output/encryption/owner, scan bytes and actual reuse status.
 GetQueryResults is paginated fully within explicit limits: 16 pages, 4096 data
-rows, 128 columns and 8 MiB responses. ColumnInfo/raw pages are preserved. SQL
+rows, 128 columns and 8 MiB responses. ColumnInfo/raw pages are journaled before interpretation. SQL
 NULL and empty strings stay distinct; integers use declared types; only explicitly
 JSON-projected columns use strict JSON parsing. Comparisons are multisets and
-retain duplicate counts. DESCRIBE rows are recorded literally, without guessing
-Hive output fields; Glue read-back verifies all typed physical columns/locations.
+retain duplicate counts. DESCRIBE rows are recorded literally as text lines in the
+observed shape, without guessing Hive output fields; Glue read-back verifies all
+typed physical columns/locations.
 
 The five catalog names are collision-checked using GetTable. Only
 EntityNotFoundException denotes absence. Resumption requires this round's exact
@@ -360,8 +361,7 @@ same context database. Its last observation is QUEUED; its terminal state and
 results are NOT_OBSERVED. `describe_packages` was never reserved. The snapshot
 final read-back was UNCHANGED (20 objects). Budget: 17 reserved, 1 remaining.
 
-Latest inspected evidence (not an automatic "latest" selection). Use it only after
-review/integration and after confirming that no later run advanced the round:
+Historical source for that resume (run 38109412318 consumed it; see below):
 
 ```json
 {
@@ -387,6 +387,54 @@ dispatch with the integrated executor (never a rerun) performs GET only for the
 QUEUED observation past its original deadline, which is cancelled, not promoted),
 a divergent context/table or empty/invalid DESCRIBE results stop before that
 Start. PASS requires 18/18 VERIFIED, including both DESCRIBE result sets.
+
+### Candidate source after the DESCRIBE results correction
+
+Run 38109412318 / attempt 1, executor `7cc3a5165490d6c3b1f0b7b0d3991914a6125f8b`,
+did the following:
+- restored that 17-entry journal before OIDC and passed the catalog gate;
+- reconciled the 17 known IDs without Start, and re-read and matched the eleven
+  SELECT result sets;
+- read `e3264498…` as SUCCEEDED (948 ms, 0 bytes, within the deadline).
+
+It then stopped with `ATHENA_ROW_WIDTH_DIFFERS` in GetQueryResults and kept no
+page. `describe_packages` was never prepared. The snapshot final read-back was
+UNCHANGED. Budget: 17 reserved, 1 remaining.
+
+An owner-authorized administrative read (GetQueryExecution and GetQueryResults
+of that ID only, no Start) supplied the real page described above. That read is
+not hosted proof.
+
+Latest inspected evidence (not an automatic "latest" selection). Use it only after
+review/integration and after confirming that no later run advanced the round:
+
+```json
+{
+  "run_id": 38109412318,
+  "attempt": 1,
+  "artifact_id": 11690561959,
+  "source_sha": "7cc3a5165490d6c3b1f0b7b0d3991914a6125f8b",
+  "zip_sha256": "935e69060b25e94727eab1e512d4bfac28dc5de3e4916fc4e47c6b11c935165c",
+  "zip_bytes": 555455,
+  "journal_sha256": "a921dad4d384f17275a97b702f1141876e98bacd39804b2deda7dc6e23aa7b4c",
+  "journal_bytes": 607331,
+  "sql_plan_sha256": "ce1c1ab7079db6bbcbdf91c4d6f1ddfbd6ef9806d9cdbe848e34a8ba8259123e",
+  "sql_plan_bytes": 257893
+}
+```
+
+Select only `athena-reports/execution-journal.json` (17 entries, describe_observations
+SUCCEEDED). The ZIP also keeps the 605578-byte journal of run 38103483249 under
+`athena-resume-source/`, which also has 17 entries. A new dispatch with the
+integrated executor (never a rerun):
+- GETs the 17 known IDs and compares the eleven SELECT result sets again;
+- reads and validates the DESCRIBE lines of `e3264498…` through the central OIDC
+  role;
+- only then makes at most one Start, for `describe_packages`.
+
+After that Start the balance is zero. A later failure is reconciled by reading
+the 18 IDs, never by a 19th ID. PASS requires 18/18 VERIFIED, including both
+DESCRIBE result sets read by the hosted executor.
 
 ### Delimited response reconciliation
 
@@ -419,9 +467,31 @@ exactly `DESCRIBE <table>`. Table and snapshot stay exact; case, quotes,
 EXTENDED/FORMATTED/TABLE, columns, partitions, catalog qualifiers, comments,
 `;`, another statement or a combined terminator omission still fail. The
 comparison records the rule, both SQL hashes and `validated_database`.
-SELECT, CREATE VIEW and table DDL never use it. DESCRIBE results keep the
-existing decoding: rows are recorded literally (no header removal), string
-columns only, and an empty result fails `ATHENA_DESCRIBE_EMPTY`.
+SELECT, CREATE VIEW and table DDL never use it.
+
+GetQueryResults pages are journaled as they arrive. After the byte-limit check,
+each page goes to the entry's `results_capture` (query ID and pages) BEFORE its
+columns, header, width, types or values are interpreted. A failure therefore
+keeps every page received so far. The error names the QueryExecutionId, page,
+row, expected and observed width, page hash and the journal location of the
+kept page. A page over the byte limit is not kept, and an incomplete chain
+fails as an incomplete capture.
+
+A capture is diagnostic only. It exists only on a SUCCEEDED, non-DDL entry, has
+exactly those two fields and at most 16 pages. It never makes an entry VERIFIED
+and is never read instead of GetQueryResults. After a successful read, the same
+pages move to `results`. A failed capture write stops the run before any further
+call.
+
+DESCRIBE results follow the real response of `e3264498…`, captured read-only on
+2026-10-11. ColumnInfo declares `col_name`, `data_type` and `comment` (string),
+but every row has ONE text cell such as `name<pad>\ttype<pad>\t<pad>`. The
+executor requires that exact ColumnInfo and one present VarCharValue per row.
+It stores the rows as `results.lines`, unchanged: no split, strip, header
+removal or dropped empty line. An empty result fails `ATHENA_DESCRIBE_EMPTY`; any
+other shape fails `ATHENA_DESCRIBE_COLUMNS_DIFFER` or
+`ATHENA_DESCRIBE_LINE_INVALID`. SELECT keeps its header, width, type and
+multiset checks. A text cell is never accepted in a SELECT.
 
 GetQueryExecution does not promise to return ExecutionParameters. Missing values
 are recorded as NOT_RETURNED, not empty or remotely verified; exact submission

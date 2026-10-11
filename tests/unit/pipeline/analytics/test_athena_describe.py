@@ -3,7 +3,9 @@
 REAL: journal bytes (requests, tokens, saved GetQueryExecution responses and the
 eleven SELECT result pages), Glue catalog objects, GitHub metadata. SYNTHETIC:
 every mutation, transport ZIPs, the terminal state of the pending DESCRIBE, the
-describe_packages execution and both DESCRIBE result pages (format not observed).
+describe_packages execution and the DESCRIBE pages built here (real Glue
+names/types in the shape observed in athena-describe-results, whose real page
+the later journal tests use).
 """
 from collections import Counter
 import copy
@@ -32,6 +34,7 @@ SOURCE = dict(run_id=38103483249, attempt=1, artifact_id=11688034210,
               source_sha='bfb0f474756035a7d36b80c4454f138214feae8c',
               zip_sha256='c303c6531dd824e06cd959144241a5960d099b6be11d6ae268668d2eba5bfcb6', zip_bytes=360130,
               journal_sha256=JOURNAL_HASH, journal_bytes=605578, sql_plan_sha256=PLAN_HASH, sql_plan_bytes=257893)
+REAL_DESCRIBE = ROOT / 'tests/fixtures/sbom-analytics/athena-describe-results/describe-observations-results.json'
 SELECTS = ('01_find_images', '02_versions', '03_runtime_vs_dev', '04_compare_digests', '05_trace_original',
            'count_observations', 'count_packages', 'inventory_counts', 'null_empty_arrays', 'nested_types', 'nested_values')
 
@@ -44,12 +47,19 @@ def plan():
     return json.loads(PLAN.read_bytes())
 
 
-def describe_pages(table_key, rows=None, kind='string'):
-    """SYNTHETIC DESCRIBE pages: real column names/types from Glue, assumed Hive text layout."""
+def describe_line(name, kind):
+    """Hive text line in the layout OBSERVED in the real e3264498 page."""
+    return name.ljust(20) + '\t' + kind.ljust(20) + '\t' + ' ' * 20
+
+
+def describe_pages(table_key, rows=None, columns=None):
+    """SYNTHETIC DESCRIBE pages in the observed shape: real Glue names/types, the real
+    three-column ColumnInfo and one text cell per row."""
     if rows is None:
-        rows = [c['Name'] + '\t' + c['Type'] + '\t' for c in real_tables()[table_key]['StorageDescriptor']['Columns']]
-    return [dict(ResultSet=dict(ResultSetMetadata={'ColumnInfo': [dict(Name='col_name', Label='col_name', Type=kind)]},
-                                Rows=[{'Data': [{'VarCharValue': v}]} for v in rows]))]
+        rows = [describe_line(c['Name'], c['Type']) for c in real_tables()[table_key]['StorageDescriptor']['Columns']]
+    if columns is None:
+        columns = json.loads(REAL_DESCRIBE.read_bytes())[0]['ResultSet']['ResultSetMetadata']['ColumnInfo']
+    return [dict(ResultSet=dict(ResultSetMetadata={'ColumnInfo': columns}, Rows=[{'Data': [{'VarCharValue': v}]} for v in rows]))]
 
 
 class AthenaDescribeComparisonTests(unittest.TestCase):
@@ -184,17 +194,19 @@ class AthenaDescribeResultsTests(unittest.TestCase):
                  dict(pages[0], ResultSet=dict(pages[0]['ResultSet'], Rows=rows[10:]))]
         result = self.fetch(split)
         self.assertEqual(len(result['pages']), 2)
-        self.assertEqual([row['col_name'] for row in result['rows']], [v['Data'][0]['VarCharValue'] for v in rows])
-        self.assertEqual(result['rows'][0]['col_name'], 'observation_id\tstring\t')  # No SELECT header removal.
+        self.assertEqual(result['lines'], [v['Data'][0]['VarCharValue'] for v in rows])
+        self.assertEqual(result['lines'][0], describe_line('observation_id', 'string'))  # No SELECT header removal.
+        self.assertNotIn('rows', result)
 
     def test_describe_result_types_and_shapes_fail_closed(self):
-        with self.assertRaisesRegex(IngestionError, 'UNEXPECTED_RESULT_TYPE'):
-            self.fetch(describe_pages('sbom_package_rows_v1', kind='array<string>'))
+        with self.assertRaisesRegex(IngestionError, 'DESCRIBE_COLUMNS_DIFFER'):
+            self.fetch(describe_pages('sbom_package_rows_v1', columns=[dict(Name=k, Type='array<string>')
+                                                                       for k in ('col_name', 'data_type', 'comment')]))
         bad = describe_pages('sbom_package_rows_v1')
         bad[0]['ResultSet']['Rows'][0]['Data'].append({'VarCharValue': 'extra'})
-        with self.assertRaisesRegex(IngestionError, 'ROW_WIDTH_DIFFERS'):
+        with self.assertRaisesRegex(IngestionError, 'DESCRIBE_LINE_INVALID'):
             self.fetch(bad)
-        self.assertEqual(self.fetch(describe_pages('sbom_package_rows_v1', rows=[]))['rows'], [])  # execute_plan rejects empty.
+        self.assertEqual(self.fetch(describe_pages('sbom_package_rows_v1', rows=[]))['lines'], [])  # execute_plan rejects empty.
 
 
 class RealJournalGitHub(GitHub):
@@ -341,7 +353,8 @@ class AthenaSeventeenEntryResumeTests(unittest.TestCase):
             entry = saved[key]
             self.assertEqual((entry['state'], entry['query_id'], entry['identity_comparison']['sql_rule']),
                              ('VERIFIED', query_id, 'DESCRIBE_DATABASE_QUALIFIER_OMITTED'))
-            self.assertTrue(entry['results']['rows'])
+            self.assertTrue(entry['results']['lines'])
+            self.assertNotIn('results_capture', entry)
         self.assertEqual(saved['describe_observations']['request']['ClientRequestToken'], DESCRIBE_TOKEN)
         self.assertEqual(saved['describe_observations']['start_attempts'], 1)
         for statement, pin in zip(plan()['statements'], pins):
@@ -390,7 +403,8 @@ class AthenaSeventeenEntryResumeTests(unittest.TestCase):
                  (query('DESCRIBE ' + PREFIX + 'sbom_package_rows_v1'), 'IDENTITY_DIFFERS'),
                  (query('DESCRIBE EXTENDED ' + PREFIX + 'sbom_observation_rows_v1'), 'IDENTITY_DIFFERS'),
                  (pages(describe_pages('sbom_observation_rows_v1', rows=[])), 'DESCRIBE_EMPTY'),
-                 (pages(describe_pages('sbom_observation_rows_v1', kind='bigint')), 'INTEGER_INVALID'),
+                 (pages(describe_pages('sbom_observation_rows_v1', columns=[dict(Name='col_name', Type='bigint')])),
+                  'DESCRIBE_COLUMNS_DIFFER'),
                  (select_page, 'RESULTS_DIFFER')]
         for number, (change, code) in enumerate(cases):
             self.fresh(str(number))

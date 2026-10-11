@@ -245,40 +245,73 @@ def _cell(value, column, json_columns):
     return raw
 
 
-def query_results(client, execution_id, *, kind, json_columns=()):
+# Real DESCRIBE response (e3264498, captured 2026-10-11): ColumnInfo names these
+# three string columns, yet every row has ONE cell holding a Hive text line such
+# as 'observation_id<pad>\tstring<pad>\t<pad>'. It is kept as text, not split.
+DESCRIBE_COLUMNS = [('col_name', 'string'), ('data_type', 'string'), ('comment', 'string')]
+
+
+def query_results(client, execution_id, *, kind, json_columns=(), keep_page=None):
+    """keep_page(number, response) persists each page within the byte limit
+    BEFORE its shape is interpreted and returns where it was kept."""
     pages, rows, columns, tokens, total = [], [], None, set(), 0
     args = dict(QueryExecutionId=execution_id, MaxResults=1000)
     for page_number in range(16):
         response = _service_call(client, 'get_query_results', **args)
-        total += len(canonical(response))
-        check(total <= RESULT_BYTES, 'ATHENA_RESULT_BYTES_LIMIT')
+        raw = canonical(response)
+        total += len(raw)
+        check(total <= RESULT_BYTES, 'ATHENA_RESULT_BYTES_LIMIT', key=execution_id,
+              observed=dict(page=page_number, total_bytes=total, kept_pages=len(pages)))
+        where = dict(query_id=execution_id, page=page_number, page_sha256=sha256(raw),
+                     kept=keep_page(page_number, response) if keep_page else None)
+        pages.append(response)
         result = response['ResultSet']
         metadata = result['ResultSetMetadata']['ColumnInfo']
         check(type(metadata) is list and metadata and len(metadata) <= 128
-              and len({c['Name'] for c in metadata}) == len(metadata), 'ATHENA_COLUMNS_INVALID')
-        check(columns is None or columns == metadata, 'ATHENA_COLUMNS_CHANGED')
+              and len({c['Name'] for c in metadata}) == len(metadata), 'ATHENA_COLUMNS_INVALID', key=execution_id, observed=where)
+        check(columns is None or columns == metadata, 'ATHENA_COLUMNS_CHANGED', key=execution_id, observed=where)
         columns = metadata
         raw_rows = result.get('Rows', [])
-        check(type(raw_rows) is list and len(raw_rows) <= 1000, 'ATHENA_ROWS_INVALID')
-        pages.append(response)
+        check(type(raw_rows) is list and len(raw_rows) <= 1000, 'ATHENA_ROWS_INVALID', key=execution_id, observed=where)
+        offset = 0
         if page_number == 0 and kind == 'SELECT':
-            # SELECT result sets have the column label row. DESCRIBE has Hive
-            # output and is preserved without guessing whether it has a header.
+            # SELECT result sets have the column label row; DESCRIBE has none.
             check(raw_rows and raw_rows[0].get('Data') == [{'VarCharValue': c.get('Label', c['Name'])} for c in columns],
-                  'ATHENA_HEADER_DIFFERS')
-            raw_rows = raw_rows[1:]
-        for row in raw_rows:
-            cells = row.get('Data')
-            check(type(cells) is list and len(cells) == len(columns), 'ATHENA_ROW_WIDTH_DIFFERS')
-            rows.append({c['Name']: _cell(v, c, json_columns) for c, v in zip(columns, cells)})
-            check(len(rows) <= RESULT_ROWS, 'ATHENA_RESULT_ROW_LIMIT')
+                  'ATHENA_HEADER_DIFFERS', key=execution_id, observed=where)
+            raw_rows, offset = raw_rows[1:], 1
+        if kind == 'DESCRIBE':
+            check([(c['Name'], c.get('Type')) for c in columns] == DESCRIBE_COLUMNS, 'ATHENA_DESCRIBE_COLUMNS_DIFFER',
+                  key=execution_id, expected=DESCRIBE_COLUMNS, observed=dict(where, columns=[(c['Name'], c.get('Type')) for c in columns]))
+        for index, row in enumerate(raw_rows, offset):
+            cells = row.get('Data') if type(row) is dict else None
+            width = len(cells) if type(cells) is list else None
+            if kind == 'DESCRIBE':
+                # Exactly one present string; '' and every space/tab are kept, a missing value is not invented.
+                check(width == 1 and type(cells[0]) is dict and set(cells[0]) == {'VarCharValue'}
+                      and type(cells[0]['VarCharValue']) is str, 'ATHENA_DESCRIBE_LINE_INVALID', key=execution_id,
+                      expected=dict(width=1, cell='VarCharValue'), observed=dict(where, row=index, width=width))
+                rows.append(cells[0]['VarCharValue'])
+            else:
+                check(width == len(columns), 'ATHENA_ROW_WIDTH_DIFFERS', key=execution_id,
+                      expected=dict(width=len(columns), columns=[c['Name'] for c in columns]),
+                      observed=dict(where, row=index, width=width))
+                try:
+                    rows.append({c['Name']: _cell(v, c, json_columns) for c, v in zip(columns, cells)})
+                except IngestionError as error:
+                    if error.observed is None:
+                        error.key, error.observed = execution_id, dict(where, row=index)
+                    raise
+            check(len(rows) <= RESULT_ROWS, 'ATHENA_RESULT_ROW_LIMIT', key=execution_id, observed=where)
         token = response.get('NextToken')
         if token is None:
+            if kind == 'DESCRIBE':
+                return dict(columns=columns, lines=rows, pages=pages)
             return dict(columns=columns, rows=rows, pages=pages)
-        check(type(token) is str and token and len(token) <= 4096 and token not in tokens, 'ATHENA_RESULT_TOKEN_INVALID')
+        check(type(token) is str and token and len(token) <= 4096 and token not in tokens, 'ATHENA_RESULT_TOKEN_INVALID',
+              key=execution_id, observed=where)
         tokens.add(token)
         args['NextToken'] = token
-    raise IngestionError('ATHENA_RESULT_PAGE_LIMIT')
+    raise IngestionError('ATHENA_RESULT_PAGE_LIMIT', key=execution_id, observed=dict(kept_pages=len(pages)))
 
 
 def execution_tokens(sql):
@@ -433,7 +466,7 @@ def validate_journal(raw, journal, authorization_reference):
     check(set(entries) == set(ids[:len(entries)]), 'ATHENA_JOURNAL_SEQUENCE_INVALID')
     query_ids = set()
     optional = {'execution', 'remote_observation', 'identity_comparison', 'timing', 'data_scanned_bytes',
-                'results', 'cancellation_observation', 'start_attempts', 'recorded_get_attempts'}
+                'results', 'results_capture', 'cancellation_observation', 'start_attempts', 'recorded_get_attempts'}
     for number, statement in enumerate(plan['statements'][:len(entries)]):
         entry = entries[statement['id']]
         check(type(entry) is dict and {'request', 'submitted_at', 'state', 'query_id'} <= set(entry)
@@ -454,6 +487,13 @@ def validate_journal(raw, journal, authorization_reference):
             check(type(entry['start_attempts']) is int and entry['start_attempts'] > 0, 'ATHENA_JOURNAL_CONFLICT')
         if 'recorded_get_attempts' in entry:
             check(type(entry['recorded_get_attempts']) is int and entry['recorded_get_attempts'] > 0, 'ATHENA_JOURNAL_CONFLICT')
+        if 'results_capture' in entry:
+            # Diagnostic pages of the SUCCEEDED execution being read; no authority to skip GetQueryResults.
+            capture = entry['results_capture']
+            check(entry['state'] == 'SUCCEEDED' and statement['kind'] != 'DDL' and type(capture) is dict
+                  and set(capture) == {'query_id', 'pages'} and capture['query_id'] == query_id
+                  and type(capture['pages']) is list and len(capture['pages']) <= 16
+                  and all(type(page) is dict for page in capture['pages']), 'ATHENA_JOURNAL_CONFLICT')
         if entry['state'] == 'VERIFIED':
             check(type(entry.get('data_scanned_bytes')) is int and entry['data_scanned_bytes'] >= 0
                   and entry.get('execution', {}).get('QueryExecutionId') == query_id
@@ -594,7 +634,19 @@ def execute_plan(raw, client, journal_path, *, authorized_sha256, authorization_
                 sleep(min(2, max(0, plan['timeout_seconds'] - elapsed)))
             entry['data_scanned_bytes'] = _verify_execution(value, plan, kind=statement['kind'])
             if statement['kind'] != 'DDL':
-                result = query_results(client, query_id, kind=statement['kind'], json_columns=statement['json_columns'])
+                # Pages are journaled as they arrive, so a shape failure keeps them. A
+                # capture is diagnostic only: never VERIFIED, never read instead of the API.
+                capture = entry['results_capture'] = dict(query_id=query_id, pages=[])
+
+                def keep_page(number, page):
+                    check(number == len(capture['pages']), 'ATHENA_RESULT_CAPTURE_INVALID', key=query_id)
+                    capture['pages'].append(page)
+                    poc.write_json(path, json_safe(journal))
+                    return 'execution-journal.json#/executions/%s/results_capture/pages/%d' % (statement['id'], number)
+
+                result = query_results(client, query_id, kind=statement['kind'], json_columns=statement['json_columns'],
+                                       keep_page=keep_page)
+                del entry['results_capture']  # Same pages are in results.
                 entry['results'] = result
                 poc.write_json(path, json_safe(journal))  # Preserve mismatching rows too.
                 if statement['expected_rows'] is not None:
@@ -602,7 +654,7 @@ def execute_plan(raw, client, journal_path, *, authorized_sha256, authorization_
                           'ATHENA_RESULTS_DIFFER', stage='COMPARE', key=query_id,
                           expected=len(statement['expected_rows']), observed=len(result['rows']))
                 else:
-                    check(result['rows'], 'ATHENA_DESCRIBE_EMPTY')
+                    check(result['lines'], 'ATHENA_DESCRIBE_EMPTY', key=query_id)
             entry['state'] = 'VERIFIED'
             poc.write_json(path, json_safe(journal))
         except Exception:
