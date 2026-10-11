@@ -353,7 +353,7 @@ def _safe_execution(value):
     return json_safe(kept)
 
 
-def _execution(client, query_id, submission, *, observation=None):
+def _execution(client, query_id, submission, *, observation=None, kind=None):
     value = _service_call(client, 'get_query_execution', QueryExecutionId=query_id)['QueryExecution']
     check(type(value) is dict, 'ATHENA_EXECUTION_RESPONSE_INVALID')
     comparison = dict(sql_rule='EXACT_TOKENS_ASCII_WHITESPACE_ONLY',
@@ -371,23 +371,32 @@ def _execution(client, query_id, submission, *, observation=None):
 
     same('QueryExecutionId', query_id, value.get('QueryExecutionId'))
     same('WorkGroup', submission['WorkGroup'], value.get('WorkGroup'))
-    wanted_tokens = execution_tokens(submission['QueryString'])
-    observed_tokens = execution_tokens(value.get('Query'))
-    # Directional response-only exception: one lexical final terminator omitted.
-    # Quoted/comment tokens containing ';' are intact; another statement,
-    # intermediate delimiter, final comment or added terminator cannot match.
-    if wanted_tokens[-1:] == [';'] and wanted_tokens.count(';') == 1 and observed_tokens == wanted_tokens[:-1]:
-        comparison['sql_rule'] = 'TRAILING_TERMINATOR_OMITTED'
-        if observation:
-            observation(_safe_execution(value), comparison)
-    else:
-        same('Query.tokens', wanted_tokens, observed_tokens)
+    # Context before SQL: the DESCRIBE exception below depends on the validated database.
     context = value.get('QueryExecutionContext')
     check(type(context) is dict and set(context) == {'Catalog', 'Database'}, 'ATHENA_EXECUTION_CONTEXT_INVALID')
-    same('Database', submission['QueryExecutionContext']['Database'], context['Database'])
+    database = submission['QueryExecutionContext']['Database']
+    same('Database', database, context['Database'])
     catalog = context['Catalog']
     wanted = submission['QueryExecutionContext']['Catalog']
     same('Catalog', wanted, 'AwsDataCatalog' if wanted == 'AwsDataCatalog' and catalog == 'awsdatacatalog' else catalog)
+    wanted_tokens = execution_tokens(submission['QueryString'])
+    observed_tokens = execution_tokens(value.get('Query'))
+    # Directional response-only exceptions. Final terminator: quoted/comment
+    # tokens containing ';' are intact; another statement, intermediate
+    # delimiter, final comment or added terminator cannot match. DESCRIBE: only
+    # a plan DESCRIBE statement written exactly `DESCRIBE <db> . <table>`, whose
+    # <db> equals the sent and returned context database, may come back as
+    # exactly `DESCRIBE <table>`; the table token stays exact.
+    if wanted_tokens[-1:] == [';'] and wanted_tokens.count(';') == 1 and observed_tokens == wanted_tokens[:-1]:
+        comparison['sql_rule'] = 'TRAILING_TERMINATOR_OMITTED'
+    elif (kind == 'DESCRIBE' and len(wanted_tokens) == 4 and wanted_tokens[0] == 'DESCRIBE' and wanted_tokens[2] == '.'
+          and wanted_tokens[1] == database == context['Database'] and re.fullmatch('[A-Za-z_][A-Za-z0-9_]*', wanted_tokens[3])
+          and observed_tokens == ['DESCRIBE', wanted_tokens[3]]):
+        comparison.update(sql_rule='DESCRIBE_DATABASE_QUALIFIER_OMITTED', validated_database=database)
+    else:
+        same('Query.tokens', wanted_tokens, observed_tokens)
+    if comparison['sql_rule'] != 'EXACT_TOKENS_ASCII_WHITESPACE_ONLY' and observation:
+        observation(_safe_execution(value), comparison)
     if 'ExecutionParameters' in value:
         check(type(value['ExecutionParameters']) is list and all(type(p) is str for p in value['ExecutionParameters']),
               'ATHENA_EXECUTION_IDENTITY_DIFFERS', observed={'field': 'ExecutionParameters', 'comparison': comparison})
@@ -553,7 +562,7 @@ def execute_plan(raw, client, journal_path, *, authorized_sha256, authorization_
                 calls['get_query_execution'] += 1
                 entry['recorded_get_attempts'] = entry.get('recorded_get_attempts', 0) + 1
                 poc.write_json(path, json_safe(journal))
-                value = _execution(client, query_id, submission, observation=preserve)
+                value = _execution(client, query_id, submission, observation=preserve, kind=statement['kind'])
                 state = value['Status']['State']
                 check(state in TERMINAL + ('QUEUED', 'RUNNING'), 'ATHENA_STATE_INVALID')
                 entry.update(state=state, execution=value)
@@ -578,7 +587,8 @@ def execute_plan(raw, client, journal_path, *, authorized_sha256, authorization_
                     _service_call(client, 'stop_query_execution', QueryExecutionId=query_id)
                     calls['get_query_execution'] += 1
                     entry['recorded_get_attempts'] += 1
-                    entry['cancellation_observation'] = _execution(client, query_id, submission, observation=preserve)
+                    entry['cancellation_observation'] = _execution(client, query_id, submission, observation=preserve,
+                                                                   kind=statement['kind'])
                     poc.write_json(path, json_safe(journal))
                     raise IngestionError('ATHENA_QUERY_TIMEOUT', stage='ATHENA', key=query_id)
                 sleep(min(2, max(0, plan['timeout_seconds'] - elapsed)))

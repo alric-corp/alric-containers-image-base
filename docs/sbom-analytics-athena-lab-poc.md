@@ -324,8 +324,7 @@ identity_comparison/recorded_get_attempts updates; the SELECT entry is unchanged
 the operator is separate administrative evidence, not a journal state: the next
 executor must GET the same ID and compare its results before any new Start.
 
-Latest inspected evidence (not an automatic "latest" selection). Use it only after
-review/integration and after confirming that no later run advanced the round:
+Historical source for that resume (run 38103483249 consumed it; see below):
 
 ```json
 {
@@ -348,6 +347,47 @@ ancestor, same six entries) and its nested source ZIP. Select only
 executor SHA separately in the receipt. The budget does not restart: six reserved
 plus at most 12 new (10 SELECT, 2 DESCRIBE), 18 in total.
 
+### Candidate source after the DESCRIBE correction
+
+Run 38103483249 / attempt 1, executor `bfb0f474756035a7d36b80c4454f138214feae8c`,
+passed the catalog gate (three views EQUIVALENT), reconciled the six known IDs
+without Start, verified 01_find_images and started 11 new requests. The 10 new
+SELECTs are VERIFIED; all 11 SELECT result sets match the plan as multisets.
+It then stopped at `ATHENA_EXECUTION_IDENTITY_DIFFERS` on `describe_observations`
+(`e3264498-d19b-428a-80a8-a8f90a0ddce2`, token `4fb38e95…ca72e5`): Athena returned
+`DESCRIBE <table>` for the sent `DESCRIBE poc_distroless_sbom.<table>`, with the
+same context database. Its last observation is QUEUED; its terminal state and
+results are NOT_OBSERVED. `describe_packages` was never reserved. The snapshot
+final read-back was UNCHANGED (20 objects). Budget: 17 reserved, 1 remaining.
+
+Latest inspected evidence (not an automatic "latest" selection). Use it only after
+review/integration and after confirming that no later run advanced the round:
+
+```json
+{
+  "run_id": 38103483249,
+  "attempt": 1,
+  "artifact_id": 11688034210,
+  "source_sha": "bfb0f474756035a7d36b80c4454f138214feae8c",
+  "zip_sha256": "c303c6531dd824e06cd959144241a5960d099b6be11d6ae268668d2eba5bfcb6",
+  "zip_bytes": 360130,
+  "journal_sha256": "ff09f07e1754bd7bce21e1b76eba04b65158e257b0bb6636eef099e9b4551983",
+  "journal_bytes": 605578,
+  "sql_plan_sha256": "ce1c1ab7079db6bbcbdf91c4d6f1ddfbd6ef9806d9cdbe848e34a8ba8259123e",
+  "sql_plan_bytes": 257893
+}
+```
+
+Select only `athena-reports/execution-journal.json` (17 entries); the ZIP also
+keeps the 36155-byte six-entry ancestor under `athena-resume-source/`. A new
+dispatch with the integrated executor (never a rerun) performs GET only for the
+17 known IDs, compares the eleven SELECT result sets again, reconciles
+`e3264498…` by GET/GetQueryResults and only then makes at most one Start, for
+`describe_packages`. FAILED/CANCELLED, a real timeout (including the historical
+QUEUED observation past its original deadline, which is cancelled, not promoted),
+a divergent context/table or empty/invalid DESCRIBE results stop before that
+Start. PASS requires 18/18 VERIFIED, including both DESCRIBE result sets.
+
 ### Delimited response reconciliation
 
 Outgoing SQL, context, parameters, round and token stay exact. Execution identity
@@ -368,6 +408,20 @@ a final comment after the semicolon cannot use this exception. The lexer,
 outgoing QueryString, SQL plan/hash and token preimage remain unchanged. Both
 SQL texts and their separate byte hashes are preserved in the journal observation
 and comparison metadata; these hashes do not replace the authorized plan hash.
+
+A second directional exception, `DESCRIBE_DATABASE_QUALIFIER_OMITTED`, applies
+only to plan statements of kind DESCRIBE (execute_plan passes the kind; catalog
+read-back does not). Workgroup, QueryExecutionId and the returned context are
+checked first, so the exception never relies on unvalidated fields. The
+authorized tokens must be exactly `DESCRIBE <db> . <table>` with `<db>` equal to
+the sent and returned context database, an unquoted table, and the response
+exactly `DESCRIBE <table>`. Table and snapshot stay exact; case, quotes,
+EXTENDED/FORMATTED/TABLE, columns, partitions, catalog qualifiers, comments,
+`;`, another statement or a combined terminator omission still fail. The
+comparison records the rule, both SQL hashes and `validated_database`.
+SELECT, CREATE VIEW and table DDL never use it. DESCRIBE results keep the
+existing decoding: rows are recorded literally (no header removal), string
+columns only, and an empty result fails `ATHENA_DESCRIBE_EMPTY`.
 
 GetQueryExecution does not promise to return ExecutionParameters. Missing values
 are recorded as NOT_RETURNED, not empty or remotely verified; exact submission
