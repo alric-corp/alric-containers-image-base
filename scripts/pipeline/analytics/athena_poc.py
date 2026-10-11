@@ -618,38 +618,230 @@ def _get_table(client, account, database, name):
                              observed={'service_code':poc.service_code(error)}) from error
 
 
-def _view_tokens(sql):
-    """Compare ONLY the simple v1 views despite Athena's SQL pretty printing.
+VIEW_SQL_LIMIT = 65536
+VIEW_TOKEN_LIMIT = 4096
+VIEW_DEPTH_LIMIT = 4
+# Trino reserved words, plus clause words outside v1: never identifiers/aliases.
+VIEW_RESERVED = frozenset((
+    'ALTER AND AS BETWEEN BY CASE CAST CONSTRAINT CREATE CROSS CUBE CURRENT_CATALOG CURRENT_DATE CURRENT_PATH '
+    'CURRENT_ROLE CURRENT_SCHEMA CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER DEALLOCATE DELETE DESCRIBE DISTINCT DROP '
+    'ELSE END ESCAPE EXCEPT EXECUTE EXISTS EXTRACT FALSE FOR FROM FULL GROUP GROUPING HAVING IN INNER INSERT INTERSECT '
+    'INTO IS JOIN JSON_ARRAY JSON_EXISTS JSON_OBJECT JSON_QUERY JSON_TABLE JSON_VALUE LEFT LIKE LISTAGG LOCALTIME '
+    'LOCALTIMESTAMP NATURAL NORMALIZE NOT NULL ON OR ORDER OUTER PREPARE RECURSIVE RIGHT ROLLUP SELECT SKIP TABLE THEN '
+    'TRIM TRUE UESCAPE UNION UNNEST USING VALUES WHEN WHERE WITH ALL FETCH LATERAL LIMIT OFFSET OVER TABLESAMPLE WINDOW'
+).split())
+_VIEW_WORD = re.compile('[A-Za-z_][A-Za-z0-9_]*')
 
-    v1 uses a column list, FROM/JOIN, equalities and AND, no functions or OR.
-    Parentheses/optional AS cannot change precedence in that grammar. Literals
-    stay exact; different columns, tables, predicates or operators still differ.
-    This is not a general SQL semantic equivalence checker.
+
+def _view_failure(sql, reason, offset, token=None):
+    return IngestionError('GLUE_VIEW_SQL_UNSUPPORTED', stage='CATALOG', observed=dict(
+        reason=reason, offset=offset, token=token, sql_sha256=sha256(sql.encode()) if type(sql) is str else None))
+
+
+def _view_lexemes(sql):
+    """Keywords are case-insensitive; identifiers stay exact and must be lowercase.
+
+    Strings keep their quotes and content. Comments, delimited identifiers,
+    numbers, other operators, ';' and non-ASCII whitespace are outside v1.
     """
-    check(type(sql) is str and len(sql.encode()) <= 65536, 'GLUE_VIEW_SQL_LIMIT')
-    pattern = re.compile(r'''\s+|--[^\n]*(?:\n|$)|/\*.*?\*/|'(?:''|[^'])*'|"[a-zA-Z_][a-zA-Z_0-9]*"|[a-zA-Z_][a-zA-Z_0-9]*|[.,=();]''', re.S)
-    tokens, position = [], 0
+    check(type(sql) is str and 0 < len(sql.encode()) <= VIEW_SQL_LIMIT, 'GLUE_VIEW_SQL_LIMIT', stage='CATALOG')
+    tokens, position, depth = [], 0, 0
     while position < len(sql):
-        match = pattern.match(sql, position)
-        check(match is not None, 'GLUE_VIEW_SQL_UNSUPPORTED')
-        token = match[0]; position = match.end()
-        if token == '(' and tokens and re.fullmatch('[a-z_][a-z_0-9]*', tokens[-1]):
-            check(tokens[-1] in ('select','where','and','on'), 'GLUE_VIEW_SQL_UNSUPPORTED')
-        if token.startswith('"'):
-            check(token.strip('"').lower() not in ('select','distinct','from','join','on','where','and','false','true','as'),
-                  'GLUE_VIEW_SQL_UNSUPPORTED')
-        if token.isspace() or token.startswith(('--','/*')) or token in ('(',')') or token.upper()=='AS':
+        char, start = sql[position], position
+        if char in ' \t\r\n':
+            position += 1
             continue
-        tokens.append(token if token.startswith("'") else token.strip('"').lower())
-    if tokens and tokens[-1]==';':
-        tokens.pop()
-    check(';' not in tokens and not any(t in tokens for t in ('or','union','with','group','limit')), 'GLUE_VIEW_SQL_UNSUPPORTED')
+        word = _VIEW_WORD.match(sql, position)
+        if word:
+            position = word.end()
+            if word[0].upper() in VIEW_RESERVED:
+                token = ('keyword', word[0].upper())
+            elif re.fullmatch('[a-z_][a-z0-9_]*', word[0]):
+                token = ('identifier', word[0])
+            else:
+                raise _view_failure(sql, 'IDENTIFIER_CASE', start, ['word', word[0][:64]])
+        elif char == "'":
+            position += 1
+            while not sql.startswith("'", position) or sql.startswith("''", position):
+                if position >= len(sql):
+                    raise _view_failure(sql, 'UNTERMINATED_STRING', start)
+                position += 2 if sql.startswith("''", position) else 1
+            position += 1
+            token = ('string', sql[start:position])
+        elif char in '.,=()':
+            position += 1
+            depth += {'(': 1, ')': -1}.get(char, 0)
+            if not 0 <= depth <= VIEW_DEPTH_LIMIT:
+                raise _view_failure(sql, 'UNBALANCED_PARENTHESES' if depth < 0 else 'DEPTH_LIMIT', start)
+            token = (char, char)
+        else:
+            reason = ('COMMENT' if sql.startswith(('--', '/*'), position) else 'DELIMITED_IDENTIFIER' if char in '"`'
+                      else 'STATEMENT_DELIMITER' if char == ';' else 'CHARACTER')
+            raise _view_failure(sql, reason, start)
+        tokens.append(token + (start,))
+        if len(tokens) > VIEW_TOKEN_LIMIT:
+            raise _view_failure(sql, 'TOKEN_LIMIT', start)
+    if depth:
+        raise _view_failure(sql, 'UNBALANCED_PARENTHESES', len(sql))
     return tokens
 
 
+def view_structure(sql):
+    """Structure of the three reviewed v1 views only; not a general SQL parser.
+
+      query    := SELECT [DISTINCT] column {',' column} FROM source [WHERE condition]
+      source   := '(' join ')' | join | relation
+      join     := relation [INNER] JOIN relation ON condition
+      relation := database '.' table [[AS] alias]
+      column   := [alias '.'] name
+      condition:= term {AND term}
+      term     := '(' condition ')' | column '=' (column | string | FALSE | TRUE)
+
+    Removed only: whitespace, the optional INNER/AS in their own positions, and
+    parentheses that return the same node. AND groups are not flattened; columns,
+    order, DISTINCT, relations, aliases, operands and literals are kept. The
+    whole input must be consumed; anything else fails closed with a reason.
+    """
+    tokens, index = _view_lexemes(sql), 0
+
+    def fail(reason):
+        kind, value, offset = tokens[index] if index < len(tokens) else ('end', None, len(sql))
+        raise _view_failure(sql, reason, offset, None if value is None else [kind, value[:64]])
+
+    def peek(kind, value=None):
+        return index < len(tokens) and tokens[index][0] == kind and (value is None or tokens[index][1] == value)
+
+    def take(kind, value=None, reason='UNEXPECTED_TOKEN'):
+        nonlocal index
+        if not peek(kind, value):
+            fail(reason)
+        index += 1
+        return tokens[index-1][1]
+
+    def accept(kind, value=None):
+        if not peek(kind, value):
+            return False
+        take(kind, value)
+        return True
+
+    def column():
+        name = [None, take('identifier')]
+        if accept('.'):
+            name = [name[1], take('identifier')]
+        if peek('('):
+            fail('FUNCTION')
+        return name
+
+    def relation():
+        database = take('identifier')
+        take('.', reason='UNQUALIFIED_RELATION')
+        table = take('identifier')
+        if peek('.'):
+            fail('CATALOG_QUALIFIED_RELATION')
+        alias = take('identifier', reason='ALIAS') if accept('keyword', 'AS') else (
+            take('identifier') if peek('identifier') else None)
+        return dict(database=database, table=table, alias=alias)
+
+    def term():
+        if accept('('):
+            if peek('keyword', 'SELECT'):
+                fail('SUBQUERY')
+            node = condition()
+            take(')')
+            return node
+        left = dict(column=column())
+        take('=', reason='OPERATOR')
+        if peek('string'):
+            return {'=': [left, dict(string=take('string'))]}
+        if peek('keyword', 'FALSE') or peek('keyword', 'TRUE'):
+            return {'=': [left, dict(boolean=take('keyword') == 'TRUE')]}
+        return {'=': [left, dict(column=column())]}
+
+    def condition():
+        terms = [term()]
+        while accept('keyword', 'AND'):
+            terms.append(term())
+        return terms[0] if len(terms) == 1 else {'and': terms}
+
+    def source():
+        grouped = accept('(')
+        if grouped and peek('keyword', 'SELECT'):
+            fail('SUBQUERY')
+        left = relation()
+        if accept('keyword', 'INNER'):
+            take('keyword', 'JOIN', reason='JOIN_TYPE')
+        elif not accept('keyword', 'JOIN'):
+            if any(peek('keyword', k) for k in ('LEFT', 'RIGHT', 'FULL', 'CROSS', 'NATURAL', 'OUTER')):
+                fail('JOIN_TYPE')
+            if grouped:
+                fail('GROUPED_RELATION')
+            return left
+        node = dict(join='INNER', left=left, right=relation())
+        take('keyword', 'ON', reason='JOIN_CONDITION')
+        node['on'] = condition()
+        if grouped:
+            take(')')
+        return node
+
+    def references(node):
+        if node is None:
+            return []
+        if 'and' in node:
+            return [c for term in node['and'] for c in references(term)]
+        return [o['column'] for o in node['='] if 'column' in o]
+
+    take('keyword', 'SELECT')
+    distinct = accept('keyword', 'DISTINCT')
+    columns = [column()]
+    while accept(','):
+        columns.append(column())
+    take('keyword', 'FROM')
+    node = source()
+    where = condition() if accept('keyword', 'WHERE') else None
+    if index != len(tokens):
+        fail('TRAILING_INPUT')
+    aliases = [node['left']['alias'], node['right']['alias']] if 'join' in node else [node['alias']]
+    if len(set(aliases)) != len(aliases) or (len(aliases) > 1 and None in aliases):
+        fail('ALIAS_DECLARATION')
+    if any(qualifier not in aliases for qualifier, _ in columns + references(node.get('on')) + references(where)):
+        fail('ALIAS_BINDING')
+    return dict(distinct=distinct, columns=columns, source=node, where=where)
+
+
+def _compare_view(view, request_sql, qualified, settings, record):
+    """Safe representation is recorded BEFORE the identity and structure checks."""
+    sql = view.get('originalSql')
+    header, separator, authorized = request_sql.partition(' AS\n')
+    comparison = record['view'] = dict(
+        catalog=view.get('catalog'), schema=view.get('schema'),
+        original_sql=sql if type(sql) is str and len(sql.encode()) <= VIEW_SQL_LIMIT else None,
+        original_sql_sha256=sha256(sql.encode()) if type(sql) is str else None,
+        authorized_sql_sha256=sha256(authorized.encode()), rule='RESTRICTED_V1_VIEW_STRUCTURE', status='PENDING')
+    context = dict(stage='CATALOG', key=record['name'], observed=record)
+    check(separator and header == 'CREATE VIEW ' + qualified, 'GLUE_VIEW_CONFLICT', **context)
+    check(view.get('catalog') in (settings['catalog'], settings['catalog'].lower())
+          and view.get('schema') == settings['database'], 'GLUE_VIEW_CONFLICT', **context)
+    try:
+        wanted, observed = view_structure(authorized), view_structure(sql)
+    except IngestionError as error:
+        comparison.update(status='UNSUPPORTED', failure=error.observed)
+        raise IngestionError(error.code, **context) from error
+    comparison.update(authorized_structure_sha256=sha256(canonical(wanted)),
+                      observed_structure_sha256=sha256(canonical(observed)),
+                      status='EQUIVALENT' if observed == wanted else 'DIFFERENT')
+    check(observed == wanted, 'GLUE_VIEW_CONFLICT', **context)
+    return comparison
+
+
 def resource_readback(athena, glue, expected, settings, proposal, journal=None, *, require_complete=False,
-                      journal_path=None, plan_raw=None, authorization_reference=None):
-    """No create/adopt/update. Existing names require this exact round's journal."""
+                      journal_path=None, plan_raw=None, authorization_reference=None, observations=None):
+    """No create/adopt/update. Existing names require this exact round's journal.
+
+    `observations['objects']` is filled before each object's checks; an object
+    never read stays NOT_OBSERVED. Only selected identity/definition fields are kept.
+    """
+    objects = (observations if observations is not None else {}).setdefault(
+        'objects', {k: 'NOT_OBSERVED' for k in TABLE_NAMES})
     account = expected['destination']['expected_bucket_owner']
     calls = dict(get_query_execution=0, idempotent_retransmissions=0)
     group = _service_call(athena, 'get_work_group', WorkGroup=settings['workgroup'])['WorkGroup']
@@ -692,10 +884,13 @@ def resource_readback(athena, glue, expected, settings, proposal, journal=None, 
         name = qualified.split('.')[1]
         table = _get_table(glue, account, settings['database'], name)
         if table is None:
+            objects[table_name] = 'ABSENT'
             check(not require_complete, 'ATHENA_CATALOG_INCOMPLETE', stage='CATALOG', key=name)
             continue
         key = ('table-' + str(number)) if number < 2 else ('view-' + str(number-2))
         entry = (journal or {}).get('executions', {}).get(key)
+        record = objects[table_name] = dict(statement_id=key, query_id=(entry or {}).get('query_id'), name=name,
+                                            identity={k: table.get(k) for k in ('Name', 'DatabaseName', 'CatalogId', 'TableType')})
         check(entry is not None and entry.get('query_id'), 'ATHENA_CATALOG_NAME_CONFLICT', stage='CATALOG', key=name)
         def preserve(observed, comparison):
             entry.update(remote_observation=observed, identity_comparison=comparison)
@@ -729,18 +924,17 @@ def resource_readback(athena, glue, expected, settings, proposal, journal=None, 
             # Keep both representations; this is not an S3 object-byte comparison.
             table = dict(table, location_comparison=location_rule)
         else:
-            check(table.get('TableType') == 'VIRTUAL_VIEW' and type(table.get('ViewOriginalText')) is str,
-                  'GLUE_VIEW_CONFLICT')
+            text = table.get('ViewOriginalText')
+            record['view_original_text_sha256'] = sha256(text.encode()) if type(text) is str else None
+            check(table.get('TableType') == 'VIRTUAL_VIEW' and type(text) is str,
+                  'GLUE_VIEW_CONFLICT', stage='CATALOG', key=name, observed=record)
             # Ordinary Athena views encode the original SELECT in Presto JSON.
             # Unknown representations fail closed; a same-name view is not enough.
-            encoded = re.fullmatch(r'/\* Presto View: ([A-Za-z0-9+/=]+) \*/', table['ViewOriginalText'])
-            check(encoded is not None, 'GLUE_VIEW_REPRESENTATION_UNSUPPORTED')
+            encoded = re.fullmatch(r'/\* Presto View: ([A-Za-z0-9+/=]+) \*/', text)
+            check(encoded is not None, 'GLUE_VIEW_REPRESENTATION_UNSUPPORTED', stage='CATALOG', key=name, observed=record)
             view = document(base64.b64decode(encoded[1], validate=True), limit=PLAN_LIMIT)
-            original_sql = entry['request']['QueryString'].split(' AS\n', 1)
-            check(len(original_sql) == 2 and _view_tokens(view.get('originalSql')) == _view_tokens(original_sql[1])
-                  and view.get('catalog') in (settings['catalog'], settings['catalog'].lower())
-                  and view.get('schema') == settings['database'],
-                  'GLUE_VIEW_CONFLICT')
+            table = dict(table, view_comparison=_compare_view(view, entry['request']['QueryString'], qualified,
+                                                              settings, record))
         existing[name] = table
     return dict(workgroup=group, database=db, existing_objects=existing, api_calls=calls)
 
@@ -768,6 +962,18 @@ def snapshot_fingerprint(verified):
     manifest = document(verified.manifest.body)
     return dict(manifest_sha256=verified.manifest.sha256, manifest_version_id=verified.manifest_version,
                 files=manifest['files'], object_count=len(verified.plan.objects)+1)
+
+
+def _final_readback(adapter, snapshot_id, before, reports):
+    """Never raises: without a recorded after-fingerprint the status is NOT_OBSERVED."""
+    try:
+        after = snapshot_fingerprint(read_snapshot(adapter, snapshot_id))
+        poc.write_json(reports/'snapshot-after.json', after)
+    except Exception as error:
+        return dict(status='NOT_OBSERVED', failure=error.diagnostic() if isinstance(error, IngestionError)
+                    else dict(status='ERROR', code=poc.service_code(error)))
+    return dict(status='UNCHANGED' if after == before else 'CHANGED', manifest_sha256=after['manifest_sha256'],
+                manifest_version_id=after['manifest_version_id'], object_count=after['object_count'])
 
 
 def run(s3, sts, athena, glue, expected, settings, session_name, round_id, reports, output, *,
@@ -806,26 +1012,32 @@ def run(s3, sts, athena, glue, expected, settings, session_name, round_id, repor
     journal = document(read_local(journal_path,16*1024*1024),limit=16*1024*1024) if journal_path.exists() else None
     if journal:
         validate_journal(raw, journal, authorization_reference)
-    resource = resource_readback(athena, glue, expected, settings, proposal, journal, journal_path=journal_path,
-                                 plan_raw=raw, authorization_reference=authorization_reference)
-    before_calls = resource['api_calls']
-    poc.write_json(reports/'resources-before.json', json_safe(resource))
+    # The catalog gate still precedes execute_plan, now inside the final read-back.
+    catalog = dict(phase='BEFORE')
     try:
+        resource = resource_readback(athena, glue, expected, settings, proposal, journal, journal_path=journal_path,
+                                     plan_raw=raw, authorization_reference=authorization_reference, observations=catalog)
+        before_calls = resource['api_calls']
+        poc.write_json(reports/'resources-before.json', json_safe(resource))
         result = execute_plan(raw, athena, journal_path, authorized_sha256=authorized_sha256,
                               authorization_reference=authorization_reference)
         journal = document(read_local(journal_path,16*1024*1024),limit=16*1024*1024)
+        catalog = dict(phase='AFTER')
         resource = resource_readback(athena, glue, expected, settings, proposal, journal, require_complete=True,
-                                     journal_path=journal_path, plan_raw=raw, authorization_reference=authorization_reference)
+                                     journal_path=journal_path, plan_raw=raw, authorization_reference=authorization_reference,
+                                     observations=catalog)
         result['resource_readback_api_calls'] = dict(before=before_calls, after=resource['api_calls'])
         poc.write_json(reports/'resources-after.json', json_safe(resource))
     except Exception as error:
         failure = error.diagnostic() if isinstance(error, IngestionError) else dict(status='ERROR',code=poc.service_code(error))
-        poc.write_json(reports/'execution-failure.json', failure)
+        # Separate states: the original error is re-raised; the final read-back
+        # is recorded beside it and never replaces it or becomes a PASS by default.
+        failure.update(catalog_readback=catalog, final_readback=_final_readback(adapter, expected['snapshot_id'], before, reports))
+        poc.write_json(reports/'execution-failure.json', json_safe(failure))
         raise
-    finally:
-        after = snapshot_fingerprint(read_snapshot(adapter, expected['snapshot_id']))
-        poc.write_json(reports/'snapshot-after.json', after)
-        check(before == after, 'ATHENA_SNAPSHOT_CHANGED', stage='FINAL_READBACK')
+    final = _final_readback(adapter, expected['snapshot_id'], before, reports)
+    check(final['status'] == 'UNCHANGED', 'ATHENA_SNAPSHOT_CHANGED' if final['status'] == 'CHANGED'
+          else 'ATHENA_FINAL_READBACK_FAILED', stage='FINAL_READBACK', observed=final)
     result.update(snapshot_bytes_and_versions_unchanged=True, snapshot_id=expected['snapshot_id'],
                   raw_traceability=[dict(row, raw_s3_uri=adapter.destination.uri(expected['snapshot_id']) + row['raw_spdx_path'])
                                     for row in inspection['raw_traceability']], identity=observed)

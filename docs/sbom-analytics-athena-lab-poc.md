@@ -132,16 +132,48 @@ Hive output fields; Glue read-back verifies all typed physical columns/locations
 The five catalog names are collision-checked using GetTable. Only
 EntityNotFoundException denotes absence. Resumption requires this round's exact
 successful DDL and compares physical columns/locations and ordinary Presto view
-definitions. The view comparison permits formatting, identifier quoting, optional
-AS and parentheses in the simple v1 SELECT/JOIN/equality/AND grammar; it preserves
-literals/columns/tables/predicates. It is not a general SQL equivalence engine.
-Unknown representations fail closed, with no replace or delete operation.
+definitions. Views are compared as a restricted v1 structure, described below;
+it is not a general SQL equivalence engine. Unknown representations fail closed,
+with no replace or delete operation.
 
 After SQL, a fresh complete snapshot read-back must match the initial fingerprint,
 including marker/object bytes and current versions. Artifacts retain identity,
 dependency versions, catalog/SQL plan, journal, actual pages/results, errors and
 pre/post read-back, including failure. They are outside Parquet LOCATIONs and
 the snapshot. No cleanup runs automatically.
+
+### Glue view structure (run 38097506220)
+
+The resume stopped at `GLUE_VIEW_SQL_UNSUPPORTED` before any new submission:
+Athena stores the authorized inventory SELECT (`FROM obs o JOIN pkg p ON a = b
+WHERE x AND y`) as `FROM (obs o INNER JOIN pkg p ON (a = b)) WHERE ((x) AND (y))`.
+Both views with SELECT DISTINCT keep the template structure, reformatted only.
+
+`view_structure` parses only `SELECT [DISTINCT] columns FROM source [WHERE
+condition]`: one `database.table [[AS] alias]` or one inner join of two such
+relations with an equality/AND ON condition, optionally wrapped once in
+parentheses; conditions are `column = column|string|true|false` joined by AND.
+`INNER` is accepted only between a relation and `JOIN`, `AS` only before a
+relation alias. Parentheses are removed only when they return the same node;
+nested AND groups are not flattened. Column list/order, qualifiers, DISTINCT,
+fully qualified relations (database and snapshot), aliases and their binding,
+ON/WHERE operand order and string/boolean literals stay exact; the whole input
+must be consumed. Keywords are case-insensitive; unquoted identifiers must be
+lowercase and are never case-folded. Subqueries, other joins, OR/NOT, functions,
+casts, numbers, other operators, comments, delimited identifiers (never observed
+in the real responses), `;`, catalog-qualified names, column aliases, more than
+4 nesting levels, 4096 tokens or 64 KiB fail with a specific reason. Identity,
+VIRTUAL_VIEW, the Presto envelope, catalog/schema and the round's successful
+QueryExecutionId remain required; CreatedBy or a same name is not ownership.
+
+The catalog read-back now runs inside the final snapshot read-back. Each object's
+statement, QueryExecutionId, identity and the view's decoded definition/hashes are
+recorded before its checks; unread objects stay NOT_OBSERVED and
+resources-before.json is written only after success. On any failure
+execution-failure.json keeps the original error, `catalog_readback` and a
+separate `final_readback` (UNCHANGED, CHANGED or NOT_OBSERVED). snapshot-after.json
+exists only when the after-fingerprint was read; a failed final read-back never
+replaces the original error and never counts as PASS.
 The new sbom-athena- artifact uses the existing 30-day GitHub product-evidence
 convention, registered in policies/operations/health.json for its mandatory lint
 and code-owner review. Existing retentions, health thresholds and schedules do
@@ -220,7 +252,7 @@ because Athena omitted its final `;` in the returned Query. The preserved
 journal records five VERIFIED DDLs and one SUBMITTED SELECT with a QUEUED
 observation. That observation does not establish the SELECT's current state.
 
-Approved source for the next resume, conditional on no later run advancing it:
+Historical source for that resume (run 38097506220 consumed it; see below):
 
 ```json
 {
@@ -280,6 +312,41 @@ permissions/resources, a different hash or more than 18 distinct executions
 requires a separate decision. No query, catalog object, result or snapshot is
 deleted automatically. Failed/cancelled/TIMED_OUT history requires review; it is
 not silently converted to success on restoration.
+
+### Candidate source after the view-structure correction
+
+Run 38097506220 / attempt 1, executor `dcdbf3151fc85fe2385f059c2d9bc75586a56134`,
+restored that six-entry journal and stopped during view-2 catalog reconciliation,
+before execute_plan: no Start, no GetQueryResults, no new ID. Its journal keeps
+the same six IDs, requests and tokens; the five DDL entries only gained
+identity_comparison/recorded_get_attempts updates; the SELECT entry is unchanged
+(SUBMITTED, historical QUEUED observation). A later SUCCEEDED/38330-byte read by
+the operator is separate administrative evidence, not a journal state: the next
+executor must GET the same ID and compare its results before any new Start.
+
+Latest inspected evidence (not an automatic "latest" selection). Use it only after
+review/integration and after confirming that no later run advanced the round:
+
+```json
+{
+  "run_id": 38097506220,
+  "attempt": 1,
+  "artifact_id": 11686421115,
+  "source_sha": "dcdbf3151fc85fe2385f059c2d9bc75586a56134",
+  "zip_sha256": "d43567eb8fb2293a37b754cb110fe8bc73213d6a7db374596439c1415c93418a",
+  "zip_bytes": 213530,
+  "journal_sha256": "e621e60802bd9e7017460a012ec783ea17478cf0df0c26892c99624d03906101",
+  "journal_bytes": 36155,
+  "sql_plan_sha256": "ce1c1ab7079db6bbcbdf91c4d6f1ddfbd6ef9806d9cdbe848e34a8ba8259123e",
+  "sql_plan_bytes": 257893
+}
+```
+
+The ZIP also keeps `athena-resume-source/execution-journal.json` (the 35270-byte
+ancestor, same six entries) and its nested source ZIP. Select only
+`athena-reports/execution-journal.json`; keep this source_sha, and record the new
+executor SHA separately in the receipt. The budget does not restart: six reserved
+plus at most 12 new (10 SELECT, 2 DESCRIBE), 18 in total.
 
 ### Delimited response reconciliation
 

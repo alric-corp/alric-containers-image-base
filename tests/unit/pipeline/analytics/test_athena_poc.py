@@ -356,13 +356,14 @@ class AthenaPocTests(unittest.TestCase):
 
     def test_view_pretty_printing_is_allowed_but_different_logic_is_not(self):
         sql="SELECT o.a FROM db.t o JOIN db.u p ON o.hash = p.hash WHERE o.scope = 'platform' AND p.subject = false"
-        rendered='SELECT "o"."a"\nFROM "db"."t" AS "o" JOIN "db"."u" AS "p" ON ("o"."hash" = "p"."hash") WHERE ("o"."scope" = \'platform\') AND ("p"."subject" = false)'
-        self.assertEqual(a._view_tokens(sql),a._view_tokens(rendered))
-        self.assertNotEqual(a._view_tokens(sql),a._view_tokens(sql.replace("'platform'","'index'")))
-        self.assertNotEqual(a._view_tokens(sql),a._view_tokens(sql.replace('db.u','db.other')))
-        with self.assertRaisesRegex(IngestionError,'SQL_UNSUPPORTED'):a._view_tokens(sql.replace(' AND ',' OR '))
-
-        with self.assertRaisesRegex(IngestionError,'SQL_UNSUPPORTED'):a._view_tokens('SELECT o.a() FROM db.t o')
+        rendered="SELECT\n  o.a\nFROM\n  (db.t o\nINNER JOIN db.u AS p ON (o.hash = p.hash))\nWHERE ((o.scope = 'platform') AND (p.subject = false))\n"
+        self.assertEqual(a.view_structure(sql),a.view_structure(rendered))
+        self.assertNotEqual(a.view_structure(sql),a.view_structure(sql.replace("'platform'","'index'")))
+        self.assertNotEqual(a.view_structure(sql),a.view_structure(sql.replace('db.u','db.other')))
+        with self.assertRaisesRegex(IngestionError,'SQL_UNSUPPORTED'):a.view_structure(sql.replace(' AND ',' OR '))
+        # Delimited identifiers were never observed in the real Glue view responses.
+        with self.assertRaisesRegex(IngestionError,'SQL_UNSUPPORTED'):a.view_structure(sql.replace('o.a','"o"."a"'))
+        with self.assertRaisesRegex(IngestionError,'SQL_UNSUPPORTED'):a.view_structure('SELECT o.a() FROM db.t o')
 
     def test_null_empty_string_number_and_nested_json_are_distinct(self):
         self.assertIsNone(a._cell({},dict(Name='s',Type='varchar'),()))
@@ -398,9 +399,11 @@ class AthenaPocTests(unittest.TestCase):
             a.resource_readback(self.athena,self.glue,self.expected,self.settings,self.proposal,journal)
         table['StorageDescriptor']['Location']=self.proposal['locations']['sbom_observations']
         view=next(v for v in self.glue.tables.values() if v['TableType']=='VIRTUAL_VIEW')
-        view['ViewOriginalText']='/* Presto View: '+base64.b64encode(canonical(dict(originalSql='SELECT observation_id FROM other.table',catalog=self.settings['catalog'],schema=self.settings['database']))).decode()+' */'
-        with self.assertRaisesRegex(IngestionError,'VIEW_CONFLICT'):
-            a.resource_readback(self.athena,self.glue,self.expected,self.settings,self.proposal,journal)
+        # `table` is a reserved word: outside the v1 grammar before any structural comparison.
+        for sql,code in (('SELECT observation_id FROM other.rows','VIEW_CONFLICT'),('SELECT observation_id FROM other.table','VIEW_SQL_UNSUPPORTED')):
+            view['ViewOriginalText']='/* Presto View: '+base64.b64encode(canonical(dict(originalSql=sql,catalog=self.settings['catalog'],schema=self.settings['database']))).decode()+' */'
+            with self.subTest(sql=sql),self.assertRaisesRegex(IngestionError,code):
+                a.resource_readback(self.athena,self.glue,self.expected,self.settings,self.proposal,journal)
 
     def test_wrong_role_or_snapshot_stops_before_athena(self):
         sts=SimpleNamespace(get_caller_identity=lambda:dict(Account='712107929769',Arn='admin',UserId='admin'))
