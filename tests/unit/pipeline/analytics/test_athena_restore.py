@@ -16,7 +16,7 @@ from scripts.pipeline.analytics import athena_restore as r, athena_run as a
 from scripts.pipeline.analytics.ingestion_types import IngestionError
 from scripts.pipeline.analytics.spdx import canonical, sha256
 from tests.unit.pipeline.analytics import test_athena_reconciliation as support
-from tests.unit.pipeline.analytics.test_athena_run import HISTORICAL, historical_profile
+from tests.unit.pipeline.analytics.test_athena_run import HISTORICAL, HISTORICAL_ORIGIN, historical_profile
 
 ROOT, FIXTURE, AUTH, PLAN_HASH = support.ROOT, support.FIXTURE, support.AUTH, support.PLAN_HASH
 
@@ -62,6 +62,7 @@ class AthenaRestoreTests(unittest.TestCase):
         self.sha='a'*40;self.snapshot='6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6'
 
     def restore(self, **kwargs):
+        kwargs.setdefault('origin',HISTORICAL_ORIGIN)
         return r.restore(self.client,self.source,self.root/'reports',self.root/'originals',executor_sha=self.sha,
                          authorized_sha256=PLAN_HASH,authorization_reference=AUTH,round_id='lab-sbom-athena-v1',
                          snapshot_id=self.snapshot,**kwargs)
@@ -111,6 +112,23 @@ class AthenaRestoreTests(unittest.TestCase):
             self.assertNotIn(self.source.artifact_id,self.client.calls)
         self.client.metadata=base
         self.restore()  # Positive after negatives; expected failed source accepted.
+
+    def test_origin_is_explicit_and_must_own_the_run_and_artifact(self):
+        for repository, repository_id in (('other/repository', HISTORICAL_ORIGIN.repository_id),
+                                          (HISTORICAL_ORIGIN.repository, HISTORICAL_ORIGIN.repository_id + 1)):
+            with self.subTest(repository=repository, repository_id=repository_id):
+                with self.assertRaisesRegex(IngestionError,'REPOSITORY_DIFFERS|ARTIFACT_RUN_DIFFERS'):
+                    self.restore(origin=r.Origin(repository,repository_id))
+                self.assertNotIn(self.source.artifact_id,self.client.calls)
+        for repository, repository_id in (('', 1), ('owner', 1), ('owner/../x', 1), ('owner/name', 0),
+                                          ('owner/name', True), ('owner/name', '1')):
+            with self.subTest(repository=repository, repository_id=repository_id), \
+                    self.assertRaisesRegex(IngestionError,'ORIGIN_INVALID'):
+                r.Origin(repository, repository_id)
+        with self.assertRaisesRegex(IngestionError,'ORIGIN_INVALID'):self.restore(origin=None)
+        with self.assertRaisesRegex(IngestionError,'API_PATH_INVALID'):
+            r.GitHubActions(r.Origin('owner/name',1))._read('repos/other/name/actions/runs/1',10)
+        self.assertFalse(hasattr(r,'REPOSITORY') or hasattr(r,'REPOSITORY_ID'))
 
     def test_download_hash_failure_keeps_zip_no_working_journal(self):
         self.client.raw=self.raw[:-1]+b'x'
@@ -213,7 +231,8 @@ class AthenaRestoreTests(unittest.TestCase):
         report=self.root/'reports/restore.json'
         argv=['--source',str(source),'--reports',str(self.root/'reports'),'--originals',str(self.root/'originals'),
               '--report',str(report),'--executor-sha',self.sha,'--authorized-plan-sha256',PLAN_HASH,
-              '--authorization-reference',AUTH,'--round-id','lab-sbom-athena-v1','--snapshot-id',self.snapshot]
+              '--authorization-reference',AUTH,'--round-id','lab-sbom-athena-v1','--snapshot-id',self.snapshot,
+              '--repository',HISTORICAL_ORIGIN.repository,'--repository-id',str(HISTORICAL_ORIGIN.repository_id)]
         with patch.object(r,'GitHubActions',return_value=self.client),patch.object(self.client,'get_json',side_effect=TimeoutError('SECRET')):
             with patch('sys.stdout',new_callable=io.StringIO):self.assertEqual(r.main(argv),1)
         self.assertEqual(json.loads(report.read_bytes())['code'],'RESUME_INVALID');self.assertNotIn('SECRET',report.read_text())

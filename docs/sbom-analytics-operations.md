@@ -10,7 +10,7 @@ Os identificadores abaixo pertencem ao deployment pessoal, na conta `71210792976
 
 | Componente | Ativo |
 | --- | --- |
-| Bucket S3 | `alric-distroless-sbom-analytics-712107929769-us-east-1` |
+| Bucket S3 | `distroless-sbom-analytics`: nome exato em `policies/pipeline/config.json` (`analytics.bucket`), sem conta, região ou organização |
 | Prefixo de dados | `sbom-analytics/v1/` (snapshots em `sbom-analytics/v1/snapshots/<snapshot_id>/`) |
 | Prefixo de resultados | `query-results/sbom-analytics-v1/` |
 | Athena Workgroup | `sbom_analytics` (engine 3, saída imposta, SSE-S3, corte de 100 MiB por consulta) |
@@ -20,7 +20,7 @@ Os identificadores abaixo pertencem ao deployment pessoal, na conta `71210792976
 | Environment dos workflows de dados | `DEV` |
 | Environment do Terraform | `lab-image-base-infra`: environment de implantação já existente, com revisor obrigatório. O nome identifica o deployment, não o produto. |
 
-A infraestrutura S3 é o filho `module.sbom_analytics` (`infra/s3`) do root `infra/ecr`, no mesmo backend e state, com `prevent_destroy = true` e `force_destroy = false`. O workgroup e o database são criados fora do Terraform pelo administrador, a partir de [`docs/examples/sbom-analytics/`](examples/sbom-analytics/). Permissões e procedimento: [operador externo](sbom-analytics-athena-iam-runbook.md).
+A infraestrutura S3 é o filho `module.sbom_analytics` (`infra/s3`) do root `infra/ecr`, no mesmo backend e state, com `prevent_destroy = true` e `force_destroy = false`. O nome do bucket entra como `sbom_bucket_name`; outra instalação define o seu próprio nome na configuração, sem alterar código. Conta e região continuam configuradas separadamente. O workgroup e o database são criados fora do Terraform pelo administrador, a partir de [`docs/examples/sbom-analytics/`](examples/sbom-analytics/). Permissões e procedimento: [operador externo](sbom-analytics-athena-iam-runbook.md).
 
 ## Componentes no repositório
 
@@ -43,7 +43,7 @@ A infraestrutura S3 é o filho `module.sbom_analytics` (`infra/s3`) do root `inf
 ### 1. Publicar o snapshot
 
 ```sh
-gh workflow run sbom-analytics-s3.yml --repo alric-corp/alric-containers-image-base --ref develop
+gh workflow run sbom-analytics-s3.yml --ref develop
 ```
 
 O job `publish` executa nesta ordem:

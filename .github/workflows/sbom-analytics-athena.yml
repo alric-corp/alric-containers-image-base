@@ -114,11 +114,16 @@ jobs:
           path.write_bytes(raw)
           path.chmod(0o600)
           PY
+          # The active snapshot comes from the versioned configuration; the
+          # repository is the one running this workflow, never a product constant.
+          SNAPSHOT_ID="$("$RUNNER_TEMP/analytics-venv/bin/python" -B -c \
+            "from scripts.pipeline.analytics import s3_run; print(s3_run.config('policies/analytics/s3.json')['snapshot_id'])")"
           "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.athena_restore \
             --source "$RUNNER_TEMP/resume-source.json" --executor-sha "$GITHUB_SHA" \
             --reports "$RUNNER_TEMP/athena-reports" --originals "$RUNNER_TEMP/athena-resume-source" \
             --report "$RUNNER_TEMP/athena-reports/resume-diagnostic.json" \
-            --round-id "$ROUND_ID" --snapshot-id 0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b \
+            --round-id "$ROUND_ID" --snapshot-id "$SNAPSHOT_ID" \
+            --repository "$GITHUB_REPOSITORY" --repository-id "$GITHUB_REPOSITORY_ID" \
             --authorized-plan-sha256 "$AUTHORIZED_PLAN_SHA256" --authorization-reference "$AUTHORIZATION_REFERENCE"
       - name: Load versioned operational identity
         id: pipeline

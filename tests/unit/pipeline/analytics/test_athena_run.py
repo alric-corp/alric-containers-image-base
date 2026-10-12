@@ -32,6 +32,8 @@ HISTORICAL = ROOT / 'tests/fixtures/sbom-analytics/historical-poc-round'
 HISTORICAL_NAMESPACE = dict(database='poc_distroless_sbom', workgroup='poc_distroless_sbom',
                             table_prefix='poc_snapshot', results_prefix='query-results/poc-v1/')
 HISTORICAL_WORKFLOW = '.github/workflows/sbom-analytics-athena-lab-poc.yml'
+# The repository that ran the historical round, as recorded in its run metadata.
+HISTORICAL_ORIGIN = athena_restore.Origin('alric-corp/alric-containers-image-base', 1360616627)
 
 
 def historical_profile(cls):

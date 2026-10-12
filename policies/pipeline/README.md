@@ -79,6 +79,12 @@ antiga variável `INFRA_PLAN_ROLE_ARN`. Sua habilitação exige concluir a retir
 dos caminhos históricos de Infra PR descrita no runbook. Alterar um JSON não
 provisiona recursos nem muda trust IAM automaticamente.
 
+`analytics.bucket` é o nome exato do bucket do Distroless SBOM Analytics neste
+deployment (`distroless-sbom-analytics`). Os escopos `INFRA_*` o emitem como
+`SBOM_BUCKET_NAME`, que os workflows de Infra passam ao Terraform
+(`sbom_bucket_name`) e aos verificadores (`--bucket-name`). O nome nunca é
+derivado de conta, região ou organização; outra instalação define o seu.
+
 O carregador `scripts.pipeline.governance.configuration` valida os arquivos
 antes de emitir outputs/env para o job. Arquivo ausente, chave duplicada, campo
 desconhecido, booleano textual, conta inválida, framework fora do catálogo ou

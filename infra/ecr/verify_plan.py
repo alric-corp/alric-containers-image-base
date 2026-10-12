@@ -23,8 +23,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent))
-from s3.contract import (ADDRESSES as S3_ADDRESSES, LEGACY_ADDRESSES, LEGACY_MODULE, LEGACY_SNAPSHOTS_PREFIX,
-                         LEGACY_SOURCE, MODULE as S3_MODULE, SNAPSHOTS_PREFIX, bucket_name as default_bucket_name,
+from s3.contract import (ADDRESSES as S3_ADDRESSES, BUCKET_NAME_PATTERN, LEGACY_ADDRESSES, LEGACY_MODULE,
+                         LEGACY_SNAPSHOTS_PREFIX, LEGACY_SOURCE, MODULE as S3_MODULE, SNAPSHOTS_PREFIX,
                          bucket_policy, legacy_bucket_name, unique_json)
 RESOURCE_TYPES = (
     "aws_ecr_repository",
@@ -247,7 +247,7 @@ def validate_legacy(address, kind, item, planned, configuration, bucket, account
 
 
 def verify(plan, frameworks_dir=ROOT.parent.parent / "frameworks", mode="sbom-adoption", *,
-           account_id, region, bucket_name=None):
+           account_id, region, bucket_name):
     if mode not in {"sbom-adoption", "noop"}:
         raise PlanError(f"unsupported verification mode: {mode}")
     if plan.get("errored") or plan.get("complete") is False or plan.get("deferred_changes"):
@@ -257,14 +257,15 @@ def verify(plan, frameworks_dir=ROOT.parent.parent / "frameworks", mode="sbom-ad
     frameworks = catalog(frameworks_dir)
     if not re.fullmatch(r'[0-9]{12}', account_id) or not re.fullmatch(r'[a-z]{2}(?:-[a-z]+)+-[0-9]+', region):
         raise PlanError('external account and region are required')
-    bucket = bucket_name or default_bucket_name(account_id, region)
+    bucket = bucket_name
     legacy_bucket = legacy_bucket_name(account_id, region)
-    if not re.fullmatch(r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', bucket) or bucket == legacy_bucket:
-        raise PlanError('invalid expected bucket name')
+    if (not isinstance(bucket, str) or not re.fullmatch(BUCKET_NAME_PATTERN, bucket) or '--' in bucket
+            or bucket == legacy_bucket):
+        raise PlanError('the exact analytics bucket name is required')
     variables = plan.get('variables', {})
     if (variables.get('aws_region', {}).get('value') != region
             or variables.get('expected_bucket_owner', {}).get('value') != account_id
-            or variables.get('sbom_bucket_name', {}).get('value') not in (None, bucket)):
+            or variables.get('sbom_bucket_name', {}).get('value') != bucket):
         raise PlanError('plan variables differ from external identity')
     calls = plan.get('configuration', {}).get('root_module', {}).get('module_calls', {})
     if (set(calls) - {LEGACY_MODULE} != {'ecr', S3_MODULE} or calls[S3_MODULE].get('source') != '../s3'
@@ -378,7 +379,7 @@ def main(argv=None):
     parser.add_argument('--mode', choices=('sbom-adoption', 'noop'), default='sbom-adoption')
     parser.add_argument('--account-id', required=True)
     parser.add_argument('--region', required=True)
-    parser.add_argument('--bucket-name')
+    parser.add_argument('--bucket-name', required=True)
     args = parser.parse_args(argv)
     try:
         result = verify(json.loads(args.plan.read_text(), object_pairs_hook=unique_json),

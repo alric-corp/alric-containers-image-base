@@ -1,7 +1,7 @@
 {
   "protocol_version": 1,
   "destination": {
-    "bucket": "alric-distroless-sbom-analytics-712107929769-us-east-1",
+    "bucket": "distroless-sbom-analytics",
     "prefix": "sbom-analytics/v1",
     "region": "us-east-1",
     "expected_bucket_owner": "712107929769"
@@ -9,7 +9,7 @@
   "expected_role_arn": "arn:aws:iam::712107929769:role/itau-github-repo-factory-distroless-v1",
   "expected_role_id": "AROA2LTHQWCU2N3H2OE3L",
   "batch_id": "2da32bfa4c095802a7ae7c84cdbf421cedd5529412b2b6b55f0e51119302bd5a",
-  "snapshot_id": "0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b",
+  "snapshot_id": "8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507",
   "payload_objects": 19,
   "payload_bytes": 630308,
   "golden": {

@@ -28,8 +28,8 @@ from tests.unit.pipeline.analytics.test_athena_run import Athena, Glue, HISTORIC
 ROOT = Path(__file__).resolve().parents[4]
 FIXTURES = ROOT / 'tests/fixtures/sbom-analytics'
 ACTIVE = ROOT / 'policies/analytics/s3.json'
-BUCKET = 'alric-distroless-sbom-analytics-712107929769-us-east-1'
-SNAPSHOT = '0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b'
+BUCKET = 'distroless-sbom-analytics'
+SNAPSHOT = '8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507'
 AUTH = 'TEST_ONLY owner authorization'
 
 
@@ -205,7 +205,12 @@ class ActiveWorkflowTests(unittest.TestCase):
         self.assertIn("assert os.environ['ROUND_ID'] != 'lab-sbom-athena-v1'", intent)
         self.assertIn("assert not os.environ['RESUME_SOURCE'] and os.environ['FRESH_ROUND'] == 'false'", intent)
         restore = next(s for s in steps if s['name'] == 'Restore exact prior journal before AWS authentication')
-        self.assertIn('--snapshot-id ' + SNAPSHOT, restore['run'])
+        # Snapshot and repository are explicit inputs: versioned configuration and the running repository.
+        self.assertIn("print(s3_run.config('policies/analytics/s3.json')['snapshot_id'])", restore['run'])
+        self.assertIn('--snapshot-id "$SNAPSHOT_ID"', restore['run'])
+        self.assertIn('--repository "$GITHUB_REPOSITORY" --repository-id "$GITHUB_REPOSITORY_ID"', restore['run'])
+        for name in ('sbom-analytics-athena.yml', 'sbom-analytics-s3.yml'):
+            self.assertNotRegex((ROOT / '.github/workflows' / name).read_text(), r'[0-9a-f]{64}|[0-9]{12}|us-east-1')
         execution = next(s for s in steps if 'Recover S3 snapshot' in s['name'])['run']
         self.assertIn('--fresh-round)', execution)
         self.assertIn('policies/analytics/athena.json', execution)
@@ -225,6 +230,10 @@ class ActiveWorkflowTests(unittest.TestCase):
 MARK = re.compile(r'(?i)(?<![a-z])(lab|poc)(?![a-z])')
 # Explicit exceptions: real historical identifiers and the existing deployment identity.
 HISTORICAL_ALLOWED = ("'lab-sbom-athena-v1'", '`lab-sbom-athena-v1`')
+# Personal/organization names never identify the product; the only active
+# occurrence is the job guard naming the repository that runs this deployment.
+PERSONAL = re.compile(r'(?i)alric')
+DEPLOYMENT_GUARD = "github.repository == 'alric-corp/alric-containers-image-base'"
 
 
 class ActiveNamingTests(unittest.TestCase):
@@ -274,6 +283,28 @@ class ActiveNamingTests(unittest.TestCase):
                      BUCKET + '/' + NAMESPACE['results_prefix']):
             self.assertIn(name, encoded)
         self.assertEqual(self.marks(encoded), [])
+
+    def test_product_identity_carries_no_personal_or_organization_name(self):
+        config = json.loads((ROOT / 'policies/pipeline/config.json').read_text())
+        self.assertEqual(config['analytics'], {'bucket': BUCKET})
+        self.assertEqual(json.loads(ACTIVE.read_text())['destination']['bucket'], config['analytics']['bucket'])
+        analytics = ROOT / 'scripts/pipeline/analytics'
+        paths = [*analytics.glob('*.py'), *(ROOT / 'sql/sbom-analytics').rglob('*.sql'), ACTIVE,
+                 *(ROOT / 'docs/examples/sbom-analytics').glob('*.json'), FIXTURES / 'frozen-plan-v1.json',
+                 *(ROOT / 'infra/s3').glob('*.tf'), ROOT / 'docs/sbom-analytics-operations.md',
+                 ROOT / 'requirements-sbom-analytics.txt']
+        for path in paths:
+            with self.subTest(path=path.relative_to(ROOT)):
+                self.assertEqual([l for l in path.read_text().splitlines() if PERSONAL.search(l)], [])
+        for name in ('sbom-analytics-s3.yml', 'sbom-analytics-athena.yml'):
+            lines = [l for l in (ROOT / '.github/workflows' / name).read_text().splitlines() if PERSONAL.search(l)]
+            self.assertTrue(lines and all(DEPLOYMENT_GUARD in l and l.count('alric') == 2 for l in lines), name)
+        policy = json.loads((ROOT / 'policies/aws/factory-distroless-v1.inline-policy.json').read_text())
+        product = [s for s in policy['Statement'] if s['Sid'].startswith(('SbomSnapshot', 'SbomAnalytics'))]
+        self.assertEqual(len(product), 5)
+        self.assertFalse(PERSONAL.search(json.dumps(product)))
+        bucket = next(s for s in policy['Statement'] if s['Sid'] == 'ExactSbomAnalyticsBucket')
+        self.assertIn('arn:aws:s3:::' + BUCKET, bucket['Resource'])
 
     def test_entry_documentation_and_module_names(self):
         index = (ROOT / 'docs/README.md').read_text()

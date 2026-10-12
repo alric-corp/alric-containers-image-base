@@ -25,7 +25,7 @@ def observed_region(response):
     return 'us-east-1' if raw is None else raw
 
 
-def preflight(plan, account, region, *, aws=None, bucket_name=None):
+def preflight(plan, account, region, *, bucket_name, aws=None):
     scope = verify(plan, account_id=account, region=region, bucket_name=bucket_name)
     bucket = scope['bucket_name']
     aws = aws or AwsCli(region)
@@ -51,10 +51,12 @@ def preflight(plan, account, region, *, aws=None, bucket_name=None):
                 region=region, bucket_state='ALREADY_MANAGED', cloud_writes=0)
 
 
-def readback(outputs, account, region, *, aws=None):
+def readback(outputs, account, region, *, bucket_name, aws=None):
     values = {k: v.get('value') for k, v in outputs.items()}
     bucket = values.get('bucket_name')
     validate_inputs(bucket, region, account)
+    if bucket != bucket_name:
+        raise BackendError('OUTPUT_IDENTITY_MISMATCH', 'Output bucket differs from the configured analytics bucket')
     expected_config = {'protocol_version': 1, 'destination': {
         'bucket': bucket, 'prefix': DATA_PREFIX, 'region': region,
         'expected_bucket_owner': account}}
@@ -132,7 +134,7 @@ def main(argv=None):
     p.add_argument('--outputs', type=Path)
     p.add_argument('--account-id', required=True)
     p.add_argument('--region', required=True)
-    p.add_argument('--bucket-name')
+    p.add_argument('--bucket-name', required=True)
     p.add_argument('--report', type=Path, required=True)
     args = p.parse_args(argv)
     try:
@@ -140,7 +142,8 @@ def main(argv=None):
             result = preflight(json.loads(args.plan.read_text(), object_pairs_hook=unique_json),
                                args.account_id, args.region, bucket_name=args.bucket_name)
         else:
-            result = readback(json.loads(args.outputs.read_text(), object_pairs_hook=unique_json), args.account_id, args.region)
+            result = readback(json.loads(args.outputs.read_text(), object_pairs_hook=unique_json), args.account_id,
+                              args.region, bucket_name=args.bucket_name)
     except (BackendError, OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
         result = dict(status='FAIL', code=getattr(exc, 'code', 'INVALID_CONTRACT'),
                       stage=args.operation, account_id=args.account_id, region=args.region,

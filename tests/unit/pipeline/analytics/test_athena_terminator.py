@@ -192,7 +192,8 @@ class AthenaSixEntryResumeTests(unittest.TestCase):
         self.events = []
 
     def restore(self):
-        return r.restore(self.github, self.resume, self.reports, self.originals, executor_sha=self.executor_sha,
+        return r.restore(self.github, self.resume, self.reports, self.originals, origin=support.HISTORICAL_ORIGIN,
+                         executor_sha=self.executor_sha,
                          authorized_sha256=PLAN_HASH, authorization_reference=AUTH,
                          round_id='lab-sbom-athena-v1', snapshot_id=self.expected['snapshot_id'])
 

@@ -16,10 +16,11 @@ SPEC.loader.exec_module(verifier)
 
 ACCOUNT = "123456789012"
 REGION = "us-east-1"
-BUCKET = f"alric-distroless-sbom-analytics-{ACCOUNT}-{REGION}"
+BUCKET = "distroless-sbom-analytics"
 
 
 def verify(plan, **kwargs):
+    kwargs.setdefault('bucket_name', BUCKET)
     return verifier.verify(plan, account_id=ACCOUNT, region=REGION, **kwargs)
 
 
@@ -84,7 +85,8 @@ def valid_plan(action="create"):
         configuration.append(config)
     children.append({"address": "module.sbom_analytics", "resources": resources})
     return {
-        "variables": {"aws_region": {"value": REGION}, "expected_bucket_owner": {"value": ACCOUNT}},
+        "variables": {"aws_region": {"value": REGION}, "expected_bucket_owner": {"value": ACCOUNT},
+                      "sbom_bucket_name": {"value": BUCKET}},
         "configuration": {"root_module": {"module_calls": {"ecr": {"source": "terraform-aws-modules/ecr/aws", "version_constraint": "3.2.0"}, "sbom_analytics": {"source": "../s3", "module": {"resources": configuration}}}}},
         "prior_state": {"values": {"root_module": {"child_modules": copy.deepcopy(children) if action == "no-op" else ecr_prior}}},
         "format_version": "1.2", "complete": True, "errored": False,

@@ -5,10 +5,14 @@ no backend, provider configuration, credential/profile selection or independent
 lockfile. Plan/apply execute only from `infra/ecr`; the existing ECR addresses,
 S3 backend, key, default workspace and native locking remain unchanged.
 
-The personal AWS deployment supplies account `712107929769` and region `us-east-1`.
-The root derives `alric-distroless-sbom-analytics-712107929769-us-east-1` from that expected
-account/region; `sbom_bucket_name` can select an explicitly authorized name.
-The child has no account or region literals. Its caller account precondition
+Every deployment supplies the account, region and exact bucket name explicitly;
+nothing is derived from the account, region or organization. The versioned
+deployment configuration (`policies/pipeline/config.json`) provides
+`analytics.bucket`, passed as the required root variable `sbom_bucket_name`
+and to `verify_plan.py`/`readback.py` as `--bucket-name`. The personal AWS
+deployment uses account `712107929769`, region `us-east-1` and the bucket
+`distroless-sbom-analytics`; another installation sets its own name there.
+The child has no account, region or bucket literals. Its caller account precondition
 compares the provider session with the independently supplied expected owner.
 The backend remains in `us-east-2`; its region is not the bucket/provider region.
 
@@ -64,7 +68,7 @@ native lock, default workspace, exact execution root and all catalog ECR address
 before planning. It rejects an empty/wrong state or unexpected managed address.
 The temporary JSON state stays private and is excluded from workflow artifacts.
 
-`verify_plan.py --mode sbom-adoption --account-id ... --region ...` requires all
+`verify_plan.py --mode sbom-adoption --account-id ... --region ... --bucket-name ...` requires all
 catalog ECR resources to be no-op and the six S3 resources to be create or no-op.
 It checks both plan graphs, names, tags, provider identity, region, policies and
 security values. Changes, replacements, imports, moves and extra/missing resources

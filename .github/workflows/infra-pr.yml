@@ -121,12 +121,14 @@ jobs:
         run: |
           set -euo pipefail
           terraform -chdir=infra/ecr plan -input=false -no-color -lock-timeout=5m \
-            -var="aws_region=$AWS_REGION" -var="expected_bucket_owner=$AWS_ACCOUNT_ID" -out="$RUNNER_TEMP/infra.tfplan"
+            -var="aws_region=$AWS_REGION" -var="expected_bucket_owner=$AWS_ACCOUNT_ID" \
+            -var="sbom_bucket_name=$SBOM_BUCKET_NAME" -out="$RUNNER_TEMP/infra.tfplan"
           terraform -chdir=infra/ecr show -no-color "$RUNNER_TEMP/infra.tfplan" > "$RUNNER_TEMP/infra-plan.txt"
           terraform -chdir=infra/ecr show -json "$RUNNER_TEMP/infra.tfplan" > "$RUNNER_TEMP/infra-plan.json"
-          python3 infra/ecr/verify_plan.py "$RUNNER_TEMP/infra-plan.json" --mode sbom-adoption --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION"
+          python3 infra/ecr/verify_plan.py "$RUNNER_TEMP/infra-plan.json" --mode sbom-adoption \
+            --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION" --bucket-name "$SBOM_BUCKET_NAME"
           python3 infra/s3/readback.py preflight --plan "$RUNNER_TEMP/infra-plan.json" \
-            --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION" \
+            --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION" --bucket-name "$SBOM_BUCKET_NAME" \
             --report "$RUNNER_TEMP/s3-preflight.json"
       - name: Publish plan summary
         run: |

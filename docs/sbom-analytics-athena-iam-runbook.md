@@ -107,7 +107,7 @@ aws glue create-database --region us-east-1 \
 ```
 
 Read both back. Require SQL engine 3, workgroup enabled, enforced output
-`s3://alric-distroless-sbom-analytics-712107929769-us-east-1/query-results/sbom-analytics-v1/`, SSE_S3,
+`s3://distroless-sbom-analytics/query-results/sbom-analytics-v1/`, SSE_S3,
 expected results bucket owner 712107929769, 104857600-byte cutoff, metrics=false
 and RequesterPays=false. Record external ownership (personal AWS deployment), timestamp, administrator,
 authorization and responses. If only one creation succeeds, preserve the partial

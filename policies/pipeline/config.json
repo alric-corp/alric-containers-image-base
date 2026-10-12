@@ -27,5 +27,8 @@
   },
   "factory": {
     "operational_role_name": "itau-github-repo-factory-distroless-v1"
+  },
+  "analytics": {
+    "bucket": "distroless-sbom-analytics"
   }
 }

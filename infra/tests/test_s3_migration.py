@@ -139,7 +139,7 @@ class TransitionTests(unittest.TestCase):
         plan['configuration']['root_module']['module_calls']['sbom']['source'] = '../s3'
         with self.assertRaisesRegex(verifier.PlanError, 'root/module source'):
             verify(plan)
-        with self.assertRaisesRegex(verifier.PlanError, 'invalid expected bucket name'):
+        with self.assertRaisesRegex(verifier.PlanError, 'exact analytics bucket name'):
             verify(transition_plan(), bucket_name=LEGACY)
 
     def test_ecr_and_unrelated_resources_still_block_the_transition(self):
@@ -225,6 +225,82 @@ class StateAndSourceTests(unittest.TestCase):
         self.assertIn('module "sbom" {\n  source                = "../s3-legacy"\n'
                       '  bucket_name           = "alric-distroless-sbom-${var.expected_bucket_owner}-${var.aws_region}"', root)
         self.assertEqual(set(re.findall(r'resource "([^"]+)"', legacy)), set(LEGACY_ADDRESSES.values()))
+
+
+class SharedInfrastructureTests(unittest.TestCase):
+    """In every phase, only the analytics buckets may change; shared identity never enters the plan."""
+
+    PHASES = {
+        'adoption': lambda: valid_plan('create'),
+        'transition': transition_plan,
+        'transition-applied': lambda: transition_plan('no-op', applied=True),
+        'removal': removal_plan,
+    }
+    SHARED = (
+        ('aws_iam_role', 'aws_iam_role.central'),
+        ('aws_iam_role_policy', 'aws_iam_role_policy.factory_distroless_v1'),
+        ('aws_iam_openid_connect_provider', 'aws_iam_openid_connect_provider.github'),
+        ('aws_s3_bucket', 'aws_s3_bucket.terraform_state'),
+        ('aws_s3_object', 'aws_s3_object.terraform_state_lock'),
+        ('aws_s3_bucket', 'module.sbom_analytics.aws_s3_bucket.state'),
+        ('aws_ecr_repository', 'aws_ecr_repository.unmanaged'),
+    )
+
+    def test_iam_oidc_state_and_unknown_resources_are_rejected_in_every_phase(self):
+        for phase, build in self.PHASES.items():
+            self.assertTrue(verify(build())['phase'] in ('steady', 'transition', 'removal'))
+            for kind, address in self.SHARED:
+                for action in (['create'], ['update'], ['delete'], ['no-op'], ['delete', 'create']):
+                    plan = build()
+                    plan['resource_changes'].append({'address': address, 'mode': 'managed', 'type': kind,
+                                                     'provider_name': verifier.PROVIDER,
+                                                     'change': {'actions': action, 'before': {}, 'after': {}}})
+                    with self.subTest(phase=phase, address=address, action=action), \
+                            self.assertRaisesRegex(verifier.PlanError, 'graph mismatch'):
+                        verify(plan)
+
+    def test_shared_resources_in_prior_state_block_every_phase(self):
+        for phase, build in self.PHASES.items():
+            for kind, address in self.SHARED[:5]:
+                plan = build()
+                plan['prior_state']['values']['root_module'].setdefault('resources', []).append(
+                    {'address': address, 'mode': 'managed', 'type': kind, 'provider_name': verifier.PROVIDER,
+                     'values': {}})
+                with self.subTest(phase=phase, address=address), self.assertRaises(verifier.PlanError):
+                    verify(plan)
+
+    def test_every_ecr_change_is_rejected_in_every_phase(self):
+        for phase, build in self.PHASES.items():
+            ecr = [c['address'] for c in build()['resource_changes'] if c['address'].startswith('module.ecr[')]
+            self.assertTrue(ecr)
+            for address in (ecr[0], ecr[1], ecr[2]):
+                for action in (['update'], ['delete'], ['create'], ['delete', 'create'], ['create', 'delete']):
+                    plan = build()
+                    change(plan, address)['actions'] = action
+                    with self.subTest(phase=phase, address=address, action=action), \
+                            self.assertRaisesRegex(verifier.PlanError, 'disallowed actions'):
+                        verify(plan)
+            plan = build()
+            change(plan, ecr[0])['after'] = dict(change(plan, ecr[0])['after'] or {}, image_tag_mutability='MUTABLE')
+            with self.subTest(phase=phase, drift='no-op with different values'), self.assertRaises(verifier.PlanError):
+                verify(plan)
+
+    def test_backend_variables_and_module_sources_cannot_be_redirected(self):
+        for phase, build in self.PHASES.items():
+            for name, value in (('aws_region', 'us-east-2'), ('expected_bucket_owner', '999999999999'),
+                                ('sbom_bucket_name', '712107929769-alric-containers-image-base-tfstate')):
+                plan = build(); plan['variables'][name] = {'value': value}
+                with self.subTest(phase=phase, variable=name), self.assertRaisesRegex(verifier.PlanError, 'external identity'):
+                    verify(plan)
+            for module, source in (('ecr', '../ecr-fork'), ('sbom_analytics', '../s3-legacy'), ('iam', '../iam')):
+                plan = build()
+                calls = plan['configuration']['root_module']['module_calls']
+                if module in calls:
+                    calls[module]['source'] = source
+                else:
+                    calls[module] = {'source': source, 'module': {'resources': []}}
+                with self.subTest(phase=phase, module=module), self.assertRaises(verifier.PlanError):
+                    verify(plan)
 
 
 if __name__ == '__main__':

@@ -23,8 +23,9 @@ LEGACY_ADDRESSES = {f'module.{LEGACY_MODULE}.{kind}.sbom': kind for kind in RESO
 LEGACY_SNAPSHOTS_PREFIX = 'sbom-analytics/poc-v1/snapshots/'
 
 
-def bucket_name(account, region):
-    return f'alric-distroless-sbom-analytics-{account}-{region}'
+# The active bucket name is never derived: each deployment supplies it exactly
+# (policies/pipeline/config.json -> analytics.bucket -> var.sbom_bucket_name).
+BUCKET_NAME_PATTERN = r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]'
 
 
 def legacy_bucket_name(account, region):

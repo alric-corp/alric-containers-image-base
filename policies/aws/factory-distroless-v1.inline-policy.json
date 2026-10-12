@@ -96,7 +96,7 @@
         "s3:PutBucketTagging"
       ],
       "Resource": [
-        "arn:aws:s3:::alric-distroless-sbom-analytics-712107929769-us-east-1",
+        "arn:aws:s3:::distroless-sbom-analytics",
         "arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1"
       ],
       "Condition": {
@@ -194,7 +194,7 @@
         "s3:GetObjectVersion"
       ],
       "Resource": [
-        "arn:aws:s3:::alric-distroless-sbom-analytics-712107929769-us-east-1/sbom-analytics/v1/snapshots/*"
+        "arn:aws:s3:::distroless-sbom-analytics/sbom-analytics/v1/snapshots/*"
       ],
       "Condition": {
         "StringEquals": {
@@ -209,7 +209,7 @@
         "s3:ListBucket"
       ],
       "Resource": [
-        "arn:aws:s3:::alric-distroless-sbom-analytics-712107929769-us-east-1"
+        "arn:aws:s3:::distroless-sbom-analytics"
       ],
       "Condition": {
         "StringEquals": {
@@ -248,11 +248,11 @@
       "Resource": [
         "arn:aws:glue:us-east-1:712107929769:catalog",
         "arn:aws:glue:us-east-1:712107929769:database/sbom_analytics",
-        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b_sbom_observation_rows_v1",
-        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b_sbom_package_rows_v1",
-        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b_sbom_observations_v1",
-        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b_sbom_packages_v1",
-        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b_sbom_inventory_v1"
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507_sbom_observation_rows_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507_sbom_package_rows_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507_sbom_observations_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507_sbom_packages_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507_sbom_inventory_v1"
       ]
     },
     {
@@ -263,7 +263,7 @@
         "s3:PutObject"
       ],
       "Resource": [
-        "arn:aws:s3:::alric-distroless-sbom-analytics-712107929769-us-east-1/query-results/sbom-analytics-v1/*"
+        "arn:aws:s3:::distroless-sbom-analytics/query-results/sbom-analytics-v1/*"
       ]
     },
     {

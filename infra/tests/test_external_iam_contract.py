@@ -84,7 +84,7 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         cls.statements = {item["Sid"]: item for item in cls.policy["Statement"]}
         cls.backend = "arn:aws:s3:::" + cls.config["infra"]["backend"]["bucket"]
         cls.state = cls.backend + "/" + cls.config["infra"]["backend"]["key"]
-        cls.analytics = f"arn:aws:s3:::alric-distroless-sbom-analytics-{cls.lab['aws_account_id']}-{cls.lab['aws_region']}"
+        cls.analytics = "arn:aws:s3:::" + cls.config["analytics"]["bucket"]
         # Legacy (historical) bucket: granted only while the migration is transitional.
         cls.legacy = f"arn:aws:s3:::alric-distroless-sbom-{cls.lab['aws_account_id']}-{cls.lab['aws_region']}"
         cls.analytics_config = json.loads((ROOT / "policies/analytics/s3.json").read_text())
@@ -218,7 +218,7 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
     def test_athena_complement_keeps_exact_workgroup_catalog_and_five_objects(self):
         # The five names follow the active snapshot in the versioned analytics configuration.
         snapshot = self.analytics_config["snapshot_id"]
-        self.assertEqual(snapshot, "0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b")
+        self.assertEqual(snapshot, "8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507")
         self.assertEqual(self.analytics_config["destination"]["bucket"], self.analytics.split(":::")[1])
         glue = "arn:aws:glue:us-east-1:712107929769:"
         self.assert_statement("SbomAnalyticsAthenaWorkgroup", ATHENA_ACTIONS,
@@ -235,8 +235,10 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         self.assertEqual(self.policy["Statement"][11:14], delta["Statement"])
         self.assertFalse({"athena:CreateWorkGroup", "glue:CreateDatabase", "glue:UpdateTable"} & {
             a for s in self.policy["Statement"] for a in s["Action"]})
-        self.assertNotIn("poc", json.dumps(self.policy["Statement"][9:14]))
-        self.assertEqual(len(json.dumps(self.policy, separators=(",", ":"))), 6887)
+        for mark in ("poc", "lab", "alric"):
+            self.assertNotIn(mark, json.dumps(self.policy["Statement"][9:14]).lower())
+        self.assertEqual(self.analytics, "arn:aws:s3:::distroless-sbom-analytics")
+        self.assertEqual(len(json.dumps(self.policy, separators=(",", ":"))), 6771)
 
     def test_transitional_removal_is_limited_to_the_replaced_bucket(self):
         region = {"StringEquals": {"aws:RequestedRegion": "us-east-1"}}

@@ -10,7 +10,7 @@
       "SelectedEngineVersion": "Athena engine version 3"
     },
     "ResultConfiguration": {
-      "OutputLocation": "s3://alric-distroless-sbom-analytics-712107929769-us-east-1/query-results/sbom-analytics-v1/",
+      "OutputLocation": "s3://distroless-sbom-analytics/query-results/sbom-analytics-v1/",
       "ExpectedBucketOwner": "712107929769",
       "EncryptionConfiguration": {
         "EncryptionOption": "SSE_S3"

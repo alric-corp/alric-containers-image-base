@@ -148,6 +148,23 @@ class PlanTests(unittest.TestCase):
             with self.assertRaisesRegex(verifier.PlanError, 'external identity'):
                 verify(p)
 
+    def test_bucket_name_is_exactly_the_configured_one_never_derived(self):
+        derived = f'alric-distroless-sbom-analytics-{ACCOUNT}-{REGION}'
+        for value in (None, derived, 'distroless-sbom-analytics-copy'):
+            p = valid_plan()
+            if value is None:
+                del p['variables']['sbom_bucket_name']
+            else:
+                p['variables']['sbom_bucket_name']['value'] = value
+            with self.subTest(value=value), self.assertRaisesRegex(verifier.PlanError, 'external identity'):
+                verify(p)
+        for value in (None, '', 'Distroless_SBOM', 'bad--name', derived):
+            with self.subTest(expected=value), self.assertRaises(verifier.PlanError):
+                verify(valid_plan(), bucket_name=value)
+        p = valid_plan(); s3_change(p, 'aws_s3_bucket')['change']['after']['bucket'] = derived
+        with self.assertRaises(verifier.PlanError):
+            verify(p)
+
     def test_extra_acl_resource_and_wrong_s3_address_rejected(self):
         for address in ('module.sbom_analytics.aws_s3_bucket_acl.sbom', 'module.other.aws_s3_bucket.sbom'):
             p = valid_plan(); s3_change(p, 'aws_s3_bucket')['address'] = address
@@ -207,7 +224,11 @@ class StructureTests(unittest.TestCase):
                 if 'configure-aws-credentials' not in str(job):
                     continue
                 self.assertIn('verify_state.py', s)
-                self.assertIn('--mode sbom-adoption --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION"', s)
+                self.assertIn('--mode sbom-adoption \\\n  --account-id "$AWS_ACCOUNT_ID" --region "$AWS_REGION" '
+                              '--bucket-name "$SBOM_BUCKET_NAME"', s)
+                self.assertIn('-var="sbom_bucket_name=$SBOM_BUCKET_NAME"', s)
+                self.assertIn('readback.py preflight', s)
+                self.assertEqual(s.count('--bucket-name "$SBOM_BUCKET_NAME"'), s.count('--account-id "$AWS_ACCOUNT_ID" --region'))
                 self.assertNotIn('--allow-noop', s)
                 self.assertIn('infra/s3/readback.py preflight', s)
                 self.assertNotIn('-target', s)
@@ -282,7 +303,7 @@ class FakeAws:
 
 class ReadbackTests(unittest.TestCase):
     def test_all_controls_are_observed_and_null_is_us_east_1(self):
-        f = FakeAws(); r = readback.readback(outputs(), ACCOUNT, REGION, aws=f)
+        f = FakeAws(); r = readback.readback(outputs(), ACCOUNT, REGION, bucket_name=BUCKET, aws=f)
         self.assertEqual(r['status'], 'BUCKET_CONFIGURATION_VERIFIED')
         self.assertEqual(len(r['checks']), 10)
         self.assertEqual(r['object_operations'], 'NOT_PROVEN')
@@ -290,7 +311,7 @@ class ReadbackTests(unittest.TestCase):
 
     def test_unsafe_control_retains_prior_checks_and_reports_failure(self):
         f = FakeAws(); f.responses['get-bucket-versioning'] = {'Status': 'Suspended'}
-        r = readback.readback(outputs(), ACCOUNT, REGION, aws=f)
+        r = readback.readback(outputs(), ACCOUNT, REGION, bucket_name=BUCKET, aws=f)
         self.assertEqual(r['status'], 'FAIL')
         self.assertEqual(len(r['checks']), 10)
         self.assertEqual(next(c for c in r['checks'] if c['check'] == 'versioning')['result'], 'FAIL')
@@ -302,58 +323,68 @@ class ReadbackTests(unittest.TestCase):
             ('get-bucket-encryption', {'ServerSideEncryptionConfiguration': {'Rules': [{'ApplyServerSideEncryptionByDefault': {'SSEAlgorithm': 'aws:kms'}}]}}),
             ('get-bucket-ownership-controls', {'OwnershipControls': {'Rules': [{'ObjectOwnership': 'ObjectWriter'}]}})):
             f = FakeAws(); f.responses[operation] = response
-            self.assertEqual(readback.readback(outputs(), ACCOUNT, REGION, aws=f)['status'], 'FAIL')
+            self.assertEqual(readback.readback(outputs(), ACCOUNT, REGION, bucket_name=BUCKET, aws=f)['status'], 'FAIL')
 
     def test_access_denied_is_not_absence_of_lifecycle_or_object_lock(self):
         f = FakeAws(); f.errors['get-bucket-lifecycle-configuration'] = 'AccessDenied'
-        self.assertEqual(readback.readback(outputs(), ACCOUNT, REGION, aws=f)['status'], 'FAIL')
+        self.assertEqual(readback.readback(outputs(), ACCOUNT, REGION, bucket_name=BUCKET, aws=f)['status'], 'FAIL')
 
     def test_false_or_missing_region_cannot_be_normalized_to_us_east_1(self):
         for value in ({'LocationConstraint': False}, {}):
             f = FakeAws(); f.responses['get-bucket-location'] = value
-            self.assertEqual(readback.readback(outputs(), ACCOUNT, REGION, aws=f)['status'], 'FAIL')
+            self.assertEqual(readback.readback(outputs(), ACCOUNT, REGION, bucket_name=BUCKET, aws=f)['status'], 'FAIL')
 
     def test_actual_lifecycle_or_object_lock_is_outside_contract(self):
         for op in ('get-bucket-lifecycle-configuration', 'get-object-lock-configuration'):
             f = FakeAws(); f.errors.pop(op); f.responses[op] = {'Enabled': True}
-            self.assertEqual(readback.readback(outputs(), ACCOUNT, REGION, aws=f)['status'], 'FAIL')
+            self.assertEqual(readback.readback(outputs(), ACCOUNT, REGION, bucket_name=BUCKET, aws=f)['status'], 'FAIL')
 
     def test_wrong_external_account_stops_before_any_s3_call(self):
         f = FakeAws(); f.responses['get-caller-identity']['Account'] = '999999999999'
         with self.assertRaises(readback.BackendError):
-            readback.readback(outputs(), ACCOUNT, REGION, aws=f)
+            readback.readback(outputs(), ACCOUNT, REGION, bucket_name=BUCKET, aws=f)
         self.assertEqual(len(f.calls), 1)
 
     def test_invalid_output_does_not_contact_aws(self):
         f = FakeAws(); o = outputs(); o['ingestion_config']['value']['destination']['prefix'] = 'query-results/sbom-analytics-v1'
         with self.assertRaises(readback.BackendError):
-            readback.readback(o, ACCOUNT, REGION, aws=f)
+            readback.readback(o, ACCOUNT, REGION, bucket_name=BUCKET, aws=f)
         self.assertEqual(f.calls, [])
 
     def test_absent_create_bucket_is_only_observed_not_created(self):
         f = FakeAws(); f.errors['head-bucket'] = '404'
-        r = readback.preflight(valid_plan(), ACCOUNT, REGION, aws=f)
+        r = readback.preflight(valid_plan(), ACCOUNT, REGION, bucket_name=BUCKET, aws=f)
         self.assertEqual(r['bucket_state'], 'ABSENT_AT_PREFLIGHT')
         self.assertEqual(len(f.calls), 2)
 
     def test_existing_name_and_denied_probe_cannot_authorize_creation(self):
         f = FakeAws()
         with self.assertRaises(readback.BackendError) as e:
-            readback.preflight(valid_plan(), ACCOUNT, REGION, aws=f)
+            readback.preflight(valid_plan(), ACCOUNT, REGION, bucket_name=BUCKET, aws=f)
         self.assertEqual(e.exception.code, 'BUCKET_NAME_COLLISION')
         f.errors['head-bucket'] = '403'
         with self.assertRaises(readback.BackendError) as e:
-            readback.preflight(valid_plan(), ACCOUNT, REGION, aws=f)
+            readback.preflight(valid_plan(), ACCOUNT, REGION, bucket_name=BUCKET, aws=f)
         self.assertEqual(e.exception.code, '403')
 
     def test_managed_bucket_cannot_be_recreated_when_absent(self):
         f = FakeAws(); f.errors['head-bucket'] = '404'
         with self.assertRaises(readback.BackendError) as e:
-            readback.preflight(valid_plan('no-op'), ACCOUNT, REGION, aws=f)
+            readback.preflight(valid_plan('no-op'), ACCOUNT, REGION, bucket_name=BUCKET, aws=f)
         self.assertEqual(e.exception.code, 'MANAGED_BUCKET_MISSING')
 
+    def test_outputs_for_another_bucket_are_rejected_before_aws(self):
+        f = FakeAws()
+        with self.assertRaises(readback.BackendError) as raised:
+            readback.readback(outputs(), ACCOUNT, REGION, bucket_name='another-analytics-bucket', aws=f)
+        self.assertEqual(raised.exception.code, 'OUTPUT_IDENTITY_MISMATCH')
+        self.assertEqual(f.calls, [])
+        with self.assertRaisesRegex(ValueError, 'external identity'):
+            readback.preflight(valid_plan(), ACCOUNT, REGION, bucket_name='another-analytics-bucket', aws=f)
+        self.assertEqual(f.calls, [])
+
     def test_noop_managed_bucket_is_read_only(self):
-        r = readback.preflight(valid_plan('no-op'), ACCOUNT, REGION, aws=FakeAws())
+        r = readback.preflight(valid_plan('no-op'), ACCOUNT, REGION, bucket_name=BUCKET, aws=FakeAws())
         self.assertEqual(r['bucket_state'], 'ALREADY_MANAGED')
 
     def test_failure_json_is_written_before_nonzero_exit(self):
@@ -361,7 +392,8 @@ class ReadbackTests(unittest.TestCase):
             p = Path(d); (p/'outputs.json').write_text(json.dumps(outputs()))
             f = FakeAws(); f.errors['get-bucket-versioning'] = 'AccessDenied'
             with patch.object(readback, 'AwsCli', return_value=f), redirect_stdout(io.StringIO()):
-                code = readback.main(['readback', '--outputs', str(p/'outputs.json'), '--account-id', ACCOUNT, '--region', REGION, '--report', str(p/'report.json')])
+                code = readback.main(['readback', '--outputs', str(p/'outputs.json'), '--account-id', ACCOUNT, '--region', REGION,
+                                      '--bucket-name', BUCKET, '--report', str(p/'report.json')])
             self.assertEqual(code, 1)
             self.assertEqual(json.loads((p/'report.json').read_text())['status'], 'FAIL')
 
