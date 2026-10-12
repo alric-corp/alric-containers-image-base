@@ -97,4 +97,5 @@ Registros SPDX não são APKs instalados. As consultas `01`–`05` estão em `sq
   - as páginas de resultado ficam no journal antes da validação;
   - nunca há rerun cego, e falha ou resultado incerto se reconcilia por leitura.
 - **Credenciais:** só a role central por OIDC. Não há fallback administrativo para SQL.
+- **Identidade de execução:** cada job confere repositório, owner, IDs, branch e evento nativos contra `policies/pipeline/config.json` antes de qualquer credencial ([detalhes](workflow-identity-portability.md)).
 - **Evidências** de cada execução ficam fora do Git, em diretório privado.

@@ -320,5 +320,124 @@ class ConfigurationTests(unittest.TestCase):
         self.assertNotIn('build_image', commands)
 
 
+class ExecutionIdentityTests(unittest.TestCase):
+    """Native GitHub identity versus the versioned authorized identity, offline."""
+    IDENTITY = {
+        'GITHUB_REPOSITORY': 'alric-corp/alric-containers-image-base',
+        'GITHUB_REPOSITORY_OWNER': 'alric-corp',
+        'GITHUB_REPOSITORY_ID': '1360616627',
+        'GITHUB_REPOSITORY_OWNER_ID': '178685987',
+        'GITHUB_REF': 'refs/heads/develop',
+        'GITHUB_EVENT_NAME': 'workflow_dispatch',
+    }
+    STRICT = ['--scope', 'DEV', '--authorized-event', 'workflow_dispatch']
+
+    def setUp(self):
+        self.cfg = config.configuration()
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.directory = Path(temp.name)
+        # Offline by construction: any network use fails the test.
+        guard = patch('socket.socket', side_effect=AssertionError('network is not allowed'))
+        guard.start()
+        self.addCleanup(guard.stop)
+
+    def run_cli(self, identity, argv=None):
+        env = dict(identity, GITHUB_ENV=str(self.directory / 'env'), GITHUB_OUTPUT=str(self.directory / 'output'))
+        with patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(io.StringIO()):
+            config.main(argv or self.STRICT)
+        return (self.directory / 'output').read_text()
+
+    def assert_fails_closed(self, identity, message='execution identity', argv=None):
+        with self.assertRaisesRegex(ValueError, message):
+            self.run_cli(identity, argv)
+        # Nothing reaches the job: no role ARN, account or region for OIDC.
+        self.assertFalse((self.directory / 'env').exists())
+        self.assertFalse((self.directory / 'output').exists())
+
+    def test_authorized_identity_comes_from_repository_and_subject_prefix(self):
+        self.assertEqual(config.authorized_identity(self.cfg), {
+            key: value for key, value in self.IDENTITY.items() if key != 'GITHUB_EVENT_NAME'})
+
+    def test_correct_repository_and_ids_emit_the_operational_identity(self):
+        output = self.run_cli(self.IDENTITY)
+        self.assertIn('EXECUTION_IDENTITY=VERIFIED\n', output)
+        self.assertIn('AWS_ROLE_ARN=arn:aws:iam::712107929769:role/itau-github-repo-factory-distroless-v1\n', output)
+        self.assertEqual(config.verify_execution_identity(self.cfg, self.IDENTITY, ['workflow_dispatch']), self.IDENTITY)
+
+    def test_same_repository_name_with_another_repository_id(self):
+        for value in ('1360616628', '1', '178685987'):
+            with self.subTest(value=value):
+                self.assert_fails_closed(dict(self.IDENTITY, GITHUB_REPOSITORY_ID=value), 'GITHUB_REPOSITORY_ID differs')
+
+    def test_owner_id_differs(self):
+        for value in ('178685988', '1360616627'):
+            with self.subTest(value=value):
+                self.assert_fails_closed(dict(self.IDENTITY, GITHUB_REPOSITORY_OWNER_ID=value),
+                                         'GITHUB_REPOSITORY_OWNER_ID differs')
+
+    def test_owner_name_differs(self):
+        self.assert_fails_closed(dict(self.IDENTITY, GITHUB_REPOSITORY_OWNER='other-org'), 'GITHUB_REPOSITORY_OWNER differs')
+        # A fork or transfer keeps the repository name but not the owner.
+        self.assert_fails_closed(dict(self.IDENTITY, GITHUB_REPOSITORY='other-org/alric-containers-image-base',
+                                      GITHUB_REPOSITORY_OWNER='other-org'), 'differs')
+
+    def test_self_consistent_foreign_identity_is_not_authorized(self):
+        # Matching other context fields is not enough; the versioned identity decides.
+        self.assert_fails_closed({
+            'GITHUB_REPOSITORY': 'fork-owner/alric-containers-image-base', 'GITHUB_REPOSITORY_OWNER': 'fork-owner',
+            'GITHUB_REPOSITORY_ID': '999', 'GITHUB_REPOSITORY_OWNER_ID': '888',
+            'GITHUB_REF': 'refs/heads/develop', 'GITHUB_EVENT_NAME': 'workflow_dispatch'}, 'differs')
+
+    def test_missing_or_invalid_identifiers(self):
+        for key in self.IDENTITY:
+            identity = dict(self.IDENTITY)
+            del identity[key]
+            with self.subTest(missing=key):
+                self.assert_fails_closed(identity, 'missing or invalid')
+        for key, values in (
+                ('GITHUB_REPOSITORY_ID', ('', ' ', '0', '01360616627', '1360616627 ', 'abc', '1360616627\nX=1', '9' * 20)),
+                ('GITHUB_REPOSITORY_OWNER_ID', ('', '0', '-178685987', '178685987.0', '1e9')),
+                ('GITHUB_REPOSITORY', ('', 'alric-corp/alric-containers-image-base\nAWS_ROLE_ARN=x', 'ALRIC-CORP/alric-containers-image-base')),
+                ('GITHUB_REPOSITORY_OWNER', ('', 'alric-corp ', 'Alric-Corp')),
+                ('GITHUB_REF', ('', 'develop', 'refs/heads/develop\n'))):
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    self.assert_fails_closed(dict(self.IDENTITY, **{key: value}))
+
+    def test_other_branches_and_refs(self):
+        for ref in ('refs/heads/main', 'refs/heads/develop-x', 'refs/heads/feature/develop', 'refs/tags/develop',
+                    'refs/pull/132/merge'):
+            with self.subTest(ref=ref):
+                self.assert_fails_closed(dict(self.IDENTITY, GITHUB_REF=ref), 'GITHUB_REF differs')
+
+    def test_pull_request_and_unauthorized_events(self):
+        for event in ('pull_request', 'pull_request_target', 'push', 'schedule', 'workflow_run', 'repository_dispatch'):
+            with self.subTest(event=event):
+                self.assert_fails_closed(dict(self.IDENTITY, GITHUB_EVENT_NAME=event))
+        # pull_request can never be declared authorized.
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.run_cli(self.IDENTITY, ['--scope', 'DEV', '--authorized-event', 'pull_request'])
+        with self.assertRaisesRegex(ValueError, 'unsupported authorized event'):
+            config.verify_execution_identity(self.cfg, self.IDENTITY, [])
+
+    def test_identity_follows_the_versioned_configuration_without_code_changes(self):
+        cfg = copy.deepcopy(self.cfg)
+        cfg.update(repository='target-org/target-repository', subject_prefix='repo:target-org@42/target-repository@4242')
+        target = dict(self.IDENTITY, GITHUB_REPOSITORY='target-org/target-repository', GITHUB_REPOSITORY_OWNER='target-org',
+                      GITHUB_REPOSITORY_ID='4242', GITHUB_REPOSITORY_OWNER_ID='42')
+        self.assertEqual(config.verify_execution_identity(cfg, target, ['workflow_dispatch']), target)
+        with self.assertRaisesRegex(ValueError, 'differs'):
+            config.verify_execution_identity(cfg, self.IDENTITY, ['workflow_dispatch'])
+
+    def test_without_the_strict_flag_other_scopes_keep_their_semantics(self):
+        for scope in ('DEV', 'HOM', 'INFRA_APPLY'):
+            with self.subTest(scope=scope):
+                output = self.run_cli({'GITHUB_REPOSITORY': self.IDENTITY['GITHUB_REPOSITORY'],
+                                       'GITHUB_EVENT_NAME': 'schedule'}, ['--scope', scope])
+                self.assertNotIn('EXECUTION_IDENTITY', output)
+                (self.directory / 'env').unlink(); (self.directory / 'output').unlink()
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -85,6 +85,13 @@ deployment (`distroless-sbom-analytics`). Os escopos `INFRA_*` o emitem como
 (`sbom_bucket_name`) e aos verificadores (`--bucket-name`). O nome nunca é
 derivado de conta, região ou organização; outra instalação define o seu.
 
+Com `--authorized-event`, o carregador compara a identidade observada (os
+contextos nativos `github.repository`, `repository_owner`, `repository_id`,
+`repository_owner_id`, `ref` e `event_name`) com a autorizada: `repository`,
+os IDs de `subject_prefix` e `branch`. Qualquer divergência falha antes de
+gravar outputs, ou seja, antes de OIDC. Detalhes em
+[identidade de execução](../../docs/workflow-identity-portability.md).
+
 O carregador `scripts.pipeline.governance.configuration` valida os arquivos
 antes de emitir outputs/env para o job. Arquivo ausente, chave duplicada, campo
 desconhecido, booleano textual, conta inválida, framework fora do catálogo ou

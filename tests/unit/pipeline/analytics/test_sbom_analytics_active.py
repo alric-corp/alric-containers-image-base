@@ -215,7 +215,7 @@ class ActiveWorkflowTests(unittest.TestCase):
         self.assertEqual(inputs['round_id']['default'], 'sbom-analytics-v1-r1')
         self.assertEqual((inputs['fresh_round']['type'], inputs['fresh_round']['default']), ('boolean', 'false'))
         steps = value['jobs']['athena']['steps']
-        intent = steps[2]['run']
+        intent = next(s for s in steps if s['name'] == 'Check intent and install pinned isolated dependencies')['run']
         self.assertIn("assert os.environ['ROUND_ID'] != 'lab-sbom-athena-v1'", intent)
         self.assertIn("assert not os.environ['RESUME_SOURCE'] and os.environ['FRESH_ROUND'] == 'false'", intent)
         restore = next(s for s in steps if s['name'] == 'Restore exact prior journal before AWS authentication')
@@ -229,6 +229,67 @@ class ActiveWorkflowTests(unittest.TestCase):
         self.assertIn('--fresh-round)', execution)
         self.assertIn('policies/analytics/athena.json', execution)
         self.assertEqual(json.loads(ACTIVE.read_text())['snapshot_id'], SNAPSHOT)
+
+    IDENTITY_STEP = dict(name='Verify native execution identity before any credential', id='pipeline',
+                         run='python3 -B -m scripts.pipeline.governance.configuration --scope DEV '
+                             '--authorized-event workflow_dispatch')
+    PRIVILEGED = re.compile(r'configure-aws-credentials|GH_TOKEN|gh api|athena_restore|s3_run (publish|recover)|'
+                            r'athena_run|aws ')
+
+    def jobs(self):
+        for name in ('sbom-analytics-s3.yml', 'sbom-analytics-athena.yml'):
+            for job_name, job in self.load(name)['jobs'].items():
+                yield f'{name}:{job_name}', job
+
+    def test_identity_is_verified_natively_before_any_privileged_step(self):
+        seen = 0
+        for label, job in self.jobs():
+            with self.subTest(job=label):
+                seen += 1
+                # Branch and event guards stay; the repository is no longer a literal.
+                self.assertEqual(job['if'], "github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'")
+                steps = job['steps']
+                self.assertTrue(steps[0]['uses'].startswith('actions/checkout@'))
+                self.assertEqual({k: steps[1].get(k) for k in ('name', 'id', 'run')}, self.IDENTITY_STEP)
+                self.assertFalse({'if', 'continue-on-error', 'env'} & set(steps[1]))
+                self.assertEqual(sum(s.get('id') == 'pipeline' for s in steps), 1)
+                for index, step in enumerate(steps):
+                    text = json.dumps(step)
+                    if not self.PRIVILEGED.search(text):
+                        continue
+                    # Every privileged step comes after the identity check and only runs on success.
+                    self.assertGreater(index, 1, step['name'])
+                    self.assertNotRegex(step.get('if', ''), r'always\(\)|failure\(\)|cancelled\(\)', step['name'])
+                    self.assertNotIn('continue-on-error', step)
+                oidc = [s for s in steps if s.get('uses', '').startswith('aws-actions/configure-aws-credentials@')]
+                self.assertEqual(len(oidc), 1)
+                self.assertEqual(oidc[0]['with']['role-to-assume'], '${{ steps.pipeline.outputs.AWS_ROLE_ARN }}')
+        self.assertEqual(seen, 3)
+
+    def test_identity_failure_never_reaches_aws_authentication(self):
+        from scripts.pipeline.governance import configuration
+        env = {'GITHUB_REPOSITORY': 'alric-corp/alric-containers-image-base', 'GITHUB_REPOSITORY_OWNER': 'alric-corp',
+               'GITHUB_REPOSITORY_ID': '1', 'GITHUB_REPOSITORY_OWNER_ID': '178685987',
+               'GITHUB_REF': 'refs/heads/develop', 'GITHUB_EVENT_NAME': 'workflow_dispatch'}
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / 'output'
+            env['GITHUB_OUTPUT'] = str(output)
+            with patch.dict('os.environ', env, clear=True), patch('socket.socket', side_effect=AssertionError('network')), \
+                    patch.object(a, 'aws_clients') as athena_clients, patch.object(s3_run, 'aws_clients') as s3_clients, \
+                    self.assertRaises(ValueError):
+                configuration.main(self.IDENTITY_STEP['run'].split()[4:])
+            # The step fails: no AWS_ROLE_ARN output exists for the OIDC step, and no client was built.
+            self.assertFalse(output.exists())
+            athena_clients.assert_not_called(); s3_clients.assert_not_called()
+
+    def test_no_repository_variables_secrets_or_dynamic_action_references(self):
+        for name in ('sbom-analytics-s3.yml', 'sbom-analytics-athena.yml'):
+            text = (ROOT / '.github/workflows' / name).read_text()
+            with self.subTest(workflow=name):
+                self.assertNotIn('vars.', text)
+                self.assertNotIn('secrets.', text)
+                for ref in re.findall(r'uses:\s*(\S+)', text):
+                    self.assertRegex(ref, r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}$')
 
     def test_no_active_input_names_the_historical_namespace(self):
         # infra/s3-legacy and the LEGACY_* contract constants name the replaced bucket on purpose.
@@ -244,10 +305,10 @@ class ActiveWorkflowTests(unittest.TestCase):
 MARK = re.compile(r'(?i)(?<![a-z])(lab|poc)(?![a-z])')
 # Explicit exceptions: real historical identifiers and the existing deployment identity.
 HISTORICAL_ALLOWED = ("'lab-sbom-athena-v1'", '`lab-sbom-athena-v1`')
-# Personal/organization names never identify the product; the only active
-# occurrence is the job guard naming the repository that runs this deployment.
+# Personal/organization names never identify the product. The workflows learn
+# their repository from the native github.* contexts and compare it with
+# policies/pipeline/config.json; no repository literal remains in them.
 PERSONAL = re.compile(r'(?i)alric')
-DEPLOYMENT_GUARD = "github.repository == 'alric-corp/alric-containers-image-base'"
 
 
 class ActiveNamingTests(unittest.TestCase):
@@ -311,8 +372,9 @@ class ActiveNamingTests(unittest.TestCase):
             with self.subTest(path=path.relative_to(ROOT)):
                 self.assertEqual([l for l in path.read_text().splitlines() if PERSONAL.search(l)], [])
         for name in ('sbom-analytics-s3.yml', 'sbom-analytics-athena.yml'):
-            lines = [l for l in (ROOT / '.github/workflows' / name).read_text().splitlines() if PERSONAL.search(l)]
-            self.assertTrue(lines and all(DEPLOYMENT_GUARD in l and l.count('alric') == 2 for l in lines), name)
+            text = (ROOT / '.github/workflows' / name).read_text()
+            self.assertEqual([l for l in text.splitlines() if PERSONAL.search(l)], [], name)
+            self.assertNotRegex(text, r"github\.repository(_owner|_id|_owner_id)?\s*==|1360616627|178685987")
         policy = json.loads((ROOT / 'policies/aws/factory-distroless-v1.inline-policy.json').read_text())
         product = [s for s in policy['Statement'] if s['Sid'].startswith(('SbomSnapshot', 'SbomAnalytics'))]
         self.assertEqual(len(product), 5)
