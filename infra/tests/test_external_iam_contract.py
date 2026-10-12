@@ -85,7 +85,7 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         cls.backend = "arn:aws:s3:::" + cls.config["infra"]["backend"]["bucket"]
         cls.state = cls.backend + "/" + cls.config["infra"]["backend"]["key"]
         cls.analytics = f"arn:aws:s3:::alric-distroless-sbom-analytics-{cls.lab['aws_account_id']}-{cls.lab['aws_region']}"
-        # Replaced POC bucket: only while the LAB reset is transitional.
+        # Legacy (historical) bucket: granted only while the migration is transitional.
         cls.legacy = f"arn:aws:s3:::alric-distroless-sbom-{cls.lab['aws_account_id']}-{cls.lab['aws_region']}"
         cls.analytics_config = json.loads((ROOT / "policies/analytics/s3.json").read_text())
         cls.release = "arn:aws:s3:::" + cls.config["DEV"]["release_bucket"]
@@ -209,7 +209,7 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         self.assertFalse(any("*" in action for action in actions))
         deletion = {(action, resource) for item in self.policy["Statement"]
                     for action in item["Action"] for resource in item["Resource"] if "Delete" in action}
-        # Besides the state lock, deletion reaches ONLY the replaced POC bucket, and only while transitional.
+        # Besides the state lock, deletion reaches ONLY the legacy bucket, and only while transitional.
         self.assertEqual(deletion, {("s3:DeleteObject", self.state + ".tflock"),
                                     ("s3:DeleteBucketPolicy", self.legacy), ("s3:DeleteBucket", self.legacy),
                                     ("s3:DeleteObjectVersion", self.legacy + "/*")})
@@ -231,7 +231,7 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         ])
         self.assert_statement("SbomAnalyticsQueryResults", {"s3:GetObject", "s3:PutObject"},
                               [self.analytics + "/query-results/sbom-analytics-v1/*"])
-        delta = json.loads((ROOT / "docs/examples/sbom-lab/athena-policy-delta.json").read_text())
+        delta = json.loads((ROOT / "docs/examples/sbom-analytics/athena-policy-delta.json").read_text())
         self.assertEqual(self.policy["Statement"][11:14], delta["Statement"])
         self.assertFalse({"athena:CreateWorkGroup", "glue:CreateDatabase", "glue:UpdateTable"} & {
             a for s in self.policy["Statement"] for a in s["Action"]})

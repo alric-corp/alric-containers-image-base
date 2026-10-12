@@ -3,7 +3,9 @@
 > **Histórico (POC encerrada em 2026-10-11).** Este documento registra a POC
 > S3 + Athena e suas provas (runs `38031426478` e `38117928589`). Os nomes `poc`
 > abaixo não estão mais ativos. Nomes, workflows e operação atuais:
-> [Distroless SBOM Analytics — reset do LAB](sbom-analytics-lab-reset.md).
+> [Distroless SBOM Analytics — operação](sbom-analytics-operations.md); transição:
+> [migração](sbom-analytics-migration.md). Caminhos de arquivos citados abaixo
+> refletem o layout histórico.
 
 The manual executor calls the merged normalizer/snapshot/S3 APIs. It does not add
 implicit upload to the offline planner. `sbom-analytics-lab-poc.yml` uses only

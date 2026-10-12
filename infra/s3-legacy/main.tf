@@ -1,4 +1,5 @@
-# TRANSITIONAL ONLY: the POC bucket replaced by the 2026-10-11 LAB reset.
+# LEGACY, TRANSITIONAL ONLY: the historical bucket replaced by Distroless SBOM
+# Analytics (authorized 2026-10-11), with its real historical prefix.
 # Same resources and bucket policy as before. Destruction is enabled here so
 # the next revision can remove the bucket, versions included, after the new
 # analytics proof. The active module (../s3) keeps prevent_destroy = true and

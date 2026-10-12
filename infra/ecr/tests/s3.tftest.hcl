@@ -70,7 +70,7 @@ run "reject_invalid_bucket" {
   expect_failures = [var.bucket_name]
 }
 
-# Transitional child for the replaced POC bucket: same controls and policy,
+# Transitional legacy child for the replaced historical bucket: same controls and policy,
 # only destruction enabled. The active child above keeps both safeguards.
 run "transitional_legacy_bucket" {
   command = plan

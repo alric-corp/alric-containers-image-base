@@ -12,10 +12,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from scripts.pipeline.analytics import athena_poc as a, athena_restore as r, parquet
+from scripts.pipeline.analytics import athena_run as a, athena_restore as r, parquet
 from scripts.pipeline.analytics.ingestion_types import IngestionError
 from scripts.pipeline.analytics.spdx import canonical, sha256
-from tests.unit.pipeline.analytics import test_athena_poc as support
+from tests.unit.pipeline.analytics import test_athena_run as support
 from tests.unit.pipeline.analytics.test_athena_restore import archive, GitHub
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -168,10 +168,10 @@ class SixEntryGitHub(GitHub):
 
 
 class AthenaSixEntryResumeTests(unittest.TestCase):
-    setUpClass = classmethod(support.AthenaPocTests.setUpClass.__func__)
+    setUpClass = classmethod(support.AthenaRunTests.setUpClass.__func__)
 
     def setUp(self):
-        support.AthenaPocTests.setUp(self)
+        support.AthenaRunTests.setUp(self)
         self.raw = (PRIOR / 'sql-plan.json').read_bytes()
         self.original = (FIXTURE / 'execution-journal.json').read_bytes()
         self.source_sha, self.executor_sha = '20ee0051018eefe94001b9639fd819c4b898ded7', 'a' * 40

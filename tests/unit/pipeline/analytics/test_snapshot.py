@@ -34,7 +34,7 @@ class SnapshotTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix='sbom-snapshot-')
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        self.target = Destination('analytics-example', 'offline/poc', 'test-region-1', '000000000000')
+        self.target = Destination('analytics-example', 'offline/analytics', 'test-region-1', '000000000000')
         self.client = FakeS3()
         self.adapter = S3Adapter(self.client, self.target)
         self.batch = Path(export(prepare(synthetic(self.root / 'input')), self.root / 'output')['path'])
@@ -256,7 +256,7 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn(key, self.client.current)  # No orphan deletion.
 
     def test_wrong_bucket_prefix_or_owner_is_rejected_before_transport(self):
-        for destination in (replace(self.target, bucket='different-bucket'), replace(self.target, prefix='another/poc'),
+        for destination in (replace(self.target, bucket='different-bucket'), replace(self.target, prefix='another/analytics'),
                             replace(self.target, expected_bucket_owner='111111111111')):
             with self.assertRaisesRegex(IngestionError, 'DESTINATION_NOT_AUTHORIZED'):
                 publish_snapshot(replace(self.plan, destination=destination), self.adapter)
@@ -283,7 +283,7 @@ class SnapshotTests(unittest.TestCase):
             self.assertIn("LOCATION '"+uri+"'",result['ddl'])
             prefix = uri.removeprefix('s3://'+self.target.bucket+'/')
             self.assertEqual([k for b,k in self.client.current if k.startswith(prefix)], [prefix+'part-00000.parquet'])
-        # Exact active names only: the closed POC namespace, look-alikes and injections are rejected.
+        # Exact active names only: the historical namespace, look-alikes and injections are rejected.
         for database, prefix in (('production','sbom_snapshot'),('sbom_analytics','active'),('sbom_analytics','sbom_snapshot;drop'),
                                  ('poc_distroless_sbom','poc_snapshot'),('sbom_analytics','poc_snapshot'),
                                  ('poc_distroless_sbom','sbom_snapshot'),('sbom_analytics2','sbom_snapshot'),

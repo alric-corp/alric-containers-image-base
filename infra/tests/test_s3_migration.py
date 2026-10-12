@@ -1,4 +1,4 @@
-"""Replacement of the POC analytics bucket: transition, removal and their limits.
+"""Replacement of the legacy analytics bucket: transition, removal and their limits.
 
 Offline Terraform JSON only. The phase is derived from the reviewed
 configuration and prior state; there is no flag that widens the boundary.

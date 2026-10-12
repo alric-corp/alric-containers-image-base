@@ -5,22 +5,25 @@ no backend, provider configuration, credential/profile selection or independent
 lockfile. Plan/apply execute only from `infra/ecr`; the existing ECR addresses,
 S3 backend, key, default workspace and native locking remain unchanged.
 
-The LAB configuration supplies account `712107929769` and region `us-east-1`.
+The personal AWS deployment supplies account `712107929769` and region `us-east-1`.
 The root derives `alric-distroless-sbom-analytics-712107929769-us-east-1` from that expected
 account/region; `sbom_bucket_name` can select an explicitly authorized name.
-The child has no LAB account or region literals. Its caller account precondition
+The child has no account or region literals. Its caller account precondition
 compares the provider session with the independently supplied expected owner.
 The backend remains in `us-east-2`; its region is not the bucket/provider region.
 
-## Replaced POC bucket (transitional)
+## Legacy bucket (transitional)
 
-The LAB reset of 2026-10-11 replaced `alric-distroless-sbom-712107929769-us-east-1`
-(prefixes `sbom-analytics/poc-v1`, `query-results/poc-v1/`). While transitional
-it stays at its original addresses `module.sbom.<type>.sbom`, served by
-`infra/s3-legacy`, whose only difference is `force_destroy = true` and
-`prevent_destroy = false`. The next revision removes that block and Terraform
-destroys the old bucket with every version. This module never relaxes either
-safeguard. See [the reset runbook](../../docs/sbom-analytics-lab-reset.md).
+Distroless SBOM Analytics replaced the historical bucket
+`alric-distroless-sbom-712107929769-us-east-1` (historical prefixes
+`sbom-analytics/poc-v1`, `query-results/poc-v1/`). While the migration is
+transitional it stays at its real state addresses `module.sbom.<type>.sbom`,
+served by `infra/s3-legacy`, whose only difference is `force_destroy = true`
+and `prevent_destroy = false`. The next revision removes that block and
+Terraform destroys exactly that bucket, every version included. This module
+never relaxes either safeguard. See the
+[migration procedure](../../docs/sbom-analytics-migration.md); operation is in
+[Distroless SBOM Analytics operations](../../docs/sbom-analytics-operations.md).
 
 ## Six resources and controls
 
@@ -116,7 +119,7 @@ Outputs do not authorize upload, catalog creation or Athena queries.
 
 ## External prerequisites observed before first use
 
-Read-only LAB inspection on 2026-10-09 found the bucket absent, the existing
+Read-only inspection of the personal deployment on 2026-10-09 found the bucket absent, the existing
 backend/key/default workspace in use, and the Infra apply inline policy scoped
 to the backend bucket only. No S3 permissions for the new bucket were granted.
 The Environment still permits `main` only while dispatch requires `develop`;
@@ -162,6 +165,6 @@ No expiration period is decided. This delivery creates no Athena/Glue resources,
 automatic ingestion, promotion changes, monitoring platform or productive HGC-04.
 
 Corporate adoption retains dynamically generated backend/provider and its
-authorized provider mirror/ARC/UP2 configuration. Do not copy LAB identifiers or
+authorized provider mirror/ARC/UP2 configuration. Do not copy personal-deployment identifiers or
 replace FROZEN files; only the child and authorized root linkage are candidates
 for a separately reviewed port. No corporate account is applied here.

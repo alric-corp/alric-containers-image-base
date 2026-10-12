@@ -1,8 +1,8 @@
-"""Active Distroless SBOM Analytics namespace after the LAB reset (2026-10-11).
+"""Active Distroless SBOM Analytics names, contracts and entry points.
 
-Offline, service-shaped fakes only. The closed POC round stays replayable
-through its own fixtures (test_athena_poc.historical_profile); nothing here
-accepts its names, prefix, bucket or round.
+Offline, service-shaped fakes only. The closed historical round stays
+replayable through its own fixtures (test_athena_run.historical_profile);
+nothing here accepts its names, prefix, bucket or round.
 """
 from contextlib import redirect_stdout
 import io
@@ -16,21 +16,21 @@ from unittest.mock import patch
 
 import yaml
 
-from scripts.pipeline.analytics import athena_poc as a, poc
+from scripts.pipeline.analytics import athena_run as a, s3_run
 from scripts.pipeline.analytics.catalog import catalog_plan, NAMESPACE
 from scripts.pipeline.analytics.ingestion_types import IngestionError
 from scripts.pipeline.analytics.s3_ingestion import S3Adapter
 from scripts.pipeline.analytics.snapshot import load_plan, publish_snapshot, read_snapshot, recover_snapshot
 from scripts.pipeline.analytics.spdx import canonical, sha256
 from tests.unit.pipeline.analytics.s3_support import FakeS3, ServiceError
-from tests.unit.pipeline.analytics.test_athena_poc import Athena, Glue, HISTORICAL
+from tests.unit.pipeline.analytics.test_athena_run import Athena, Glue, HISTORICAL
 
 ROOT = Path(__file__).resolve().parents[4]
 FIXTURES = ROOT / 'tests/fixtures/sbom-analytics'
 ACTIVE = ROOT / 'policies/analytics/s3.json'
 BUCKET = 'alric-distroless-sbom-analytics-712107929769-us-east-1'
 SNAPSHOT = '0b0c4ed7014746c8facdd779debd435e6a3fb160c5619f7d60751dabf5e4ec0b'
-AUTH = 'TEST_ONLY reset authorization'
+AUTH = 'TEST_ONLY owner authorization'
 
 
 def athena_settings(**changes):
@@ -46,8 +46,8 @@ class ActiveProfileTests(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.tmp.cleanup)
-        cls.expected = poc.config(ACTIVE)
-        poc.unpack(FIXTURES / 'frozen-plan-v1.zip', FIXTURES / 'frozen-plan-v1.json',
+        cls.expected = s3_run.config(ACTIVE)
+        s3_run.unpack(FIXTURES / 'frozen-plan-v1.zip', FIXTURES / 'frozen-plan-v1.json',
                    Path(cls.tmp.name) / 'plan', cls.expected)
         cls.payload = load_plan(Path(cls.tmp.name) / 'plan')
 
@@ -61,7 +61,7 @@ class ActiveProfileTests(unittest.TestCase):
         self.settings = athena_settings(manifest_sha256=fingerprint['manifest_sha256'],
                                         manifest_version_id=fingerprint['manifest_version_id'])
         recover_snapshot(self.adapter, SNAPSHOT, self.root / 'local')
-        self.inspection = poc.inspect_recovered(self.root / 'local', self.expected)
+        self.inspection = s3_run.inspect_recovered(self.root / 'local', self.expected)
         self.proposal = catalog_plan(self.adapter, SNAPSHOT, database='sbom_analytics', table_prefix='sbom_snapshot')
         self.raw = a.build_plan(self.proposal, self.inspection, self.root / 'local', self.expected, self.settings,
                                 'sbom-analytics-v1-r1')
@@ -74,7 +74,7 @@ class ActiveProfileTests(unittest.TestCase):
             UserId=self.expected['expected_role_id'] + ':' + self.session))
 
     def test_active_destination_new_snapshot_and_unchanged_corpus(self):
-        historical = poc.config(HISTORICAL / 'lab-poc.json')
+        historical = s3_run.config(HISTORICAL / 'lab-poc.json')
         self.assertEqual(self.expected['destination'], dict(bucket=BUCKET, prefix='sbom-analytics/v1', region='us-east-1',
                                                             expected_bucket_owner='712107929769'))
         self.assertEqual(self.expected['snapshot_id'], SNAPSHOT)
@@ -84,8 +84,8 @@ class ActiveProfileTests(unittest.TestCase):
         self.assertNotRegex(ACTIVE.read_text(), 'poc')
 
     def test_retargeted_plan_keeps_every_frozen_spdx_and_parquet_byte(self):
-        historical = poc.config(HISTORICAL / 'lab-poc.json')
-        poc.unpack(FIXTURES / 'lab-frozen-plan.zip', FIXTURES / 'lab-frozen-plan.json', self.root / 'old', historical)
+        historical = s3_run.config(HISTORICAL / 'lab-poc.json')
+        s3_run.unpack(FIXTURES / 'lab-frozen-plan.zip', FIXTURES / 'lab-frozen-plan.json', self.root / 'old', historical)
         old = load_plan(self.root / 'old')
         self.assertEqual([(o.path, o.body) for o in old.objects], [(o.path, o.body) for o in self.payload.objects])
         self.assertEqual(old.batch_id, self.payload.batch_id)
@@ -185,11 +185,11 @@ class ActiveWorkflowTests(unittest.TestCase):
         return yaml.load((ROOT / '.github/workflows' / name).read_text(), Loader=yaml.BaseLoader)
 
     def test_active_workflows_are_named_for_the_product_and_never_overlap(self):
-        for name, title in (('sbom-analytics-s3.yml', 'Distroless SBOM Analytics - S3 snapshot'),
+        for name, title in (('sbom-analytics-s3.yml', 'Distroless SBOM Analytics - S3 Snapshot'),
                             ('sbom-analytics-athena.yml', 'Distroless SBOM Analytics - Athena')):
             value, text = self.load(name), (ROOT / '.github/workflows' / name).read_text()
             self.assertEqual(value['name'], title)
-            self.assertEqual(value['concurrency'], {'group': 'sbom-analytics-lab', 'cancel-in-progress': 'false'})
+            self.assertEqual(value['concurrency'], {'group': 'distroless-sbom-analytics', 'cancel-in-progress': 'false'})
             self.assertNotRegex(text, r'lab-poc|sbom-poc-|poc_distroless|poc-v1|lab-frozen-plan')
             self.assertEqual(set(value['on']), {'workflow_dispatch'})
         for old in ('sbom-analytics-lab-poc.yml', 'sbom-analytics-athena-lab-poc.yml'):
@@ -211,13 +211,87 @@ class ActiveWorkflowTests(unittest.TestCase):
         self.assertIn('policies/analytics/athena.json', execution)
         self.assertEqual(json.loads(ACTIVE.read_text())['snapshot_id'], SNAPSHOT)
 
-    def test_no_active_input_names_the_closed_poc_namespace(self):
+    def test_no_active_input_names_the_historical_namespace(self):
         # infra/s3-legacy and the LEGACY_* contract constants name the replaced bucket on purpose.
         paths = [*(ROOT / 'policies/analytics').glob('*.json'), *(ROOT / 'infra/s3').glob('*.tf'),
-                 *(ROOT / 'docs/examples/sbom-lab').glob('*.json'), ROOT / 'scripts/pipeline/analytics/catalog.py']
+                 *(ROOT / 'docs/examples/sbom-analytics').glob('*.json'), ROOT / 'scripts/pipeline/analytics/catalog.py']
         for path in paths:
             with self.subTest(path=path.relative_to(ROOT)):
                 self.assertNotRegex(path.read_text(), r'poc_distroless|poc_snapshot|poc-v1')
+
+
+
+# A whole word "lab"/"poc" (not "available"), in any case.
+MARK = re.compile(r'(?i)(?<![a-z])(lab|poc)(?![a-z])')
+# Explicit exceptions: real historical identifiers and the existing deployment identity.
+HISTORICAL_ALLOWED = ("'lab-sbom-athena-v1'", '`lab-sbom-athena-v1`')
+
+
+class ActiveNamingTests(unittest.TestCase):
+    """Product identifiers carry no historical mark; history keeps its real names elsewhere."""
+
+    def marks(self, text, allowed=HISTORICAL_ALLOWED):
+        return [line for line in text.splitlines() if MARK.search(line) and not any(a in line for a in allowed)]
+
+    def test_workflow_names_groups_steps_and_artifacts(self):
+        for name in ('sbom-analytics-s3.yml', 'sbom-analytics-athena.yml'):
+            with self.subTest(workflow=name):
+                text = (ROOT / '.github/workflows' / name).read_text()
+                self.assertEqual(self.marks(text), [])
+                self.assertIn('requirements-sbom-analytics.txt', text)
+        # The single allowed mark is the refusal of the real closed round.
+        athena = (ROOT / '.github/workflows/sbom-analytics-athena.yml').read_text()
+        self.assertEqual([l.strip() for l in athena.splitlines() if MARK.search(l)],
+                         ["assert os.environ['ROUND_ID'] != 'lab-sbom-athena-v1', 'The closed historical round is never reopened'"])
+
+    def test_aws_creation_examples_and_active_configuration(self):
+        examples = sorted((ROOT / 'docs/examples/sbom-analytics').glob('*.json'))
+        self.assertEqual([p.name for p in examples], ['athena-policy-delta.json', 'athena-workgroup-proposal.json',
+                                                     'glue-database-proposal.json'])
+        self.assertFalse((ROOT / 'docs/examples/sbom-lab').exists())
+        workgroup = json.loads((ROOT / 'docs/examples/sbom-analytics/athena-workgroup-proposal.json').read_text())
+        database = json.loads((ROOT / 'docs/examples/sbom-analytics/glue-database-proposal.json').read_text())
+        self.assertTrue(workgroup['Description'].startswith('Distroless SBOM Analytics'))
+        self.assertTrue(database['DatabaseInput']['Description'].startswith('Distroless SBOM Analytics'))
+        self.assertEqual((workgroup['Name'], database['DatabaseInput']['Name']), (NAMESPACE['workgroup'], NAMESPACE['database']))
+        self.assertEqual(workgroup['Configuration']['ResultConfiguration']['OutputLocation'],
+                         's3://' + BUCKET + '/' + NAMESPACE['results_prefix'])
+        for path in [*examples, *(ROOT / 'policies/analytics').glob('*.json'), ACTIVE,
+                     FIXTURES / 'frozen-plan-v1.json', ROOT / 'scripts/pipeline/analytics/catalog.py',
+                     *(ROOT / 'infra/s3').glob('*.tf'), ROOT / 'infra/s3/README.md']:
+            with self.subTest(path=path.relative_to(ROOT)):
+                allowed = HISTORICAL_ALLOWED + (('sbom-analytics/poc-v1', 'query-results/poc-v1/')
+                                               if path.name == 'README.md' else ())
+                self.assertEqual(self.marks(path.read_text(), allowed), [])
+
+    def test_iam_names_match_the_catalog_and_examples(self):
+        policy = json.loads((ROOT / 'policies/aws/factory-distroless-v1.inline-policy.json').read_text())
+        self.assertFalse([s['Sid'] for s in policy['Statement'] if MARK.search(s['Sid'])])
+        delta = json.loads((ROOT / 'docs/examples/sbom-analytics/athena-policy-delta.json').read_text())
+        self.assertEqual(delta['Statement'], policy['Statement'][11:14])
+        encoded = json.dumps(delta)
+        for name in (NAMESPACE['workgroup'], 'database/' + NAMESPACE['database'], NAMESPACE['table_prefix'] + '_' + SNAPSHOT,
+                     BUCKET + '/' + NAMESPACE['results_prefix']):
+            self.assertIn(name, encoded)
+        self.assertEqual(self.marks(encoded), [])
+
+    def test_entry_documentation_and_module_names(self):
+        index = (ROOT / 'docs/README.md').read_text()
+        rows = [l for l in index.splitlines() if 'sbom-analytics-' in l]
+        self.assertEqual(len(rows), 2)
+        self.assertIn('(sbom-analytics-operations.md)', rows[0]); self.assertIn('(sbom-analytics-migration.md)', rows[1])
+        self.assertEqual(self.marks('\n'.join(rows)), [])
+        operations = (ROOT / 'docs/sbom-analytics-operations.md').read_text()
+        self.assertEqual(operations.splitlines()[0], '# Distroless SBOM Analytics — operação')
+        # lab-image-base-infra is the existing deployment Environment (OIDC subject), not a product name.
+        self.assertEqual(self.marks(operations, HISTORICAL_ALLOWED + ('`lab-image-base-infra`',)), [])
+        self.assertFalse((ROOT / 'docs/sbom-analytics-lab-reset.md').exists())
+        analytics = ROOT / 'scripts/pipeline/analytics'
+        self.assertEqual(sorted(p.name for p in analytics.glob('*.py') if MARK.search(p.stem.replace('_', ' '))), [])
+        self.assertFalse(list(ROOT.glob('requirements-*poc*.txt')))
+        for module in ('s3_run.py', 'athena_run.py', 'athena_restore.py', 'catalog.py'):
+            text = (analytics / module).read_text()
+            self.assertNotRegex(text, r"'[A-Z_]*POC[A-Z_]*'|poc-package", module)
 
 
 if __name__ == '__main__':

@@ -25,8 +25,9 @@ O [incremento de ingestão](../../docs/sbom-analytics-ingestion.md) implementa
 snapshots fechados e substitui esse append compartilhado nesta fase. Seu plano
 de catalogação renderiza estes mesmos templates para duas LOCATIONs exatas em
 `<prefix>/snapshots/<snapshot_id>/analytics/sbom_observations/` e
-`<prefix>/snapshots/<snapshot_id>/analytics/sbom_packages/`. Exige nomes POC
-externos e confirmação de namespace isolado; não executa DDL ou altera tabelas.
+`<prefix>/snapshots/<snapshot_id>/analytics/sbom_packages/`. Aceita somente o
+namespace exato do Distroless SBOM Analytics (`sbom_analytics`, `sbom_snapshot`);
+não executa DDL nem altera tabelas.
 O marcador final não bloqueia leituras Athena por si só. A catalogação precisa
 selecionar explicitamente um snapshot cujo read-back completo passou.
 

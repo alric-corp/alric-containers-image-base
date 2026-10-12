@@ -8,10 +8,10 @@ import time
 import unittest
 from unittest.mock import patch
 
-from scripts.pipeline.analytics import athena_poc as a
+from scripts.pipeline.analytics import athena_run as a
 from scripts.pipeline.analytics.ingestion_types import IngestionError
 from scripts.pipeline.analytics.spdx import canonical, sha256
-from tests.unit.pipeline.analytics import test_athena_poc as support
+from tests.unit.pipeline.analytics import test_athena_run as support
 
 Athena, ROOT = support.Athena, support.ROOT
 
@@ -24,8 +24,8 @@ TOKEN = '80d33f677de36228e9c2d8ed6bf34207f6bd400c2d779fdfcdd42d8e245ca3d8'
 
 class AthenaReconciliationTests(unittest.TestCase):
     # Reuse setup, not the author's test cases: no duplicated suite/count.
-    setUpClass = classmethod(support.AthenaPocTests.setUpClass.__func__)
-    setUp = support.AthenaPocTests.setUp
+    setUpClass = classmethod(support.AthenaRunTests.setUpClass.__func__)
+    setUp = support.AthenaRunTests.setUp
 
     def original(self):
         self.raw = (FIXTURE/'sql-plan.json').read_bytes()

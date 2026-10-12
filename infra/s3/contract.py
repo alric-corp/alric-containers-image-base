@@ -14,8 +14,9 @@ RESOURCE_TYPES = (
 MODULE = 'sbom_analytics'
 ADDRESSES = {f'module.{MODULE}.{kind}.sbom': kind for kind in RESOURCE_TYPES}
 
-# Replaced POC bucket (LAB reset 2026-10-11). It keeps its original state
-# address only while it is transitional, then may only be destroyed.
+# Legacy bucket replaced by Distroless SBOM Analytics (2026-10-11). It keeps
+# its real historical state address and prefix only while transitional, then
+# may only be destroyed.
 LEGACY_MODULE = 'sbom'
 LEGACY_SOURCE = '../s3-legacy'
 LEGACY_ADDRESSES = {f'module.{LEGACY_MODULE}.{kind}.sbom': kind for kind in RESOURCE_TYPES}

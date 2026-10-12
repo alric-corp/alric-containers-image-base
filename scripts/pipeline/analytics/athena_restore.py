@@ -18,7 +18,7 @@ import threading
 import zipfile
 import zlib
 
-from scripts.pipeline.analytics import athena_poc as a, poc
+from scripts.pipeline.analytics import athena_run as a, s3_run
 from scripts.pipeline.analytics.ingestion_types import IngestionError, check, hash_id
 from scripts.pipeline.analytics.spdx import canonical, document, read_local, sha256
 
@@ -264,7 +264,7 @@ def restore(client, source, reports, originals, *, executor_sha, authorized_sha2
                    round_id=round_id, snapshot_id=snapshot_id, members=inventory,
                    restored_executions=len(journal['executions']), total_round_budget=18,
                    remaining_unreserved_executions=18-len(journal['executions']))
-    poc.write_json(reports/'resume-receipt.json', receipt)
+    s3_run.write_json(reports/'resume-receipt.json', receipt)
     return receipt
 
 
@@ -303,7 +303,7 @@ def main(argv=None):
                          authorization_reference=args.authorization_reference, round_id=args.round_id, snapshot_id=args.snapshot_id)
     except Exception as error:
         result = error.diagnostic() if isinstance(error, IngestionError) else dict(status='ERROR', code='RESUME_INVALID', stage='RESTORE')
-    poc.write_json(args.report, result)
+    s3_run.write_json(args.report, result)
     print(json.dumps(result, sort_keys=True))
     return 0 if result['status'] == 'RESTORED_VERIFIED' else 1
 

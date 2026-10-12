@@ -1,5 +1,5 @@
 variable "aws_region" {
-  description = "AWS region explicitly selected for the personal LAB."
+  description = "AWS region explicitly selected for the personal deployment."
   type        = string
 }
 
@@ -19,7 +19,7 @@ variable "expected_bucket_owner" {
 }
 
 variable "sbom_bucket_name" {
-  description = "Optional explicit analytics bucket name; otherwise derive the LAB name from the expected account and region."
+  description = "Optional explicit analytics bucket name; otherwise derive the deployment name from the expected account and region."
   type        = string
   default     = null
 }

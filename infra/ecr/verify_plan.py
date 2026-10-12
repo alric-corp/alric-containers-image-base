@@ -6,7 +6,7 @@ addresses correspond to the pinned terraform-aws-modules/ecr/aws 3.2.0 source:
 private repository + attached repository policy + enabled lifecycle policy.
 Their count is derived from the checked-out catalog, not an expected total.
 
-The replaced POC bucket (LAB reset 2026-10-11) has exactly two allowed
+The legacy bucket replaced by Distroless SBOM Analytics (2026-10-11) has two allowed
 phases, both derived from the reviewed configuration, never from a flag:
 TRANSITION while ``module.sbom`` points at ../s3-legacy (only its
 force_destroy may become true; nothing else changes), then REMOVAL once the

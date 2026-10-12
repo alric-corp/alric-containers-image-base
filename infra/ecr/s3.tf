@@ -7,9 +7,10 @@ module "sbom_analytics" {
   tags                  = local.tags
 }
 
-# TRANSITIONAL (LAB reset authorized 2026-10-11): the replaced POC bucket keeps
-# its state address only until the new analytics proof. The next revision
-# deletes this block and Terraform destroys the bucket, versions included.
+# LEGACY (historical bucket replaced by Distroless SBOM Analytics, authorized
+# 2026-10-11): it keeps its real state address only until the new analytics
+# proof. The next revision deletes this block and Terraform destroys exactly
+# this bucket, versions included.
 module "sbom" {
   source                = "../s3-legacy"
   bucket_name           = "alric-distroless-sbom-${var.expected_bucket_owner}-${var.aws_region}"

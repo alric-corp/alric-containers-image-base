@@ -36,7 +36,7 @@ permissions: {}
 
 # Shared with the S3 snapshot workflow: analytics dispatches never overlap.
 concurrency:
-  group: sbom-analytics-lab
+  group: distroless-sbom-analytics
   cancel-in-progress: false
 
 jobs:
@@ -81,7 +81,7 @@ jobs:
           from pathlib import Path
           try:
               assert re.fullmatch('[A-Za-z0-9_-]{1,64}', os.environ['ROUND_ID'])
-              assert os.environ['ROUND_ID'] != 'lab-sbom-athena-v1', 'The closed POC round is never reopened'
+              assert os.environ['ROUND_ID'] != 'lab-sbom-athena-v1', 'The closed historical round is never reopened'
               assert os.environ['FRESH_ROUND'] in ('true', 'false')
               if os.environ['ANALYTICS_MODE'] == 'execute':
                   assert re.fullmatch('[0-9a-f]{64}', os.environ['AUTHORIZED_PLAN_SHA256'])
@@ -99,7 +99,7 @@ jobs:
               raise SystemExit(1)
           PY
           python3 -m venv "$RUNNER_TEMP/analytics-venv"
-          "$RUNNER_TEMP/analytics-venv/bin/python" -m pip install --quiet -r requirements-sbom-poc.txt
+          "$RUNNER_TEMP/analytics-venv/bin/python" -m pip install --quiet -r requirements-sbom-analytics.txt
           "$RUNNER_TEMP/analytics-venv/bin/python" -m pip freeze > "$RUNNER_TEMP/analytics-dependencies.txt"
       - name: Restore exact prior journal before AWS authentication
         if: inputs.mode == 'execute' && inputs.fresh_round != true
@@ -131,11 +131,11 @@ jobs:
           python3 -B - <<'PY'
           import json, os
           from pathlib import Path
-          from scripts.pipeline.analytics import athena_poc, poc
-          expected = poc.config('policies/analytics/s3.json')
-          settings = athena_poc.config('policies/analytics/athena.json')
+          from scripts.pipeline.analytics import athena_run, s3_run
+          expected = s3_run.config('policies/analytics/s3.json')
+          settings = athena_run.config('policies/analytics/athena.json')
           assert expected['expected_role_arn'] == os.environ['EXPECTED_ROLE']
-          policy = json.dumps(athena_poc.session_policy(expected, settings, execute=os.environ['ANALYTICS_MODE']=='execute'), separators=(',', ':'))
+          policy = json.dumps(athena_run.session_policy(expected, settings, execute=os.environ['ANALYTICS_MODE']=='execute'), separators=(',', ':'))
           assert len(policy) <= 2048
           with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
               output.write('policy=' + policy + '\n')
@@ -165,7 +165,7 @@ jobs:
           elif [ "$ANALYTICS_MODE" = execute ]; then
             authorization=(--authorized-plan-sha256 "$AUTHORIZED_PLAN_SHA256" --authorization-reference "$AUTHORIZATION_REFERENCE" --resume-receipt "$RUNNER_TEMP/athena-reports/resume-receipt.json")
           fi
-          "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.athena_poc \
+          "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.athena_run \
             --config policies/analytics/s3.json --athena-config policies/analytics/athena.json \
             --session-name "$ROLE_SESSION_NAME" --round-id "$ROUND_ID" \
             --output "$RUNNER_TEMP/recovered-batch" --report "$RUNNER_TEMP/athena-reports/result.json" \

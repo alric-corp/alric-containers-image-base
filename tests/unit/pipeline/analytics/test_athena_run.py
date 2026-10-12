@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 import yaml
 
-from scripts.pipeline.analytics import athena_poc as a, athena_restore, catalog, poc, parquet
+from scripts.pipeline.analytics import athena_run as a, athena_restore, catalog, s3_run, parquet
 from scripts.pipeline.analytics.catalog import catalog_plan
 from scripts.pipeline.analytics.ingestion_types import Destination, IngestionError
 from scripts.pipeline.analytics.s3_ingestion import S3Adapter
@@ -155,16 +155,16 @@ class Athena:
         return {}
 
 
-class AthenaPocTests(unittest.TestCase):
+class AthenaRunTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.tmp.cleanup)
         cls.source = Path(cls.tmp.name)
         historical_profile(cls)
-        cls.expected = poc.config(HISTORICAL/'lab-poc.json')
+        cls.expected = s3_run.config(HISTORICAL/'lab-poc.json')
         cls.settings = a.config(HISTORICAL/'athena-lab-poc.json')
-        poc.unpack(ROOT/'tests/fixtures/sbom-analytics/lab-frozen-plan.zip',ROOT/'tests/fixtures/sbom-analytics/lab-frozen-plan.json',cls.source/'plan',cls.expected)
+        s3_run.unpack(ROOT/'tests/fixtures/sbom-analytics/lab-frozen-plan.zip',ROOT/'tests/fixtures/sbom-analytics/lab-frozen-plan.json',cls.source/'plan',cls.expected)
         cls.payload = load_plan(cls.source/'plan')
 
     def setUp(self):
@@ -179,7 +179,7 @@ class AthenaPocTests(unittest.TestCase):
         # Fake versions/hashes are TEST inputs, not evidence for the historical S3.
         self.settings.update({k:fingerprint[k] for k in ('manifest_sha256','manifest_version_id')})
         recover_snapshot(self.adapter,self.expected['snapshot_id'],self.root/'local')
-        self.inspection = poc.inspect_recovered(self.root/'local',self.expected)
+        self.inspection = s3_run.inspect_recovered(self.root/'local',self.expected)
         self.proposal = catalog_plan(self.adapter,self.expected['snapshot_id'],database=self.settings['database'],table_prefix=self.settings['table_prefix'])
         self.raw = a.build_plan(self.proposal,self.inspection,self.root/'local',self.expected,self.settings,'test-round')
         self.glue = Glue(self.expected,self.settings)
@@ -220,7 +220,7 @@ class AthenaPocTests(unittest.TestCase):
             self.assertNotIn('tfstate',json.dumps(policy))
 
     def test_real_package_records_but_fake_cloud_full_sequence_without_producer_inputs(self):
-        with patch.object(poc,'load_plan',side_effect=AssertionError('no producer fallback')),patch('socket.socket',side_effect=AssertionError('no cloud')):
+        with patch.object(s3_run,'load_plan',side_effect=AssertionError('no producer fallback')),patch('socket.socket',side_effect=AssertionError('no cloud')):
             result=a.run(self.s3,self.sts,self.athena,self.glue,self.expected,self.settings,self.session,'test-round',self.root/'reports',self.root/'recovered',authorized_sha256=sha256(self.raw),authorization_reference='TEST_ONLY owner ref')
         self.assertEqual(result['query_executions'],18)
         self.assertEqual(result['code'],'ATHENA_RESULTS_VERIFIED')

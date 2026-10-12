@@ -12,11 +12,11 @@ from unittest.mock import patch
 import zipfile
 
 import yaml
-from scripts.pipeline.analytics import athena_restore as r, athena_poc as a
+from scripts.pipeline.analytics import athena_restore as r, athena_run as a
 from scripts.pipeline.analytics.ingestion_types import IngestionError
 from scripts.pipeline.analytics.spdx import canonical, sha256
 from tests.unit.pipeline.analytics import test_athena_reconciliation as support
-from tests.unit.pipeline.analytics.test_athena_poc import HISTORICAL, historical_profile
+from tests.unit.pipeline.analytics.test_athena_run import HISTORICAL, historical_profile
 
 ROOT, FIXTURE, AUTH, PLAN_HASH = support.ROOT, support.FIXTURE, support.AUTH, support.PLAN_HASH
 

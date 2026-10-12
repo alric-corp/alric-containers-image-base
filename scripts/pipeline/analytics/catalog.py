@@ -1,4 +1,4 @@
-"""Render the LAB catalog proposal only after remote snapshot read-back."""
+"""Render the Distroless SBOM Analytics catalog proposal only after remote snapshot read-back."""
 from pathlib import Path
 import re
 
@@ -6,8 +6,8 @@ from scripts.pipeline.analytics.ingestion_types import check
 from scripts.pipeline.analytics.snapshot import read_snapshot
 
 SQL = Path(__file__).resolve().parents[3] / 'sql/sbom-analytics'
-# The only LAB namespace (reset 2026-10-11): exact names, never a pattern. The
-# closed POC round's names are not accepted by the hosted configuration.
+# The only Distroless SBOM Analytics namespace: exact names, never a pattern.
+# Historical catalog names are not accepted by the hosted configuration.
 NAMESPACE = dict(database='sbom_analytics', workgroup='sbom_analytics', table_prefix='sbom_snapshot',
                  results_prefix='query-results/sbom-analytics-v1/')
 

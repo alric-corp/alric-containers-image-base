@@ -1,6 +1,6 @@
 {
   "Name": "sbom_analytics",
-  "Description": "Distroless SBOM Analytics LAB; manual analytics only, no automatic pipeline ingestion",
+  "Description": "Distroless SBOM Analytics; manual analytics only, no automatic pipeline ingestion",
   "Configuration": {
     "EnforceWorkGroupConfiguration": true,
     "BytesScannedCutoffPerQuery": 104857600,
