@@ -41,7 +41,7 @@ concurrency:
 
 jobs:
   athena:
-    if: github.repository == 'alric-corp/alric-containers-image-base' && github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
     environment: DEV
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -69,6 +69,12 @@ jobs:
             schemas/sbom-analytics
             sql/sbom-analytics
             policies
+      # The observed identity comes from the native github.* contexts; the
+      # authorized one from policies/pipeline/config.json. Any mismatch stops
+      # the job here, before dependencies, GitHub API reads or OIDC.
+      - name: Verify native execution identity before any credential
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV --authorized-event workflow_dispatch
       - name: Python compatibility target
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -125,9 +131,6 @@ jobs:
             --round-id "$ROUND_ID" --snapshot-id "$SNAPSHOT_ID" \
             --repository "$GITHUB_REPOSITORY" --repository-id "$GITHUB_REPOSITORY_ID" \
             --authorized-plan-sha256 "$AUTHORIZED_PLAN_SHA256" --authorization-reference "$AUTHORIZATION_REFERENCE"
-      - name: Load versioned operational identity
-        id: pipeline
-        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV
       - name: Bound session policy independently from the role policy
         id: session
         env:

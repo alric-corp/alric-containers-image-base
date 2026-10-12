@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   publish:
-    if: github.repository == 'alric-corp/alric-containers-image-base' && github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
     environment: DEV
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -27,6 +27,12 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      # The observed identity comes from the native github.* contexts; the
+      # authorized one from policies/pipeline/config.json. Any mismatch stops
+      # the job here, before dependencies, GitHub API reads or OIDC.
+      - name: Verify native execution identity before any credential
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV --authorized-event workflow_dispatch
       - name: Python compatibility target
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -43,9 +49,6 @@ jobs:
             --package tests/fixtures/sbom-analytics/frozen-plan-v1.zip \
             --descriptor tests/fixtures/sbom-analytics/frozen-plan-v1.json \
             --output "$RUNNER_TEMP/frozen-plan" --report "$RUNNER_TEMP/analytics-reports/preparation.json"
-      - name: Load versioned operational identity
-        id: pipeline
-        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV
       - name: Restrict this session to analytics S3
         id: session
         env:
@@ -107,7 +110,7 @@ jobs:
 
   recover:
     needs: publish
-    if: github.repository == 'alric-corp/alric-containers-image-base' && github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'workflow_dispatch'
     environment: DEV
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -128,6 +131,12 @@ jobs:
             schemas/sbom-analytics
             sql/sbom-analytics
             policies
+      # The observed identity comes from the native github.* contexts; the
+      # authorized one from policies/pipeline/config.json. Any mismatch stops
+      # the job here, before dependencies, GitHub API reads or OIDC.
+      - name: Verify native execution identity before any credential
+        id: pipeline
+        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV --authorized-event workflow_dispatch
       - name: Python compatibility target
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -139,9 +148,6 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/analytics-venv"
           "$RUNNER_TEMP/analytics-venv/bin/python" -m pip install --quiet -r requirements-sbom-analytics.txt
           "$RUNNER_TEMP/analytics-venv/bin/python" -m pip freeze > "$RUNNER_TEMP/analytics-dependencies.txt"
-      - name: Load versioned operational identity
-        id: pipeline
-        run: python3 -B -m scripts.pipeline.governance.configuration --scope DEV
       - name: Restrict reader to S3 read operations
         id: session
         env:

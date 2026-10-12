@@ -109,6 +109,41 @@ def promotion_policy(environment, path=None):
     return policy
 
 
+# Observed execution identity: the runner's native variables for the github.*
+# contexts (repository, repository_owner, repository_id, repository_owner_id,
+# ref, event_name). The authorized identity is never another observed field.
+EXECUTION_IDENTITY = ('GITHUB_REPOSITORY', 'GITHUB_REPOSITORY_OWNER', 'GITHUB_REPOSITORY_ID',
+                      'GITHUB_REPOSITORY_OWNER_ID', 'GITHUB_REF', 'GITHUB_EVENT_NAME')
+# Privileged entry points never run for pull_request events, whatever the caller asks.
+AUTHORIZABLE_EVENTS = ('workflow_dispatch', 'push', 'schedule')
+
+
+def authorized_identity(cfg):
+    """Identity this deployment authorizes: versioned repository and immutable OIDC subject IDs."""
+    owner, repo = cfg['repository'].split('/')
+    found = re.fullmatch(rf'repo:{re.escape(owner)}@([1-9][0-9]*)/{re.escape(repo)}@([1-9][0-9]*)',
+                         cfg['subject_prefix'])
+    require(found is not None, 'immutable repository subject: invalid value')
+    return {'GITHUB_REPOSITORY': cfg['repository'], 'GITHUB_REPOSITORY_OWNER': owner,
+            'GITHUB_REPOSITORY_ID': found.group(2), 'GITHUB_REPOSITORY_OWNER_ID': found.group(1),
+            'GITHUB_REF': 'refs/heads/' + cfg['branch']}
+
+
+def verify_execution_identity(cfg, environ, events):
+    """Fail closed unless the observed identity equals the authorized one, before any credential."""
+    require(events and set(events) <= set(AUTHORIZABLE_EVENTS), 'unsupported authorized event')
+    observed = {key: environ.get(key) for key in EXECUTION_IDENTITY}
+    for key, value in observed.items():
+        require(isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9_./-]{1,200}', value) is not None,
+                f'execution identity {key} is missing or invalid')
+    for key in ('GITHUB_REPOSITORY_ID', 'GITHUB_REPOSITORY_OWNER_ID'):
+        require(re.fullmatch(r'[1-9][0-9]{0,18}', observed[key]) is not None, f'execution identity {key} is invalid')
+    for key, expected in authorized_identity(cfg).items():
+        require(observed[key] == expected, f'execution identity {key} differs from the authorized identity')
+    require(observed['GITHUB_EVENT_NAME'] in events, 'execution identity GITHUB_EVENT_NAME is not authorized')
+    return observed
+
+
 def settings(cfg, scope):
     require(scope in ('DEV', 'HOM', 'INFRA_PLAN', 'INFRA_APPLY'), 'unknown pipeline scope')
     item = cfg['DEV' if scope.startswith('INFRA_') else scope]
@@ -142,8 +177,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scope', choices=('DEV', 'HOM', 'INFRA_PLAN', 'INFRA_APPLY'), required=True)
     parser.add_argument('--require-promotion', action='store_true')
+    parser.add_argument('--authorized-event', action='append', choices=AUTHORIZABLE_EVENTS,
+                        help='require the complete native execution identity to match the versioned one')
     args = parser.parse_args(argv)
     cfg = configuration()
+    if args.authorized_event:
+        verify_execution_identity(cfg, os.environ, args.authorized_event)
     if os.environ.get('GITHUB_REPOSITORY'):
         require(os.environ['GITHUB_REPOSITORY'] == cfg['repository'], 'pipeline repository mismatch')
     if os.environ.get('GITHUB_EVENT_NAME', '').startswith('pull_request'):
@@ -152,6 +191,8 @@ def main(argv=None):
         require(args.scope in ('DEV', 'HOM') and promotion_policy(args.scope)['enabled'],
                 f'{args.scope} promotion is disabled in promotion policy')
     values = settings(cfg, args.scope)
+    if args.authorized_event:
+        values['EXECUTION_IDENTITY'] = 'VERIFIED'
     # Validate everything before writing either file. Only validated single-line
     # values enter the Actions command files, never arbitrary JSON keys or env.
     payload = ''.join(f'{key}={value}\n' for key, value in values.items())
