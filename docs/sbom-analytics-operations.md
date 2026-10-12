@@ -2,7 +2,7 @@
 
 O Distroless SBOM Analytics guarda os SBOMs SPDX dos builds da Factory em snapshots fechados no S3 e os consulta no Athena. Toda execução é manual (`workflow_dispatch` em `develop`). Não existe ingestão automática a partir do build, e nenhum resultado concede autoridade de publicação ou promoção.
 
-A substituição da estrutura histórica está em [migração](sbom-analytics-migration.md). Enquanto ela não for concluída, os recursos da coluna "Ativo" abaixo podem ainda não existir na AWS.
+A substituição da estrutura histórica está em [migração](sbom-analytics-migration.md). Os recursos da coluna "Ativo" abaixo existem na AWS desde 2026-10-12. A remoção da estrutura histórica só acontece depois da prova Athena.
 
 ## Implantação atual (AWS pessoal)
 
@@ -36,7 +36,7 @@ A infraestrutura S3 é o filho `module.sbom_analytics` (`infra/s3`) do root `inf
 | Catálogo e SQL | `scripts/pipeline/analytics/catalog.py` e `sql/sbom-analytics/` |
 | Dependências | `requirements-sbom-analytics.txt` |
 
-`policies/analytics/athena.json` só recebe valores depois de uma publicação real com read-back integral: o SHA-256 e o VersionId do `ingestion-manifest.json`. Os valores nunca são inferidos.
+`policies/analytics/athena.json` só recebe valores depois de uma publicação real com read-back integral: o SHA-256 e o VersionId do `ingestion-manifest.json`. Os valores nunca são inferidos. Os valores atuais vêm da publicação do run `38207794810` e foram conferidos por leitura independente do bucket.
 
 ## Operar
 
