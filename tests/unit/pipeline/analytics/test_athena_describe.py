@@ -13,10 +13,10 @@ from datetime import datetime, timedelta
 import json
 import unittest
 
-from scripts.pipeline.analytics import athena_poc as a, athena_restore as r
+from scripts.pipeline.analytics import athena_run as a, athena_restore as r
 from scripts.pipeline.analytics.ingestion_types import IngestionError
 from scripts.pipeline.analytics.spdx import canonical, sha256
-from tests.unit.pipeline.analytics import test_athena_poc as support, test_athena_terminator as six
+from tests.unit.pipeline.analytics import test_athena_run as support, test_athena_terminator as six
 from tests.unit.pipeline.analytics.test_athena_restore import archive, GitHub
 from tests.unit.pipeline.analytics.test_athena_views import real_tables, VIEWS, FIXTURE as VIEWS_FIXTURE
 
@@ -218,12 +218,12 @@ class RealJournalGitHub(GitHub):
 
 
 class AthenaSeventeenEntryResumeTests(unittest.TestCase):
-    setUpClass = classmethod(support.AthenaPocTests.setUpClass.__func__)
+    setUpClass = classmethod(support.AthenaRunTests.setUpClass.__func__)
     restore = six.AthenaSixEntryResumeTests.restore
     execute = six.AthenaSixEntryResumeTests.execute
 
     def setUp(self):
-        support.AthenaPocTests.setUp(self)
+        support.AthenaRunTests.setUp(self)
         self.raw, self.original = PLAN.read_bytes(), (FIXTURE / 'execution-journal.json').read_bytes()
         self.ancestor = (VIEWS_FIXTURE / 'execution-journal.json').read_bytes()
         # Ancestor first: selection is by exact member path and hashes, never order/basename/size.
@@ -435,10 +435,10 @@ class AthenaSeventeenEntryResumeTests(unittest.TestCase):
 
 class AthenaDescribeRunTests(unittest.TestCase):
     """run() with the synthetic test round, REAL catalog and DESCRIBE responses without database."""
-    setUpClass = classmethod(support.AthenaPocTests.setUpClass.__func__)
-    setUp = support.AthenaPocTests.setUp
+    setUpClass = classmethod(support.AthenaRunTests.setUpClass.__func__)
+    setUp = support.AthenaRunTests.setUp
 
-    def run_poc(self, name):
+    def run_round(self, name):
         return a.run(self.s3, self.sts, self.athena, self.glue, self.expected, self.settings, self.session, 'test-round',
                      self.root / 'reports', self.root / ('recovered-' + name), authorized_sha256=sha256(self.raw),
                      authorization_reference='TEST_ONLY owner ref')
@@ -453,10 +453,10 @@ class AthenaDescribeRunTests(unittest.TestCase):
 
     def test_full_round_with_unqualified_describes_and_unchanged_snapshot(self):
         self.returned('DESCRIBE poc_distroless_sbom.', 'DESCRIBE ')
-        self.run_poc('first')
+        self.run_round('first')
         for table in real_tables().values():
             self.glue.tables[table['Name']] = table
-        result = self.run_poc('second')  # Complete journal: zero starts, real catalog before and after.
+        result = self.run_round('second')  # Complete journal: zero starts, real catalog before and after.
         self.assertEqual((result['code'], result['query_executions'], result['api_calls']['start_query_execution']),
                          ('ATHENA_RESULTS_VERIFIED', 18, 0))
         saved = json.loads((self.root / 'reports/execution-journal.json').read_bytes())['executions']
@@ -467,7 +467,7 @@ class AthenaDescribeRunTests(unittest.TestCase):
     def test_describe_of_another_table_keeps_error_and_final_readback(self):
         self.returned('_sbom_observation_rows_v1', '_sbom_package_rows_v1')
         with self.assertRaisesRegex(IngestionError, 'IDENTITY_DIFFERS'):
-            self.run_poc('first')
+            self.run_round('first')
         failure = json.loads((self.root / 'reports/execution-failure.json').read_bytes())
         self.assertEqual((failure['code'], failure['observed']['field']), ('ATHENA_EXECUTION_IDENTITY_DIFFERS', 'Query.tokens'))
         self.assertEqual(failure['final_readback']['status'], 'UNCHANGED')

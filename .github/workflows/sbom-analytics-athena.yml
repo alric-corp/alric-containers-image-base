@@ -1,4 +1,4 @@
-name: SBOM Analytics - LAB Athena POC
+name: Distroless SBOM Analytics - Athena
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
       round_id:
         description: Reviewed round identity; reuse on retry, never rotate after an unknown outcome
         type: string
-        default: lab-sbom-athena-v1
+        default: sbom-analytics-v1-r1
         required: true
       authorized_plan_sha256:
         description: Exact reviewed SQL plan hash (execute only)
@@ -23,14 +23,20 @@ on:
         type: string
         required: false
       resume_source:
-        description: Approved JSON source run/attempt/artifact/SHA and exact ZIP/journal/plan hashes and sizes (execute required)
+        description: Approved JSON source run/attempt/artifact/SHA and exact ZIP/journal/plan hashes and sizes (execute resume)
         type: string
+        required: false
+      fresh_round:
+        description: Execute only, first start of a new round with no prior journal (never a resume)
+        type: boolean
+        default: false
         required: false
 
 permissions: {}
 
+# Shared with the S3 snapshot workflow: analytics dispatches never overlap.
 concurrency:
-  group: sbom-analytics-athena-lab-poc
+  group: distroless-sbom-analytics
   cancel-in-progress: false
 
 jobs:
@@ -45,11 +51,12 @@ jobs:
       id-token: write
     env:
       ROLE_SESSION_NAME: sbom-athena-${{ github.run_id }}-${{ github.run_attempt }}
-      POC_MODE: ${{ inputs.mode }}
+      ANALYTICS_MODE: ${{ inputs.mode }}
       ROUND_ID: ${{ inputs.round_id }}
       AUTHORIZED_PLAN_SHA256: ${{ inputs.authorized_plan_sha256 }}
       AUTHORIZATION_REFERENCE: ${{ inputs.authorization_reference }}
       RESUME_SOURCE: ${{ inputs.resume_source }}
+      FRESH_ROUND: ${{ inputs.fresh_round }}
     steps:
       - name: Checkout reader and SQL without producer inputs
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -74,14 +81,17 @@ jobs:
           from pathlib import Path
           try:
               assert re.fullmatch('[A-Za-z0-9_-]{1,64}', os.environ['ROUND_ID'])
-              if os.environ['POC_MODE'] == 'execute':
+              assert os.environ['ROUND_ID'] != 'lab-sbom-athena-v1', 'The closed historical round is never reopened'
+              assert os.environ['FRESH_ROUND'] in ('true', 'false')
+              if os.environ['ANALYTICS_MODE'] == 'execute':
                   assert re.fullmatch('[0-9a-f]{64}', os.environ['AUTHORIZED_PLAN_SHA256'])
                   assert re.fullmatch('[A-Za-z0-9:/._# -]{1,200}', os.environ['AUTHORIZATION_REFERENCE'])
-                  assert os.environ['RESUME_SOURCE'], 'Execute requires a verified journal restore; no empty-history fallback'
+                  # Exactly one: a verified journal restore, or an explicit new round.
+                  assert bool(os.environ['RESUME_SOURCE']) != (os.environ['FRESH_ROUND'] == 'true'), 'Execute requires a verified journal restore or an explicit fresh round'
               else:
-                  assert os.environ['POC_MODE'] == 'plan'
+                  assert os.environ['ANALYTICS_MODE'] == 'plan'
                   assert not os.environ['AUTHORIZED_PLAN_SHA256'] and not os.environ['AUTHORIZATION_REFERENCE']
-                  assert not os.environ['RESUME_SOURCE']
+                  assert not os.environ['RESUME_SOURCE'] and os.environ['FRESH_ROUND'] == 'false'
           except Exception:
               directory = Path(os.environ['RUNNER_TEMP']) / 'athena-reports'
               directory.mkdir(exist_ok=True)
@@ -89,10 +99,10 @@ jobs:
               raise SystemExit(1)
           PY
           python3 -m venv "$RUNNER_TEMP/analytics-venv"
-          "$RUNNER_TEMP/analytics-venv/bin/python" -m pip install --quiet -r requirements-sbom-poc.txt
+          "$RUNNER_TEMP/analytics-venv/bin/python" -m pip install --quiet -r requirements-sbom-analytics.txt
           "$RUNNER_TEMP/analytics-venv/bin/python" -m pip freeze > "$RUNNER_TEMP/analytics-dependencies.txt"
       - name: Restore exact prior journal before AWS authentication
-        if: inputs.mode == 'execute'
+        if: inputs.mode == 'execute' && inputs.fresh_round != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -104,11 +114,16 @@ jobs:
           path.write_bytes(raw)
           path.chmod(0o600)
           PY
+          # The active snapshot comes from the versioned configuration; the
+          # repository is the one running this workflow, never a product constant.
+          SNAPSHOT_ID="$("$RUNNER_TEMP/analytics-venv/bin/python" -B -c \
+            "from scripts.pipeline.analytics import s3_run; print(s3_run.config('policies/analytics/s3.json')['snapshot_id'])")"
           "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.athena_restore \
             --source "$RUNNER_TEMP/resume-source.json" --executor-sha "$GITHUB_SHA" \
             --reports "$RUNNER_TEMP/athena-reports" --originals "$RUNNER_TEMP/athena-resume-source" \
             --report "$RUNNER_TEMP/athena-reports/resume-diagnostic.json" \
-            --round-id "$ROUND_ID" --snapshot-id 6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6 \
+            --round-id "$ROUND_ID" --snapshot-id "$SNAPSHOT_ID" \
+            --repository "$GITHUB_REPOSITORY" --repository-id "$GITHUB_REPOSITORY_ID" \
             --authorized-plan-sha256 "$AUTHORIZED_PLAN_SHA256" --authorization-reference "$AUTHORIZATION_REFERENCE"
       - name: Load versioned operational identity
         id: pipeline
@@ -121,11 +136,11 @@ jobs:
           python3 -B - <<'PY'
           import json, os
           from pathlib import Path
-          from scripts.pipeline.analytics import athena_poc, poc
-          expected = poc.config('policies/analytics/lab-poc.json')
-          settings = athena_poc.config('policies/analytics/athena-lab-poc.json')
+          from scripts.pipeline.analytics import athena_run, s3_run
+          expected = s3_run.config('policies/analytics/s3.json')
+          settings = athena_run.config('policies/analytics/athena.json')
           assert expected['expected_role_arn'] == os.environ['EXPECTED_ROLE']
-          policy = json.dumps(athena_poc.session_policy(expected, settings, execute=os.environ['POC_MODE']=='execute'), separators=(',', ':'))
+          policy = json.dumps(athena_run.session_policy(expected, settings, execute=os.environ['ANALYTICS_MODE']=='execute'), separators=(',', ':'))
           assert len(policy) <= 2048
           with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
               output.write('policy=' + policy + '\n')
@@ -150,11 +165,13 @@ jobs:
         run: |
           set -euo pipefail
           authorization=()
-          if [ "$POC_MODE" = execute ]; then
+          if [ "$ANALYTICS_MODE" = execute ] && [ "$FRESH_ROUND" = true ]; then
+            authorization=(--authorized-plan-sha256 "$AUTHORIZED_PLAN_SHA256" --authorization-reference "$AUTHORIZATION_REFERENCE" --fresh-round)
+          elif [ "$ANALYTICS_MODE" = execute ]; then
             authorization=(--authorized-plan-sha256 "$AUTHORIZED_PLAN_SHA256" --authorization-reference "$AUTHORIZATION_REFERENCE" --resume-receipt "$RUNNER_TEMP/athena-reports/resume-receipt.json")
           fi
-          "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.athena_poc \
-            --config policies/analytics/lab-poc.json --athena-config policies/analytics/athena-lab-poc.json \
+          "$RUNNER_TEMP/analytics-venv/bin/python" -B -m scripts.pipeline.analytics.athena_run \
+            --config policies/analytics/s3.json --athena-config policies/analytics/athena.json \
             --session-name "$ROLE_SESSION_NAME" --round-id "$ROUND_ID" \
             --output "$RUNNER_TEMP/recovered-batch" --report "$RUNNER_TEMP/athena-reports/result.json" \
             "${authorization[@]}"
@@ -171,8 +188,9 @@ jobs:
           (directory / 'authentication.json').write_text(json.dumps({
               'stage': 'OIDC', 'outcome': os.environ['CREDENTIALS_OUTCOME'],
               'source_sha': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'],
-              'attempt': os.environ['GITHUB_RUN_ATTEMPT'], 'actor': os.environ['GITHUB_ACTOR'], 'mode': os.environ['POC_MODE'],
-              'round_id': os.environ['ROUND_ID'], 'original_inputs_available': (Path(os.environ['GITHUB_WORKSPACE']) / 'tests/fixtures').exists(),
+              'attempt': os.environ['GITHUB_RUN_ATTEMPT'], 'actor': os.environ['GITHUB_ACTOR'], 'mode': os.environ['ANALYTICS_MODE'],
+              'round_id': os.environ['ROUND_ID'], 'fresh_round': os.environ['FRESH_ROUND'] == 'true',
+              'original_inputs_available': (Path(os.environ['GITHUB_WORKSPACE']) / 'tests/fixtures').exists(),
               'cloud_admin_fallback': False}) + '\n')
           PY
       - name: Upload diagnostics, frozen SQL and journal including failure

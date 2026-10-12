@@ -13,10 +13,10 @@ import json
 import unittest
 from unittest import mock
 
-from scripts.pipeline.analytics import athena_poc as a, athena_restore as r
+from scripts.pipeline.analytics import athena_run as a, athena_restore as r
 from scripts.pipeline.analytics.ingestion_types import IngestionError
 from scripts.pipeline.analytics.spdx import canonical, sha256
-from tests.unit.pipeline.analytics import test_athena_describe as previous, test_athena_poc as support
+from tests.unit.pipeline.analytics import test_athena_describe as previous, test_athena_run as support
 from tests.unit.pipeline.analytics import test_athena_terminator as six
 from tests.unit.pipeline.analytics.test_athena_restore import archive
 from tests.unit.pipeline.analytics.test_athena_views import real_tables
@@ -233,12 +233,12 @@ class CurrentJournalGitHub(previous.RealJournalGitHub):
 
 
 class CurrentJournalResumeTests(unittest.TestCase):
-    setUpClass = classmethod(support.AthenaPocTests.setUpClass.__func__)
+    setUpClass = classmethod(support.AthenaRunTests.setUpClass.__func__)
     restore, execute = six.AthenaSixEntryResumeTests.restore, six.AthenaSixEntryResumeTests.execute
     fresh, readback = previous.AthenaSeventeenEntryResumeTests.fresh, previous.AthenaSeventeenEntryResumeTests.readback
 
     def setUp(self):
-        support.AthenaPocTests.setUp(self)
+        support.AthenaRunTests.setUp(self)
         self.raw, self.original = PLAN.read_bytes(), (FIXTURE / 'execution-journal.json').read_bytes()
         self.ancestor = (previous.FIXTURE / 'execution-journal.json').read_bytes()  # 605578 bytes, also 17 entries.
         # Ancestor first: selection is by exact member path and hashes, never order/basename/size/count.
@@ -372,13 +372,13 @@ class CurrentJournalResumeTests(unittest.TestCase):
     def test_capture_write_failure_stops_before_any_start(self):
         self.restore()
         self.seed()
-        write = a.poc.write_json
+        write = a.s3_run.write_json
 
         def failing(path, value):
             if value['executions'].get('describe_observations', {}).get('results_capture', {}).get('pages'):
                 raise OSError('journal write failed')
             return write(path, value)
-        with mock.patch.object(a.poc, 'write_json', failing), self.assertRaisesRegex(OSError, 'journal write failed'):
+        with mock.patch.object(a.s3_run, 'write_json', failing), self.assertRaisesRegex(OSError, 'journal write failed'):
             self.execute()
         self.assertEqual((self.athena.calls, self.events.count(('RESULTS', DESCRIBE_ID))), ([], 1))
 

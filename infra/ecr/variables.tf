@@ -1,5 +1,5 @@
 variable "aws_region" {
-  description = "AWS region explicitly selected for the personal LAB."
+  description = "AWS region explicitly selected for the personal deployment."
   type        = string
 }
 
@@ -19,7 +19,10 @@ variable "expected_bucket_owner" {
 }
 
 variable "sbom_bucket_name" {
-  description = "Optional explicit analytics bucket name; otherwise derive the LAB name from the expected account and region."
+  description = "Exact Distroless SBOM Analytics bucket name, supplied by the deployment configuration; never derived."
   type        = string
-  default     = null
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$", var.sbom_bucket_name)) && !strcontains(var.sbom_bucket_name, "--")
+    error_message = "The analytics bucket name must be an exact lowercase S3 bucket name."
+  }
 }

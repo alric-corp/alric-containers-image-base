@@ -46,10 +46,13 @@ preservada nos mesmos ARNs. Não foi adicionada permissão compensatória.
 | Terraform | `EnsureExactBackendBucket`, `ExactDefaultWorkspaceState`, `ExactDefaultWorkspaceLock`, `ReadOnlyRegionalRepositoryInventory`, `ExactSbomAnalyticsBucket` | Backend LAB em `us-east-2`, state e lock exatos do workspace default; inventário regional ECR e administração do bucket SBOM exato |
 | ECR | `ExactCatalogEcr`, `RegistryAuthentication` | Vinte ações de infraestrutura/leitura/publicação no catálogo exato; token de registry limitado a `us-east-1` |
 | Release Store DEV | `DevReleaseInventory`, `DevReleaseRecords` | Listagem do bucket DEV e GetObject/PutObject dos registros; sem exclusão |
-| SBOM Analytics | `SbomSnapshotObjects`, `SbomSnapshotListing` | PutObject/GetObject/GetObjectVersion em `sbom-analytics/poc-v1/snapshots/*`; statement de listagem com esse prefixo |
+| Distroless SBOM Analytics (S3) | `SbomSnapshotObjects`, `SbomSnapshotListing` | PutObject/GetObject/GetObjectVersion em `sbom-analytics/v1/snapshots/*` do bucket configurado em `policies/pipeline/config.json` (`analytics.bucket`; `distroless-sbom-analytics` neste deployment); statement de listagem com esse prefixo |
+| Distroless SBOM Analytics (Athena) | `SbomAnalyticsAthenaWorkgroup`, `SbomAnalyticsGlueReadAndNewTables`, `SbomAnalyticsQueryResults` | Workgroup e database `sbom_analytics`, as cinco tabelas/views do snapshot ativo e `query-results/sbom-analytics-v1/*`; sem criar workgroup/database |
+| Migração (transitória) | `TransitionalLegacySbomBucketRemoval`, `TransitionalLegacySbomVersionRemoval` | Somente o bucket legado: listar e apagar versões, policy e o próprio bucket; removidos na revisão final ([migração](sbom-analytics-migration.md)) |
 
-O único DeleteObject permitido é o `.tflock` exato. Não há permissões IAM
-administrativas, Athena, Glue, KMS ou acesso ao prefixo de resultados de queries.
+Fora da migração, o único DeleteObject permitido é o `.tflock` exato. Não há
+permissões IAM administrativas, criação de workgroup/database Athena/Glue, KMS
+ou escrita fora dos prefixos acima.
 As duas permissões ECR com `Resource: "*"` são inventário regional de repositórios
 e obtenção de token; writes ECR permanecem no catálogo. A administração S3 já
 revisada exige `s3:ListBucket` no bucket SBOM, portanto o statement de listagem

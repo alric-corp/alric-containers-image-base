@@ -5,7 +5,7 @@ Implemented in [`infra/iam/main.tf`](../iam/main.tf) as the
 IAM state applies it separately (see [`infra/iam/README.md`](../iam/README.md));
 versioned policy is not proof of the applied policy.
 
-The existing LAB apply policy permits S3 administration only on the state bucket.
+The existing apply policy of the personal deployment permits S3 administration only on the state bucket.
 It grants nothing on the new analytics bucket. Keep that state/lock policy and
 all OIDC subjects unchanged. No Build/promotion role changes are proposed.
 
@@ -64,13 +64,13 @@ Source: [the pinned provider](https://github.com/hashicorp/terraform-provider-aw
 Snapshot data permissions are the `SbomSnapshot*` statements of the central Factory
 role's [external inline-policy contract](../../policies/aws/factory-distroless-v1.inline-policy.json).
 The role/policy are provisioned by an operator or the IAM team, outside Terraform;
-versioning this document does not apply it. See the [LAB runbook](../../docs/factory-distroless-v1-iam-runbook.md).
+versioning this document does not apply it. See the [central IAM runbook](../../docs/factory-distroless-v1-iam-runbook.md).
 Separate optional smoke/ingestion permissions, not supplied by this delivery:
 `s3:PutObject`, `s3:GetObject`, `s3:GetObjectVersion` on an authorized isolated
 snapshot/test prefix; `s3:ListBucket` with the relevant prefix restriction. Use
 conditional object creation and retain test objects for a cleanup decision.
 No data permission or read-back success grants Athena authority. Athena result
-permissions must be scoped separately to `query-results/poc-v1/`; never copy
+permissions must be scoped separately to `query-results/sbom-analytics-v1/`; never copy
 the conditional snapshot requirement onto the results area.
 
 This document creates or changes no role or policy. The IAM increment must be

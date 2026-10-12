@@ -34,7 +34,7 @@ class SnapshotTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix='sbom-snapshot-')
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        self.target = Destination('analytics-example', 'offline/poc', 'test-region-1', '000000000000')
+        self.target = Destination('analytics-example', 'offline/analytics', 'test-region-1', '000000000000')
         self.client = FakeS3()
         self.adapter = S3Adapter(self.client, self.target)
         self.batch = Path(export(prepare(synthetic(self.root / 'input')), self.root / 'output')['path'])
@@ -181,7 +181,7 @@ class SnapshotTests(unittest.TestCase):
         self.adapter.create(self.plan.key(first.path), replace(first, body=b'divergent'))
         with self.assertRaisesRegex(IngestionError, 'CONTENT_CONFLICT'):publish_snapshot(self.plan, self.adapter)
         self.assertNotIn((self.target.bucket, self.marker_key()), self.client.current)
-        with self.assertRaises(IngestionError):catalog_plan(self.adapter, self.plan.snapshot_id, database='poc_test',table_prefix='poc_sbom')
+        with self.assertRaises(IngestionError):catalog_plan(self.adapter, self.plan.snapshot_id, database='sbom_analytics',table_prefix='sbom_snapshot')
 
     def test_partial_middle_failure_has_no_final_manifest_and_same_plan_resumes(self):
         key = self.plan.key(self.plan.objects[len(self.plan.objects)//2].path)
@@ -191,7 +191,7 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(IngestionError, 'WRITE_OUTCOME_UNKNOWN'):publish_snapshot(self.plan, self.adapter)
         originals = dict(self.client.current)
         self.assertTrue(originals);self.assertNotIn((self.target.bucket, self.marker_key()), originals)
-        with self.assertRaises(IngestionError):catalog_plan(self.adapter, self.plan.snapshot_id, database='poc_test', table_prefix='poc_sbom')
+        with self.assertRaises(IngestionError):catalog_plan(self.adapter, self.plan.snapshot_id, database='sbom_analytics', table_prefix='sbom_snapshot')
         self.client.before = None
         self.assertTrue(publish_snapshot(self.plan, self.adapter)['complete'])
         self.assertTrue(all(self.client.current[k] == v for k,v in originals.items()))
@@ -252,11 +252,11 @@ class SnapshotTests(unittest.TestCase):
         key = (self.target.bucket, self.plan.key('analytics/sbom_packages/unexpected.parquet'))
         self.client.current[key] = dict(body=b'PAR1',content_type='application/vnd.apache.parquet',metadata={},version_id='extra')
         with self.assertRaises(IngestionError):read_snapshot(self.adapter, self.plan.snapshot_id)
-        with self.assertRaises(IngestionError):catalog_plan(self.adapter, self.plan.snapshot_id,database='poc_test',table_prefix='poc_sbom')
+        with self.assertRaises(IngestionError):catalog_plan(self.adapter, self.plan.snapshot_id,database='sbom_analytics',table_prefix='sbom_snapshot')
         self.assertIn(key, self.client.current)  # No orphan deletion.
 
     def test_wrong_bucket_prefix_or_owner_is_rejected_before_transport(self):
-        for destination in (replace(self.target, bucket='different-bucket'), replace(self.target, prefix='another/poc'),
+        for destination in (replace(self.target, bucket='different-bucket'), replace(self.target, prefix='another/analytics'),
                             replace(self.target, expected_bucket_owner='111111111111')):
             with self.assertRaisesRegex(IngestionError, 'DESTINATION_NOT_AUTHORIZED'):
                 publish_snapshot(replace(self.plan, destination=destination), self.adapter)
@@ -273,7 +273,7 @@ class SnapshotTests(unittest.TestCase):
 
     def test_catalog_selection_is_explicit_and_only_exact_parquet_locations(self):
         publish_snapshot(self.plan, self.adapter)
-        result = catalog_plan(self.adapter,self.plan.snapshot_id,database='poc_test',table_prefix='poc_sbom')
+        result = catalog_plan(self.adapter,self.plan.snapshot_id,database='sbom_analytics',table_prefix='sbom_snapshot')
         self.assertFalse(result['execute']);self.assertTrue(result['external_namespace_confirmation_required'])
         self.assertFalse(result['existing_tables_changed']);self.assertFalse(result['publication_authority'])
         self.assertEqual(result['authentication'], 'NOT_REVALIDATED')
@@ -283,8 +283,12 @@ class SnapshotTests(unittest.TestCase):
             self.assertIn("LOCATION '"+uri+"'",result['ddl'])
             prefix = uri.removeprefix('s3://'+self.target.bucket+'/')
             self.assertEqual([k for b,k in self.client.current if k.startswith(prefix)], [prefix+'part-00000.parquet'])
-        for database, prefix in (('production','poc_sbom'),('poc_test','active'),('poc_test','poc_unsafe;drop')):
-            with self.assertRaisesRegex(IngestionError, 'ISOLATED_POC_NAMESPACE_REQUIRED'):
+        # Exact active names only: the historical namespace, look-alikes and injections are rejected.
+        for database, prefix in (('production','sbom_snapshot'),('sbom_analytics','active'),('sbom_analytics','sbom_snapshot;drop'),
+                                 ('poc_distroless_sbom','poc_snapshot'),('sbom_analytics','poc_snapshot'),
+                                 ('poc_distroless_sbom','sbom_snapshot'),('sbom_analytics2','sbom_snapshot'),
+                                 ('SBOM_ANALYTICS','sbom_snapshot'),(None,'sbom_snapshot')):
+            with self.assertRaisesRegex(IngestionError, 'SBOM_ANALYTICS_NAMESPACE_REQUIRED'):
                 catalog_plan(self.adapter,self.plan.snapshot_id,database=database,table_prefix=prefix)
 
     def test_historical_golden_recovery_uses_only_transport_and_preserves_query_results(self):
@@ -311,7 +315,7 @@ class SnapshotTests(unittest.TestCase):
             self.assertEqual(sorted(r['component_records'] for r in demo['component_counts']),[22,22,123,123])
             self.assertFalse(demo['athena_executed'])
             trace = demo['queries']['05_trace_original']['rows'][0]
-            catalog = catalog_plan(self.adapter,plan.snapshot_id,database='poc_test',table_prefix='poc_sbom')
+            catalog = catalog_plan(self.adapter,plan.snapshot_id,database='sbom_analytics',table_prefix='sbom_snapshot')
             key = catalog['raw_root_uri'].removeprefix('s3://'+self.target.bucket+'/')+trace['raw_spdx_path']
             self.assertEqual(sha256(self.adapter.get(key).body),trace['sbom_sha256'])
         with self.assertRaisesRegex(IngestionError,'RECOVERY_DESTINATION_EXISTS'):

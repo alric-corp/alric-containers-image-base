@@ -1,0 +1,49 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SbomAnalyticsAthenaWorkgroup",
+      "Effect": "Allow",
+      "Action": [
+        "athena:GetWorkGroup",
+        "athena:StartQueryExecution",
+        "athena:GetQueryExecution",
+        "athena:GetQueryResults",
+        "athena:StopQueryExecution"
+      ],
+      "Resource": [
+        "arn:aws:athena:us-east-1:712107929769:workgroup/sbom_analytics"
+      ]
+    },
+    {
+      "Sid": "SbomAnalyticsGlueReadAndNewTables",
+      "Effect": "Allow",
+      "Action": [
+        "glue:GetDatabase",
+        "glue:GetTable",
+        "glue:GetPartitions",
+        "glue:CreateTable"
+      ],
+      "Resource": [
+        "arn:aws:glue:us-east-1:712107929769:catalog",
+        "arn:aws:glue:us-east-1:712107929769:database/sbom_analytics",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507_sbom_observation_rows_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507_sbom_package_rows_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507_sbom_observations_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507_sbom_packages_v1",
+        "arn:aws:glue:us-east-1:712107929769:table/sbom_analytics/sbom_snapshot_8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507_sbom_inventory_v1"
+      ]
+    },
+    {
+      "Sid": "SbomAnalyticsQueryResults",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::distroless-sbom-analytics/query-results/sbom-analytics-v1/*"
+      ]
+    }
+  ]
+}

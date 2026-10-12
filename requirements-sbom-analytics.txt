@@ -1,4 +1,4 @@
-# Explicit LAB SDK environment; corporate installs these through its approved channel.
+# Explicit SDK environment for the personal deployment; corporate installs these through its approved channel.
 PyYAML==6.0.3
 pyarrow==21.0.0
 boto3==1.40.39

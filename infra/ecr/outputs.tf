@@ -34,26 +34,26 @@ output "go1_26_dev_repository_url" {
 }
 
 output "bucket_name" {
-  value = module.sbom.bucket_name
+  value = module.sbom_analytics.bucket_name
 }
 output "bucket_arn" {
-  value = module.sbom.bucket_arn
+  value = module.sbom_analytics.bucket_arn
 }
 output "bucket_tags" {
-  value = module.sbom.bucket_tags
+  value = module.sbom_analytics.bucket_tags
 }
 output "bucket_region" {
-  value = module.sbom.bucket_region
+  value = module.sbom_analytics.bucket_region
 }
 output "expected_bucket_owner" {
-  value = module.sbom.expected_bucket_owner
+  value = module.sbom_analytics.expected_bucket_owner
 }
 output "snapshots_prefix" {
-  value = module.sbom.snapshots_prefix
+  value = module.sbom_analytics.snapshots_prefix
 }
 output "query_results_prefix" {
-  value = module.sbom.query_results_prefix
+  value = module.sbom_analytics.query_results_prefix
 }
 output "ingestion_config" {
-  value = module.sbom.ingestion_config
+  value = module.sbom_analytics.ingestion_config
 }

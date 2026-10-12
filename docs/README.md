@@ -11,6 +11,8 @@ não nesta árvore.
 | Localizar responsabilidades, domínios e dependências | [Arquitetura do repositório](repository-architecture.md) |
 | Entender por que distroless não é sinônimo de hardened | [RFC-013 — O que significa "hardened"](../RFC-013-Image-Base-Completa-com-Mermaid.md#o-que-significa-hardened) |
 | Entender CAs, timezone, camadas, replay e SBOMs | [Composição das imagens](image-composition.md) |
+| Operar o Distroless SBOM Analytics (S3, Athena, nomes ativos) | [Distroless SBOM Analytics — operação](sbom-analytics-operations.md) |
+| Acompanhar a substituição da estrutura histórica | [Distroless SBOM Analytics — migração](sbom-analytics-migration.md) |
 | Entender contratos com o executor compartilhado | [Workflows reutilizáveis](repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados) |
 
 ## Consumer

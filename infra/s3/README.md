@@ -5,16 +5,33 @@ no backend, provider configuration, credential/profile selection or independent
 lockfile. Plan/apply execute only from `infra/ecr`; the existing ECR addresses,
 S3 backend, key, default workspace and native locking remain unchanged.
 
-The LAB configuration supplies account `712107929769` and region `us-east-1`.
-The root derives `alric-distroless-sbom-712107929769-us-east-1` from that expected
-account/region; `sbom_bucket_name` can select an explicitly authorized name.
-The child has no LAB account or region literals. Its caller account precondition
+Every deployment supplies the account, region and exact bucket name explicitly;
+nothing is derived from the account, region or organization. The versioned
+deployment configuration (`policies/pipeline/config.json`) provides
+`analytics.bucket`, passed as the required root variable `sbom_bucket_name`
+and to `verify_plan.py`/`readback.py` as `--bucket-name`. The personal AWS
+deployment uses account `712107929769`, region `us-east-1` and the bucket
+`distroless-sbom-analytics`; another installation sets its own name there.
+The child has no account, region or bucket literals. Its caller account precondition
 compares the provider session with the independently supplied expected owner.
 The backend remains in `us-east-2`; its region is not the bucket/provider region.
 
+## Legacy bucket (transitional)
+
+Distroless SBOM Analytics replaced the historical bucket
+`alric-distroless-sbom-712107929769-us-east-1` (historical prefixes
+`sbom-analytics/poc-v1`, `query-results/poc-v1/`). While the migration is
+transitional it stays at its real state addresses `module.sbom.<type>.sbom`,
+served by `infra/s3-legacy`, whose only difference is `force_destroy = true`
+and `prevent_destroy = false`. The next revision removes that block and
+Terraform destroys exactly that bucket, every version included. This module
+never relaxes either safeguard. See the
+[migration procedure](../../docs/sbom-analytics-migration.md); operation is in
+[Distroless SBOM Analytics operations](../../docs/sbom-analytics-operations.md).
+
 ## Six resources and controls
 
-All six addresses are `module.sbom.<type>.sbom`, with types:
+All six addresses are `module.sbom_analytics.<type>.sbom`, with types:
 
 - `aws_s3_bucket`
 - `aws_s3_bucket_public_access_block`
@@ -30,12 +47,12 @@ are no ACL, lifecycle/expiration, Object Lock, replication, logging or KMS
 resources. The pinned provider/lockfile is not upgraded.
 
 Policy has three Deny statements and no Allow: TLS is required for the bucket
-and its objects; object creation at `sbom-analytics/poc-v1/snapshots/*` requires
+and its objects; object creation at `sbom-analytics/v1/snapshots/*` requires
 `If-None-Match: *`. The documented `s3:ObjectCreationOperation` condition limits
 those header rules to object creation, including multipart completion. The
 integrated adapter still uses only simple conditional PutObject. Missing headers
 and a different condition are denied. CopyObject to that area is incompatible
-with this policy. These statements do not cover `query-results/poc-v1/`;
+with this policy. These statements do not cover `query-results/sbom-analytics-v1/`;
 Athena result writes need their own future IAM authorization.
 
 References: [S3 conditional-write enforcement](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html),
@@ -51,7 +68,7 @@ native lock, default workspace, exact execution root and all catalog ECR address
 before planning. It rejects an empty/wrong state or unexpected managed address.
 The temporary JSON state stays private and is excluded from workflow artifacts.
 
-`verify_plan.py --mode sbom-adoption --account-id ... --region ...` requires all
+`verify_plan.py --mode sbom-adoption --account-id ... --region ... --bucket-name ...` requires all
 catalog ECR resources to be no-op and the six S3 resources to be create or no-op.
 It checks both plan graphs, names, tags, provider identity, region, policies and
 security values. Changes, replacements, imports, moves and extra/missing resources
@@ -99,14 +116,14 @@ result in JSON, including failed/inconclusive checks, before nonzero exit.
 See [GetBucketLocation](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketLocation.html).
 
 `terraform -chdir=infra/ecr output -json ingestion_config` exposes the exact
-protocol-v1 configuration consumed by #115, with prefix `sbom-analytics/poc-v1`
+protocol-v1 configuration consumed by #115, with prefix `sbom-analytics/v1`
 (the adapter appends `/snapshots/<snapshot_id>/`). Bucket name/ARN/region/owner,
 tags and both reserved prefixes are also root outputs, with no credentials.
 Outputs do not authorize upload, catalog creation or Athena queries.
 
 ## External prerequisites observed before first use
 
-Read-only LAB inspection on 2026-10-09 found the bucket absent, the existing
+Read-only inspection of the personal deployment on 2026-10-09 found the bucket absent, the existing
 backend/key/default workspace in use, and the Infra apply inline policy scoped
 to the backend bucket only. No S3 permissions for the new bucket were granted.
 The Environment still permits `main` only while dispatch requires `develop`;
@@ -152,6 +169,6 @@ No expiration period is decided. This delivery creates no Athena/Glue resources,
 automatic ingestion, promotion changes, monitoring platform or productive HGC-04.
 
 Corporate adoption retains dynamically generated backend/provider and its
-authorized provider mirror/ARC/UP2 configuration. Do not copy LAB identifiers or
+authorized provider mirror/ARC/UP2 configuration. Do not copy personal-deployment identifiers or
 replace FROZEN files; only the child and authorized root linkage are candidates
 for a separately reviewed port. No corporate account is applied here.

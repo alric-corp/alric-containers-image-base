@@ -1,4 +1,4 @@
-"""Thin explicit-client POC orchestration; offline commands never discover AWS credentials."""
+"""Thin explicit-client S3 snapshot orchestration; offline commands never discover AWS credentials."""
 import argparse
 from collections import Counter
 from dataclasses import asdict
@@ -37,14 +37,14 @@ def config(path):
     value = document(read_local(Path(path), 65536))
     fields(value, ('protocol_version', 'destination', 'expected_role_arn', 'expected_role_id',
                    'batch_id', 'snapshot_id', 'payload_objects', 'payload_bytes', 'golden'))
-    check(type(value['protocol_version']) is int and value['protocol_version'] == 1, 'UNSUPPORTED_POC_CONFIG')
+    check(type(value['protocol_version']) is int and value['protocol_version'] == 1, 'UNSUPPORTED_ANALYTICS_CONFIG')
     Destination(**value['destination'])
     check(re.fullmatch(r'arn:aws:iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_-]{1,64}', value['expected_role_arn']), 'INVALID_ROLE')
     check(re.fullmatch(r'AROA[A-Z0-9]+', value['expected_role_id']), 'INVALID_ROLE_ID')
     for key in ('batch_id', 'snapshot_id'):
         check(type(value[key]) is str and re.fullmatch('[0-9a-f]{64}', value[key]), 'INVALID_HASH')
     for key in ('payload_objects', 'payload_bytes'):
-        check(type(value[key]) is int and value[key] > 0, 'INVALID_POC_COUNT')
+        check(type(value[key]) is int and value[key] > 0, 'INVALID_ANALYTICS_COUNT')
     fields(value['golden'], ('observations', 'packages', 'runtime_framework', 'dev_framework',
                             'platform_components', 'comparison', 'component'))
     return value
@@ -91,7 +91,7 @@ def unpack(package, descriptor, output, expected):
             members[name] = body
     check('plan.json' in members and sha256(members['plan.json']) == descriptor['plan_sha256'], 'PLAN_BYTES_DIFFER')
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=output.parent, prefix='.poc-package-') as temporary:
+    with tempfile.TemporaryDirectory(dir=output.parent, prefix='.analytics-package-') as temporary:
         stage = Path(temporary) / 'plan'
         stage.mkdir()
         for name, body in members.items():
@@ -298,7 +298,7 @@ def aws_clients(expected):
 
 class _Parser(argparse.ArgumentParser):
     def error(self, message):
-        raise IngestionError('POC_ARGUMENTS_INVALID', stage='ARGUMENTS')
+        raise IngestionError('ANALYTICS_ARGUMENTS_INVALID', stage='ARGUMENTS')
 
 
 def main(argv=None):
@@ -316,7 +316,7 @@ def main(argv=None):
     try:
         args = parser.parse_args(argv)
     except (IngestionError, argparse.ArgumentError):
-        result = dict(status='ERROR', code='POC_ARGUMENTS_INVALID', stage='ARGUMENTS')
+        result = dict(status='ERROR', code='ANALYTICS_ARGUMENTS_INVALID', stage='ARGUMENTS')
         # Malformed arguments still get JSON; never overwrite a referenced input.
         def option(name):
             positions = [i for i, value in enumerate(argv) if value == name]
@@ -331,7 +331,7 @@ def main(argv=None):
             result = dict(status='ERROR', code='REPORT_WRITE_FAILED', stage='ARGUMENTS')
         print(json.dumps(result,sort_keys=True))
         return 1
-    result = dict(status='ERROR', code='POC_NOT_STARTED', stage=args.command)
+    result = dict(status='ERROR', code='ANALYTICS_NOT_STARTED', stage=args.command)
     try:
         expected = config(args.config)
         protected = [p.resolve() for p in (args.plan, args.package, args.descriptor, args.config, args.output) if p is not None]

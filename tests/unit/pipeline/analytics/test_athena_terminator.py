@@ -12,10 +12,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from scripts.pipeline.analytics import athena_poc as a, athena_restore as r, parquet
+from scripts.pipeline.analytics import athena_run as a, athena_restore as r, parquet
 from scripts.pipeline.analytics.ingestion_types import IngestionError
 from scripts.pipeline.analytics.spdx import canonical, sha256
-from tests.unit.pipeline.analytics import test_athena_poc as support
+from tests.unit.pipeline.analytics import test_athena_run as support
 from tests.unit.pipeline.analytics.test_athena_restore import archive, GitHub
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -168,10 +168,10 @@ class SixEntryGitHub(GitHub):
 
 
 class AthenaSixEntryResumeTests(unittest.TestCase):
-    setUpClass = classmethod(support.AthenaPocTests.setUpClass.__func__)
+    setUpClass = classmethod(support.AthenaRunTests.setUpClass.__func__)
 
     def setUp(self):
-        support.AthenaPocTests.setUp(self)
+        support.AthenaRunTests.setUp(self)
         self.raw = (PRIOR / 'sql-plan.json').read_bytes()
         self.original = (FIXTURE / 'execution-journal.json').read_bytes()
         self.source_sha, self.executor_sha = '20ee0051018eefe94001b9639fd819c4b898ded7', 'a' * 40
@@ -192,7 +192,8 @@ class AthenaSixEntryResumeTests(unittest.TestCase):
         self.events = []
 
     def restore(self):
-        return r.restore(self.github, self.resume, self.reports, self.originals, executor_sha=self.executor_sha,
+        return r.restore(self.github, self.resume, self.reports, self.originals, origin=support.HISTORICAL_ORIGIN,
+                         executor_sha=self.executor_sha,
                          authorized_sha256=PLAN_HASH, authorization_reference=AUTH,
                          round_id='lab-sbom-athena-v1', snapshot_id=self.expected['snapshot_id'])
 
@@ -405,8 +406,8 @@ class AthenaSixEntryResumeTests(unittest.TestCase):
 
     def test_missing_or_changed_restored_journal_fails_before_aws_client_construction(self):
         self.restore()
-        argv = ['--config', str(ROOT / 'policies/analytics/lab-poc.json'),
-                '--athena-config', str(ROOT / 'policies/analytics/athena-lab-poc.json'),
+        argv = ['--config', str(support.HISTORICAL / 'lab-poc.json'),
+                '--athena-config', str(support.HISTORICAL / 'athena-lab-poc.json'),
                 '--session-name', 'TEST_ONLY', '--round-id', 'lab-sbom-athena-v1',
                 '--authorized-plan-sha256', PLAN_HASH, '--authorization-reference', AUTH,
                 '--resume-receipt', str(self.reports / 'resume-receipt.json'),

@@ -1,0 +1,7 @@
+{
+  "CatalogId": "712107929769",
+  "DatabaseInput": {
+    "Name": "sbom_analytics",
+    "Description": "Distroless SBOM Analytics projection; confers no publication authority"
+  }
+}

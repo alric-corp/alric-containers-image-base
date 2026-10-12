@@ -18,13 +18,11 @@ import threading
 import zipfile
 import zlib
 
-from scripts.pipeline.analytics import athena_poc as a, poc
+from scripts.pipeline.analytics import athena_run as a, s3_run
 from scripts.pipeline.analytics.ingestion_types import IngestionError, check, hash_id
 from scripts.pipeline.analytics.spdx import canonical, document, read_local, sha256
 
-REPOSITORY = 'alric-corp/alric-containers-image-base'
-WORKFLOW = '.github/workflows/sbom-analytics-athena-lab-poc.yml'
-REPOSITORY_ID = 1360616627
+WORKFLOW = '.github/workflows/sbom-analytics-athena.yml'
 ZIP_LIMIT = 16 * 1024 * 1024
 EXPANSION_LIMIT = 32 * 1024 * 1024
 MEMBER_LIMIT = 64
@@ -62,6 +60,18 @@ class ResumeSource:
             check(type(value) is int and 0 < value <= limit, 'RESUME_SOURCE_SIZE_INVALID')
 
 
+@dataclass(frozen=True)
+class Origin:
+    """Repository that owns the workflow; supplied by the caller, never a product constant."""
+    repository: str
+    repository_id: int
+
+    def __post_init__(self):
+        check(type(self.repository) is str and re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', self.repository)
+              and '..' not in self.repository and type(self.repository_id) is int and 0 < self.repository_id < 2**63,
+              'RESUME_ORIGIN_INVALID')
+
+
 def source_document(raw):
     value = document(raw, limit=4096)
     check(set(value) == set(ResumeSource.__dataclass_fields__), 'RESUME_SOURCE_FIELDS_INVALID')
@@ -70,8 +80,11 @@ def source_document(raw):
 
 class GitHubActions:
     """Only explicit gh API reads on github.com; GH_TOKEN belongs to the caller."""
+    def __init__(self, origin):
+        self.origin = origin
+
     def _read(self, path, limit):
-        check(path.startswith('repos/' + REPOSITORY + '/'), 'RESUME_API_PATH_INVALID')
+        check(path.startswith('repos/' + self.origin.repository + '/'), 'RESUME_API_PATH_INVALID')
         with subprocess.Popen(['gh', 'api', '--hostname', 'github.com', path], stdout=subprocess.PIPE,
                               stderr=subprocess.DEVNULL) as process:
             timer = threading.Timer(60, process.kill)
@@ -90,11 +103,11 @@ class GitHubActions:
         return document(self._read(path, 2 * 1024 * 1024), limit=2 * 1024 * 1024)
 
     def download(self, artifact_id):
-        return self._read(f'repos/{REPOSITORY}/actions/artifacts/{artifact_id}/zip', ZIP_LIMIT)
+        return self._read(f'repos/{self.origin.repository}/actions/artifacts/{artifact_id}/zip', ZIP_LIMIT)
 
 
-def acquisition(client, source):
-    root = 'repos/' + REPOSITORY + '/'
+def acquisition(client, source, origin):
+    root = 'repos/' + origin.repository + '/'
     workflow = client.get_json(root + 'actions/workflows/' + WORKFLOW.rsplit('/', 1)[1])
     run = client.get_json(root + f'actions/runs/{source.run_id}/attempts/{source.attempt}')
     check(workflow.get('path') == WORKFLOW and run.get('workflow_id') == workflow.get('id')
@@ -105,15 +118,15 @@ def acquisition(client, source):
           and run.get('status') == 'completed' and run.get('conclusion') in ('failure', 'success'),
           'RESUME_RUN_IDENTITY_DIFFERS')
     for key in ('repository', 'head_repository'):
-        check(run.get(key, {}).get('full_name') == REPOSITORY
-              and run[key].get('id') == REPOSITORY_ID, 'RESUME_REPOSITORY_DIFFERS')
+        check(run.get(key, {}).get('full_name') == origin.repository
+              and run[key].get('id') == origin.repository_id, 'RESUME_REPOSITORY_DIFFERS')
     artifact = client.get_json(root + f'actions/artifacts/{source.artifact_id}')
     check(artifact.get('id') == source.artifact_id and artifact.get('name') == f'sbom-athena-{source.run_id}-{source.attempt}'
           and artifact.get('expired') is False and artifact.get('size_in_bytes') == source.zip_bytes,
           'RESUME_ARTIFACT_IDENTITY_DIFFERS')
     binding = artifact.get('workflow_run', {})
-    check(all(binding.get(k) == v for k, v in dict(id=source.run_id, repository_id=REPOSITORY_ID,
-          head_repository_id=REPOSITORY_ID, head_branch='develop', head_sha=source.source_sha).items()),
+    check(all(binding.get(k) == v for k, v in dict(id=source.run_id, repository_id=origin.repository_id,
+          head_repository_id=origin.repository_id, head_branch='develop', head_sha=source.source_sha).items()),
           'RESUME_ARTIFACT_RUN_DIFFERS')
     digest = artifact.get('digest')
     check(digest is None or digest == 'sha256:' + source.zip_sha256, 'RESUME_API_DIGEST_DIFFERS')
@@ -222,11 +235,12 @@ def _private_directory(path):
     return path
 
 
-def restore(client, source, reports, originals, *, executor_sha, authorized_sha256, authorization_reference,
+def restore(client, source, reports, originals, *, origin, executor_sha, authorized_sha256, authorization_reference,
             round_id, snapshot_id):
+    check(isinstance(origin, Origin), 'RESUME_ORIGIN_INVALID')
     check(re.fullmatch('[0-9a-f]{40}', executor_sha or '') and source.sql_plan_sha256 == hash_id(authorized_sha256),
           'RESUME_AUTHORIZATION_DIFFERS')
-    metadata = acquisition(client, source)
+    metadata = acquisition(client, source, origin)
     originals = _private_directory(originals)
     raw = client.download(source.artifact_id)
     (originals/'source-artifact.zip').write_bytes(raw)
@@ -264,7 +278,7 @@ def restore(client, source, reports, originals, *, executor_sha, authorized_sha2
                    round_id=round_id, snapshot_id=snapshot_id, members=inventory,
                    restored_executions=len(journal['executions']), total_round_budget=18,
                    remaining_unreserved_executions=18-len(journal['executions']))
-    poc.write_json(reports/'resume-receipt.json', receipt)
+    s3_run.write_json(reports/'resume-receipt.json', receipt)
     return receipt
 
 
@@ -294,16 +308,20 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('source', 'reports', 'originals', 'report'):
         parser.add_argument('--' + name, type=Path, required=True)
-    for name in ('executor-sha', 'authorized-plan-sha256', 'authorization-reference', 'round-id', 'snapshot-id'):
+    for name in ('executor-sha', 'authorized-plan-sha256', 'authorization-reference', 'round-id', 'snapshot-id',
+                 'repository', 'repository-id'):
         parser.add_argument('--' + name, required=True)
     args = parser.parse_args(argv)
     try:
-        result = restore(GitHubActions(), source_document(read_local(args.source, 4096)), args.reports, args.originals,
-                         executor_sha=args.executor_sha, authorized_sha256=args.authorized_plan_sha256,
+        check(re.fullmatch('[1-9][0-9]{0,18}', args.repository_id), 'RESUME_ORIGIN_INVALID')
+        origin = Origin(args.repository, int(args.repository_id))
+        result = restore(GitHubActions(origin), source_document(read_local(args.source, 4096)), args.reports,
+                         args.originals, origin=origin, executor_sha=args.executor_sha,
+                         authorized_sha256=args.authorized_plan_sha256,
                          authorization_reference=args.authorization_reference, round_id=args.round_id, snapshot_id=args.snapshot_id)
     except Exception as error:
         result = error.diagnostic() if isinstance(error, IngestionError) else dict(status='ERROR', code='RESUME_INVALID', stage='RESTORE')
-    poc.write_json(args.report, result)
+    s3_run.write_json(args.report, result)
     print(json.dumps(result, sort_keys=True))
     return 0 if result['status'] == 'RESTORED_VERIFIED' else 1
 

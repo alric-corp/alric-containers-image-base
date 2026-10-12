@@ -36,7 +36,8 @@ def match(value, pattern, label):
 def configuration(path=None):
     cfg = json.loads((CONFIG if path is None else Path(path)).read_text(),
                      object_pairs_hook=object_pairs)
-    keys(cfg, ('schema_version', 'repository', 'branch', 'subject_prefix', 'DEV', 'HOM', 'infra', 'factory'), 'pipeline')
+    keys(cfg, ('schema_version', 'repository', 'branch', 'subject_prefix', 'DEV', 'HOM', 'infra', 'factory', 'analytics'),
+         'pipeline')
     require(type(cfg['schema_version']) is int and cfg['schema_version'] == 1, 'unsupported pipeline schema')
     match(cfg['repository'], r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', 'repository')
     # Entrypoint branch guards and OIDC Environments are reviewed boundaries.
@@ -73,6 +74,14 @@ def configuration(path=None):
     match(infra['backend']['region'], r'[a-z]{2}-[a-z]+-[0-9]+', 'infra.backend.region')
     match(infra['backend']['key'], r'[A-Za-z0-9_-]+(?:/[A-Za-z0-9_.-]+)*', 'infra.backend.key')
     require('..' not in infra['backend']['key'].split('/'), 'backend key cannot traverse directories')
+    # Distroless SBOM Analytics bucket of this deployment: an exact name, never
+    # derived from the account, region or organization.
+    keys(cfg['analytics'], ('bucket',), 'analytics')
+    match(cfg['analytics']['bucket'], r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', 'analytics.bucket')
+    require('--' not in cfg['analytics']['bucket'], 'analytics.bucket is not a plain bucket name')
+    require(cfg['analytics']['bucket'] not in {cfg['DEV']['release_bucket'], cfg['HOM']['release_bucket'],
+                                               infra['backend']['bucket']},
+            'analytics bucket must be separate from release and state buckets')
     return cfg
 
 
@@ -125,7 +134,7 @@ def settings(cfg, scope):
     if scope.startswith('INFRA_'):
         backend = cfg['infra']['backend']
         values.update(TF_STATE_BUCKET=backend['bucket'], TF_STATE_KEY=backend['key'],
-                      TF_BACKEND_REGION=backend['region'])
+                      TF_BACKEND_REGION=backend['region'], SBOM_BUCKET_NAME=cfg['analytics']['bucket'])
     return values
 
 

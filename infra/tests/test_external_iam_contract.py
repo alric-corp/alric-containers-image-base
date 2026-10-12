@@ -69,6 +69,7 @@ ATHENA_ACTIONS = {
     "athena:GetQueryResults", "athena:StopQueryExecution",
 }
 GLUE_ACTIONS = {"glue:GetDatabase", "glue:GetTable", "glue:GetPartitions", "glue:CreateTable"}
+LEGACY_REMOVAL_ACTIONS = {"s3:ListBucketVersions", "s3:DeleteBucketPolicy", "s3:DeleteBucket", "s3:DeleteObjectVersion"}
 
 
 class ExternalFactoryIamContractTests(unittest.TestCase):
@@ -83,7 +84,10 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         cls.statements = {item["Sid"]: item for item in cls.policy["Statement"]}
         cls.backend = "arn:aws:s3:::" + cls.config["infra"]["backend"]["bucket"]
         cls.state = cls.backend + "/" + cls.config["infra"]["backend"]["key"]
-        cls.analytics = f"arn:aws:s3:::alric-distroless-sbom-{cls.lab['aws_account_id']}-{cls.lab['aws_region']}"
+        cls.analytics = "arn:aws:s3:::" + cls.config["analytics"]["bucket"]
+        # Legacy (historical) bucket: granted only while the migration is transitional.
+        cls.legacy = f"arn:aws:s3:::alric-distroless-sbom-{cls.lab['aws_account_id']}-{cls.lab['aws_region']}"
+        cls.analytics_config = json.loads((ROOT / "policies/analytics/s3.json").read_text())
         cls.release = "arn:aws:s3:::" + cls.config["DEV"]["release_bucket"]
 
     def assert_statement(self, sid, actions, resources, condition=None):
@@ -114,7 +118,8 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
             "ReadOnlyRegionalRepositoryInventory", "ExactSbomAnalyticsBucket",
             "ExactCatalogEcr", "RegistryAuthentication", "DevReleaseInventory",
             "DevReleaseRecords", "SbomSnapshotObjects", "SbomSnapshotListing",
-            "PocAthenaExactWorkgroup", "PocGlueReadAndNewTables", "PocAthenaQueryResults",
+            "SbomAnalyticsAthenaWorkgroup", "SbomAnalyticsGlueReadAndNewTables", "SbomAnalyticsQueryResults",
+            "TransitionalLegacySbomBucketRemoval", "TransitionalLegacySbomVersionRemoval",
         ])
         self.assertEqual(len(self.statements), len(self.policy["Statement"]))
 
@@ -177,7 +182,7 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
                          {"ReadOnlyRegionalRepositoryInventory", "RegistryAuthentication"})
 
     def test_exact_sbom_bucket_administration_preserves_reviewed_scope(self):
-        self.assert_statement("ExactSbomAnalyticsBucket", ANALYTICS_BUCKET_ACTIONS, [self.analytics],
+        self.assert_statement("ExactSbomAnalyticsBucket", ANALYTICS_BUCKET_ACTIONS, [self.analytics, self.legacy],
                               {"StringEquals": {"aws:RequestedRegion": "us-east-1"}})
 
     def test_dev_release_store_scope(self):
@@ -186,17 +191,17 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
 
     def test_snapshot_objects_and_listing_scope(self):
         self.assert_statement("SbomSnapshotObjects", {"s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"},
-                              [self.analytics + "/sbom-analytics/poc-v1/snapshots/*"],
+                              [self.analytics + "/sbom-analytics/v1/snapshots/*"],
                               {"StringEquals": {"aws:RequestedRegion": "us-east-1"}})
         self.assert_statement("SbomSnapshotListing", {"s3:ListBucket"}, [self.analytics], {
             "StringEquals": {"aws:RequestedRegion": "us-east-1"},
-            "StringLike": {"s3:prefix": ["sbom-analytics/poc-v1/snapshots/*"]},
+            "StringLike": {"s3:prefix": ["sbom-analytics/v1/snapshots/*"]},
         })
 
     def test_no_invalid_or_unapproved_actions_and_no_data_deletion(self):
         approved = BACKEND_ACTIONS | ANALYTICS_BUCKET_ACTIONS | ECR_ACTIONS | ATHENA_ACTIONS | GLUE_ACTIONS | {
             "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:GetObjectVersion", "ecr:GetAuthorizationToken",
-        }
+        } | LEGACY_REMOVAL_ACTIONS
         actions = {action for item in self.policy["Statement"] for action in item["Action"]}
         self.assertEqual(actions, approved)
         self.assertNotIn("ecr:ListImageReferrers", actions)
@@ -204,27 +209,50 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         self.assertFalse(any("*" in action for action in actions))
         deletion = {(action, resource) for item in self.policy["Statement"]
                     for action in item["Action"] for resource in item["Resource"] if "Delete" in action}
-        self.assertEqual(deletion, {("s3:DeleteObject", self.state + ".tflock")})
+        # Besides the state lock, deletion reaches ONLY the legacy bucket, and only while transitional.
+        self.assertEqual(deletion, {("s3:DeleteObject", self.state + ".tflock"),
+                                    ("s3:DeleteBucketPolicy", self.legacy), ("s3:DeleteBucket", self.legacy),
+                                    ("s3:DeleteObjectVersion", self.legacy + "/*")})
         self.assertNotIn("query-results", json.dumps(self.policy["Statement"][:11]))
 
     def test_athena_complement_keeps_exact_workgroup_catalog_and_five_objects(self):
-        snapshot = "6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6"
+        # The five names follow the active snapshot in the versioned analytics configuration.
+        snapshot = self.analytics_config["snapshot_id"]
+        self.assertEqual(snapshot, "8439add73fe20e08d45292dddc62b360b6ccaa372395818aa0a5cf8a910eb507")
+        self.assertEqual(self.analytics_config["destination"]["bucket"], self.analytics.split(":::")[1])
         glue = "arn:aws:glue:us-east-1:712107929769:"
-        self.assert_statement("PocAthenaExactWorkgroup", ATHENA_ACTIONS,
-                              ["arn:aws:athena:us-east-1:712107929769:workgroup/poc_distroless_sbom"])
-        self.assert_statement("PocGlueReadAndNewTables", GLUE_ACTIONS, [
-            glue + "catalog", glue + "database/poc_distroless_sbom",
-            *[glue + "table/poc_distroless_sbom/poc_snapshot_" + snapshot + "_" + name for name in (
+        self.assert_statement("SbomAnalyticsAthenaWorkgroup", ATHENA_ACTIONS,
+                              ["arn:aws:athena:us-east-1:712107929769:workgroup/sbom_analytics"])
+        self.assert_statement("SbomAnalyticsGlueReadAndNewTables", GLUE_ACTIONS, [
+            glue + "catalog", glue + "database/sbom_analytics",
+            *[glue + "table/sbom_analytics/sbom_snapshot_" + snapshot + "_" + name for name in (
                 "sbom_observation_rows_v1", "sbom_package_rows_v1", "sbom_observations_v1",
                 "sbom_packages_v1", "sbom_inventory_v1")],
         ])
-        self.assert_statement("PocAthenaQueryResults", {"s3:GetObject", "s3:PutObject"},
-                              [self.analytics + "/query-results/poc-v1/*"])
-        delta = json.loads((ROOT / "docs/examples/sbom-lab/athena-policy-delta.json").read_text())
-        self.assertEqual(self.policy["Statement"][11:], delta["Statement"])
+        self.assert_statement("SbomAnalyticsQueryResults", {"s3:GetObject", "s3:PutObject"},
+                              [self.analytics + "/query-results/sbom-analytics-v1/*"])
+        delta = json.loads((ROOT / "docs/examples/sbom-analytics/athena-policy-delta.json").read_text())
+        self.assertEqual(self.policy["Statement"][11:14], delta["Statement"])
         self.assertFalse({"athena:CreateWorkGroup", "glue:CreateDatabase", "glue:UpdateTable"} & {
             a for s in self.policy["Statement"] for a in s["Action"]})
-        self.assertEqual(len(json.dumps(self.policy, separators=(",", ":"))), 6277)
+        for mark in ("poc", "lab", "alric"):
+            self.assertNotIn(mark, json.dumps(self.policy["Statement"][9:14]).lower())
+        self.assertEqual(self.analytics, "arn:aws:s3:::distroless-sbom-analytics")
+        self.assertEqual(len(json.dumps(self.policy, separators=(",", ":"))), 6771)
+
+    def test_transitional_removal_is_limited_to_the_replaced_bucket(self):
+        region = {"StringEquals": {"aws:RequestedRegion": "us-east-1"}}
+        self.assert_statement("TransitionalLegacySbomBucketRemoval",
+                              {"s3:ListBucketVersions", "s3:DeleteBucketPolicy", "s3:DeleteBucket"}, [self.legacy], region)
+        self.assert_statement("TransitionalLegacySbomVersionRemoval", {"s3:DeleteObjectVersion"},
+                              [self.legacy + "/*"], region)
+        self.assertEqual(self.policy["Statement"][14:], [self.statements["TransitionalLegacySbomBucketRemoval"],
+                                                         self.statements["TransitionalLegacySbomVersionRemoval"]])
+        for statement in self.policy["Statement"]:
+            for resource in statement["Resource"]:
+                if resource.startswith(self.legacy):
+                    self.assertIn(statement["Sid"], {"ExactSbomAnalyticsBucket", "TransitionalLegacySbomBucketRemoval",
+                                                     "TransitionalLegacySbomVersionRemoval"})
 
     def test_single_inline_policy_size_excludes_formatting_only(self):
         compact = json.dumps(self.policy, separators=(",", ":"))

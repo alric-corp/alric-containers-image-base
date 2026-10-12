@@ -44,6 +44,9 @@ class ConfigurationTests(unittest.TestCase):
                     self.assertEqual(settings['TF_STATE_BUCKET'], '712107929769-alric-containers-image-base-tfstate')
                     self.assertEqual(settings['TF_BACKEND_REGION'], 'us-east-2')
                     self.assertEqual(settings['TF_STATE_KEY'], 'alric-containers-image-base/terraform.tfstate')
+                    self.assertEqual(settings['SBOM_BUCKET_NAME'], 'distroless-sbom-analytics')
+                else:
+                    self.assertNotIn('SBOM_BUCKET_NAME', settings)
 
     def test_operational_role_configuration_is_required_and_strict(self):
         for value in (None, {}, {'operational_role_name': True},
@@ -58,6 +61,22 @@ class ConfigurationTests(unittest.TestCase):
                 self.load(cfg)
         cfg = copy.deepcopy(self.cfg)
         del cfg['factory']
+        with self.assertRaises(ValueError):
+            self.load(cfg)
+
+    def test_analytics_bucket_is_an_exact_separate_name(self):
+        self.assertEqual(self.cfg['analytics'], {'bucket': 'distroless-sbom-analytics'})
+        for value in (None, {}, {'bucket': True}, {'bucket': 'Distroless'}, {'bucket': 'ab'},
+                      {'bucket': 'x' * 64}, {'bucket': 'bad--name'}, {'bucket': 'name\nINJECTED=true'},
+                      {'bucket': self.cfg['DEV']['release_bucket']},
+                      {'bucket': self.cfg['infra']['backend']['bucket']},
+                      {'bucket': 'distroless-sbom-analytics', 'prefix': 'other'}):
+            cfg = copy.deepcopy(self.cfg)
+            cfg['analytics'] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.load(cfg)
+        cfg = copy.deepcopy(self.cfg)
+        del cfg['analytics']
         with self.assertRaises(ValueError):
             self.load(cfg)
 

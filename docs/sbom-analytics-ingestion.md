@@ -186,7 +186,7 @@ plan = load_plan("/scratch/frozen-upload-plan")
 adapter = S3Adapter(authorized_low_level_client, plan.destination, plan.limits)
 result = publish_reported(plan, adapter, "/scratch/diagnostics/ingestion.json")
 # Somente se result["complete"] for True; catalog_plan refaz read-back obrigatório.
-proposal = catalog_plan(adapter, plan.snapshot_id, database="poc_sbom", table_prefix="poc_snapshot")
+proposal = catalog_plan(adapter, plan.snapshot_id, database="sbom_analytics", table_prefix="sbom_snapshot")
 # Nunca executa DDL. Recuperação não usa caminhos do produtor:
 recover_snapshot(adapter, plan.snapshot_id, "/scratch/new-recovered-batch")
 ```
@@ -214,8 +214,8 @@ arbitrários ou promessa de memória constante. Os máximos aceitos estão em `L
 ## Catálogo e prova local
 
 `catalog_plan` só retorna após novo read-back integral do armazenamento. Exige
-database e prefixo de nomes externos começando por `poc_`; os nomes incluem o ID
-completo do snapshot. Reutiliza `tables.sql`, `views.sql` e as cinco consultas,
+exatamente o database `sbom_analytics` e o prefixo `sbom_snapshot` (sem padrão);
+os nomes incluem o ID completo do snapshot. Reutiliza `tables.sql`, `views.sql` e as cinco consultas,
 alterando apenas identificadores e LOCATIONs. Antes de executar futuramente,
 confirmar namespace/nomes novos e isolados: o código não consulta o catálogo.
 
@@ -252,11 +252,11 @@ e contagens não equivalem a pacotes instalados. Imports do normalizador ligados
 ao modelo de release do laboratório continuam existentes e explícitos.
 SQLite não prova DDL, nested types ou leitura hospedada Athena.
 
-## Pré-requisitos da POC real e porte corporativo
+## Pré-requisitos da execução real e porte corporativo
 
 Decisões externas ainda necessárias: bucket/prefixo autorizado, região/conta owner,
 acessos limitados de escrita/leitura/versão/listagem (e KMS, caso aplicável), catálogo
-e namespace/tabelas POC isolados, workgroup, saída das consultas, controles de
+e namespace/tabelas exclusivos, workgroup, saída das consultas, controles de
 custo e retenção aprovados. Não se escolhe prazo corporativo ou bucket HGC-04 aqui.
 O integrador deve fixar SDK compatível pelo canal aprovado, configurar endpoint,
 timeouts/retries/credenciais externamente e testar parâmetros contra o serviço.

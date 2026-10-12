@@ -13,7 +13,7 @@ import zipfile
 
 import yaml
 
-from scripts.pipeline.analytics import poc
+from scripts.pipeline.analytics import s3_run
 from scripts.pipeline.analytics.ingestion_types import Destination, IngestionError
 from scripts.pipeline.analytics.snapshot import load_plan
 from scripts.pipeline.analytics.spdx import canonical, sha256
@@ -55,23 +55,23 @@ class Client(FakeS3):
         return {'Policy':json.dumps({'Version':'2012-10-17','Statement':[]})}
 
 
-class PocTests(unittest.TestCase):
+class S3RunTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
-        self.expected = poc.config(ROOT/'policies/analytics/lab-poc.json')
-        self.package = ROOT/'tests/fixtures/sbom-analytics/lab-frozen-plan.zip'
-        self.descriptor = ROOT/'tests/fixtures/sbom-analytics/lab-frozen-plan.json'
+        self.expected = s3_run.config(ROOT/'policies/analytics/s3.json')
+        self.package = ROOT/'tests/fixtures/sbom-analytics/frozen-plan-v1.zip'
+        self.descriptor = ROOT/'tests/fixtures/sbom-analytics/frozen-plan-v1.json'
         self.client = Client()
         role = self.expected['expected_role_arn']
         account = role.split(':')[4]
-        self.session = 'poc-test-session'
+        self.session = 'test-oidc-session'
         self.identity = {'Account':account,'Arn':f'arn:aws:sts::{account}:assumed-role/{role.split("/")[-1]}/{self.session}',
                          'UserId':self.expected['expected_role_id']+':'+self.session}
         self.sts = SimpleNamespace(get_caller_identity=lambda:self.identity)
 
     def unpack(self):
-        poc.unpack(self.package,self.descriptor,self.root/'plan',self.expected)
+        s3_run.unpack(self.package,self.descriptor,self.root/'plan',self.expected)
         return self.root/'plan'
 
     def test_original_frozen_bytes_are_preserved_and_validated_offline(self):
@@ -88,7 +88,7 @@ class PocTests(unittest.TestCase):
     def test_package_hash_failure_before_cloud_or_destination(self):
         raw = self.root/'package.zip'; raw.write_bytes(self.package.read_bytes()+b'tampered')
         with self.assertRaisesRegex(IngestionError,'PACKAGE_BYTES_DIFFER'):
-            poc.unpack(raw,self.descriptor,self.root/'plan',self.expected)
+            s3_run.unpack(raw,self.descriptor,self.root/'plan',self.expected)
         self.assertFalse((self.root/'plan').exists())
         self.assertEqual(self.client.calls,[])
 
@@ -101,23 +101,23 @@ class PocTests(unittest.TestCase):
             d=json.loads(self.descriptor.read_bytes());d.update(package_sha256=sha256(raw.read_bytes()),package_bytes=raw.stat().st_size)
             desc=self.root/'desc.json';desc.write_bytes(canonical(d))
             with self.subTest(member=member),self.assertRaises((IngestionError,ValueError)):
-                poc.unpack(raw,desc,self.root/'plan',self.expected)
+                s3_run.unpack(raw,desc,self.root/'plan',self.expected)
         with zipfile.ZipFile(self.package) as old, zipfile.ZipFile(raw,'w') as new:
             for i in old.infolist():
                 i.external_attr=0o120777<<16
                 new.writestr(i,old.read(i))
         d.update(package_sha256=sha256(raw.read_bytes()),package_bytes=raw.stat().st_size);desc.write_bytes(canonical(d))
         with self.assertRaisesRegex(IngestionError,'MEMBER_TYPE'):
-            poc.unpack(raw,desc,self.root/'plan',self.expected)
+            s3_run.unpack(raw,desc,self.root/'plan',self.expected)
 
     def test_expected_snapshot_or_frozen_contents_differ_before_transport(self):
         path=self.unpack()
         expected=copy.deepcopy(self.expected);expected['snapshot_id']='a'*64
         with self.assertRaisesRegex(IngestionError,'IDENTITY_DIFFERS'):
-            poc.publish(path,self.client,self.sts,expected,self.session,self.root/'reports','test')
+            s3_run.publish(path,self.client,self.sts,expected,self.session,self.root/'reports','test')
         (path/'batch/complete.json').write_bytes(b'{}')
         with self.assertRaises(ValueError):
-            poc.publish(path,self.client,self.sts,self.expected,self.session,self.root/'reports','test')
+            s3_run.publish(path,self.client,self.sts,self.expected,self.session,self.root/'reports','test')
         self.assertEqual(self.client.calls,[])
 
     def test_admin_wrong_account_role_or_roleid_rejected_before_object_calls(self):
@@ -125,20 +125,20 @@ class PocTests(unittest.TestCase):
         for field,value in [('Account','000000000000'),('Arn','arn:aws:iam::712107929769:user/Tomas-Instructor'),('UserId','AROA_OTHER:session')]:
             original=dict(self.identity);self.identity[field]=value
             with self.subTest(field=field),self.assertRaisesRegex(IngestionError,'STS_IDENTITY_DIFFERS'):
-                poc.publish(path,self.client,self.sts,self.expected,self.session,self.root/'reports','test')
+                s3_run.publish(path,self.client,self.sts,self.expected,self.session,self.root/'reports','test')
             self.identity=original
         self.assertEqual(self.client.calls,[])
 
     def test_publication_retry_and_recovery_with_original_input_hidden(self):
         path=self.unpack()
-        result=poc.publish(path,self.client,self.sts,self.expected,self.session,self.root/'reports','test')
+        result=s3_run.publish(path,self.client,self.sts,self.expected,self.session,self.root/'reports','test')
         self.assertTrue(result['publication']['complete']);self.assertEqual(result['retry']['code'],'SNAPSHOT_ALREADY_PRESENT_IDENTICAL')
         self.assertEqual(result['retry_put_calls'],0)
         self.assertEqual(result['smoke']['deny_source'],'RESOURCE_POLICY_EXPLICIT_DENY')
         shutil.rmtree(path)
         # Reader has only client and external expectations; no producer paths.
-        with patch.object(poc,'load_plan',side_effect=AssertionError('producer fallback forbidden')):
-            recovered=poc.recover(self.client,self.sts,self.expected,self.session,self.root/'recovered')
+        with patch.object(s3_run,'load_plan',side_effect=AssertionError('producer fallback forbidden')):
+            recovered=s3_run.recover(self.client,self.sts,self.expected,self.session,self.root/'recovered')
         self.assertEqual(recovered['inspection']['observations'],6);self.assertEqual(recovered['inspection']['packages'],300)
         self.assertFalse(recovered['github_artifact_fallback'])
         for o in recovered['inspection']['raw_traceability']:
@@ -152,7 +152,7 @@ class PocTests(unittest.TestCase):
                 raise ServiceError(403,'AccessDenied')
         self.client.before=fail
         with self.assertRaises(IngestionError):
-            poc.publish(path,self.client,self.sts,self.expected,self.session,self.root/'reports','test')
+            s3_run.publish(path,self.client,self.sts,self.expected,self.session,self.root/'reports','test')
         self.assertFalse(json.loads((self.root/'reports/publication.json').read_bytes())['complete'])
         self.assertFalse(any(k.endswith('ingestion-manifest.json') for b,k in self.client.current))
         self.client.before=original
@@ -164,37 +164,37 @@ class PocTests(unittest.TestCase):
 
     def test_writer_and_reader_sessions_have_no_nonanalytics_or_delete_permissions(self):
         for writer in (True,False):
-            policy=poc.session_policy(self.expected,writer=writer)
+            policy=s3_run.session_policy(self.expected,writer=writer)
             actions={a for s in policy['Statement'] for a in s['Action']}
             self.assertEqual('s3:PutObject' in actions,writer)
             self.assertFalse(any(a.startswith(('iam:','ecr:')) or 'Delete' in a or a=='s3:*' for a in actions))
             objects=next(s for s in policy['Statement'] if 's3:GetObject' in s['Action'])
-            self.assertTrue(objects['Resource'].endswith('/sbom-analytics/poc-v1/snapshots/*'))
+            self.assertTrue(objects['Resource'].endswith('/sbom-analytics/v1/snapshots/*'))
             self.assertNotIn('query-results',json.dumps(policy));self.assertNotIn('tfstate',json.dumps(policy))
 
     def test_failure_cli_json_does_not_expose_sdk_message_or_discover_credentials(self):
         report=self.root/'report.json'
-        with patch.object(poc,'aws_clients',side_effect=ServiceError(403,'AccessDenied')),redirect_stdout(io.StringIO()):
-            status=poc.main(['recover','--config',str(ROOT/'policies/analytics/lab-poc.json'),'--report',str(report),'--output',str(self.root/'out'),'--session-name',self.session])
+        with patch.object(s3_run,'aws_clients',side_effect=ServiceError(403,'AccessDenied')),redirect_stdout(io.StringIO()):
+            status=s3_run.main(['recover','--config',str(ROOT/'policies/analytics/s3.json'),'--report',str(report),'--output',str(self.root/'out'),'--session-name',self.session])
         self.assertEqual(status,1);self.assertEqual(json.loads(report.read_bytes())['code'],'AccessDenied')
         self.assertNotIn('SECRET',report.read_text())
         with patch.dict('os.environ',{},clear=True),self.assertRaisesRegex(IngestionError,'TEMPORARY_CREDENTIALS_REQUIRED'):
-            poc.aws_clients(self.expected)
+            s3_run.aws_clients(self.expected)
 
     def test_invalid_arguments_still_emit_safe_failure_json(self):
         report=self.root/'diagnostic.json'
         with redirect_stdout(io.StringIO()) as stdout:
-            status=poc.main(['--report',str(report),'--unknown','SECRET'])
+            status=s3_run.main(['--report',str(report),'--unknown','SECRET'])
         self.assertEqual(status,1)
-        self.assertEqual(json.loads(report.read_bytes())['code'],'POC_ARGUMENTS_INVALID')
+        self.assertEqual(json.loads(report.read_bytes())['code'],'ANALYTICS_ARGUMENTS_INVALID')
         self.assertNotIn('SECRET',stdout.getvalue())
         original=self.package.read_bytes()
         with redirect_stdout(io.StringIO()):
-            status=poc.main(['--package',str(self.package),'--report',str(self.package),'--unknown'])
+            status=s3_run.main(['--package',str(self.package),'--report',str(self.package),'--unknown'])
         self.assertEqual(status,1);self.assertEqual(self.package.read_bytes(),original)
 
     def test_reader_workflow_manual_guards_and_sparse_inputs(self):
-        doc=yaml.safe_load((ROOT/'.github/workflows/sbom-analytics-lab-poc.yml').read_text())
+        doc=yaml.safe_load((ROOT/'.github/workflows/sbom-analytics-s3.yml').read_text())
         self.assertEqual(doc.get('on',doc.get(True)),{'workflow_dispatch':{}})
         self.assertEqual(doc['permissions'],{})
         for name,job in doc['jobs'].items():
@@ -223,7 +223,7 @@ class PocTests(unittest.TestCase):
         for name in ('apko.lock.json','build-inputs.json','validated-index.json'):
             (folder/name).write_bytes(canonical({'fixture':'SYNTHETIC_STRUCTURE_ONLY','schema_not_claimed':True}))
         result=export(prepare(ctx),self.root/'out')
-        data=poc.read_completed(result['path'])
+        data=s3_run.read_completed(result['path'])
         self.assertEqual(len(data['observations']),3)
         self.assertTrue(all(r['repository']=='example/corporate-factory' and r['publication_authority'] is False for r in data['observations']))
         self.assertTrue(all(r['validation_record_sha256'] is None for r in data['observations']))

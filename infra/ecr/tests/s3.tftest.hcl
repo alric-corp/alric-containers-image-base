@@ -33,11 +33,11 @@ run "private_bucket_contract" {
     error_message = "Explicit SSE-S3 is required."
   }
   assert {
-    condition     = jsondecode(aws_s3_bucket_policy.sbom.policy).Statement[1].Resource == "arn:aws:s3:::example-distroless-sbom-test/sbom-analytics/poc-v1/snapshots/*" && jsondecode(aws_s3_bucket_policy.sbom.policy).Statement[1].Condition.Null["s3:if-none-match"] == "true" && jsondecode(aws_s3_bucket_policy.sbom.policy).Statement[0].Condition.Bool["aws:SecureTransport"] == "false"
+    condition     = jsondecode(aws_s3_bucket_policy.sbom.policy).Statement[1].Resource == "arn:aws:s3:::example-distroless-sbom-test/sbom-analytics/v1/snapshots/*" && jsondecode(aws_s3_bucket_policy.sbom.policy).Statement[1].Condition.Null["s3:if-none-match"] == "true" && jsondecode(aws_s3_bucket_policy.sbom.policy).Statement[0].Condition.Bool["aws:SecureTransport"] == "false"
     error_message = "Conditional writes must protect snapshots only, and TLS is mandatory."
   }
   assert {
-    condition     = output.ingestion_config == { protocol_version = 1, destination = { bucket = "example-distroless-sbom-test", prefix = "sbom-analytics/poc-v1", region = "us-east-1", expected_bucket_owner = "123456789012" } } && output.query_results_prefix == "query-results/poc-v1/"
+    condition     = output.ingestion_config == { protocol_version = 1, destination = { bucket = "example-distroless-sbom-test", prefix = "sbom-analytics/v1", region = "us-east-1", expected_bucket_owner = "123456789012" } } && output.query_results_prefix == "query-results/sbom-analytics-v1/"
     error_message = "Outputs must match the integrated ingestion contract."
   }
 }
@@ -68,4 +68,27 @@ run "reject_invalid_bucket" {
     tags                  = {}
   }
   expect_failures = [var.bucket_name]
+}
+
+# Transitional legacy child for the replaced historical bucket: same controls and policy,
+# only destruction enabled. The active child above keeps both safeguards.
+run "transitional_legacy_bucket" {
+  command = plan
+  module {
+    source = "../s3-legacy"
+  }
+  variables {
+    bucket_name           = "example-distroless-sbom-legacy"
+    bucket_region         = "us-east-1"
+    expected_bucket_owner = "123456789012"
+    tags                  = { ManagedBy = "Terraform", Source = "alric-corp/alric-containers-image-base" }
+  }
+  assert {
+    condition     = aws_s3_bucket.sbom.force_destroy == true && aws_s3_bucket.sbom.object_lock_enabled == false
+    error_message = "Only the transitional bucket may be force-destroyed."
+  }
+  assert {
+    condition     = jsondecode(aws_s3_bucket_policy.sbom.policy).Statement[1].Resource == "arn:aws:s3:::example-distroless-sbom-legacy/sbom-analytics/poc-v1/snapshots/*" && one(aws_s3_bucket_versioning.sbom.versioning_configuration).status == "Enabled"
+    error_message = "The replaced bucket keeps its original policy and versioning until removal."
+  }
 }

@@ -12,10 +12,10 @@ import re
 import unittest
 from unittest.mock import patch
 
-from scripts.pipeline.analytics import athena_poc as a, athena_restore as r
+from scripts.pipeline.analytics import athena_run as a, athena_restore as r
 from scripts.pipeline.analytics.ingestion_types import IngestionError
 from scripts.pipeline.analytics.spdx import canonical, sha256
-from tests.unit.pipeline.analytics import test_athena_poc as support, test_athena_terminator as six
+from tests.unit.pipeline.analytics import test_athena_run as support, test_athena_terminator as six
 from tests.unit.pipeline.analytics.s3_support import ServiceError
 from tests.unit.pipeline.analytics.test_athena_restore import archive, GitHub
 
@@ -213,8 +213,8 @@ class AthenaViewStructureTests(unittest.TestCase):
 
 
 class AthenaViewReadbackTests(unittest.TestCase):
-    setUpClass = classmethod(support.AthenaPocTests.setUpClass.__func__)
-    setUp = support.AthenaPocTests.setUp
+    setUpClass = classmethod(support.AthenaRunTests.setUpClass.__func__)
+    setUp = support.AthenaRunTests.setUp
 
     def catalog(self, tables=None):
         """REAL plan/journal/catalog and saved DDL responses; Athena fake only replays them."""
@@ -313,17 +313,17 @@ class AthenaViewReadbackTests(unittest.TestCase):
 
 class AthenaRunFinalReadbackTests(unittest.TestCase):
     """run() with the synthetic test round; only the five catalog objects are REAL."""
-    setUpClass = classmethod(support.AthenaPocTests.setUpClass.__func__)
+    setUpClass = classmethod(support.AthenaRunTests.setUpClass.__func__)
 
     def setUp(self):
-        support.AthenaPocTests.setUp(self)
+        support.AthenaRunTests.setUp(self)
         self.reports = self.root / 'reports'
-        self.run_poc()  # Complete SYNTHETIC round: journal and fake catalog exist.
+        self.run_round()  # Complete SYNTHETIC round: journal and fake catalog exist.
         self.starts = len(self.athena.calls)
         for name in ('resources-before.json', 'resources-after.json', 'snapshot-after.json'):
             (self.reports / name).unlink()
 
-    def run_poc(self):
+    def run_round(self):
         self.runs = getattr(self, 'runs', 0) + 1  # Each hosted attempt recovers into a fresh directory.
         return a.run(self.s3, self.sts, self.athena, self.glue, self.expected, self.settings, self.session, 'test-round',
                      self.reports, self.root / ('recovered-' + str(self.runs)), authorized_sha256=sha256(self.raw),
@@ -338,7 +338,7 @@ class AthenaRunFinalReadbackTests(unittest.TestCase):
 
     def test_real_catalog_accepted_before_and_after_complete_simulated_pass(self):
         self.install(real_tables())
-        result = self.run_poc()
+        result = self.run_round()
         self.assertEqual(result['code'], 'ATHENA_RESULTS_VERIFIED')
         self.assertEqual(len(self.athena.calls), self.starts)
         for phase in ('before', 'after'):
@@ -351,7 +351,7 @@ class AthenaRunFinalReadbackTests(unittest.TestCase):
     def test_catalog_failure_still_records_final_readback_and_not_fabricated_resources(self):
         self.install(mutated('sbom_inventory_v1', 'INNER JOIN', 'LEFT JOIN'))
         with self.assertRaisesRegex(IngestionError, 'GLUE_VIEW_SQL_UNSUPPORTED'):
-            self.run_poc()
+            self.run_round()
         failure = self.failure()
         self.assertEqual((failure['code'], failure['stage'], failure['object']),
                          ('GLUE_VIEW_SQL_UNSUPPORTED', 'CATALOG', PREFIX + 'sbom_inventory_v1'))
@@ -373,7 +373,7 @@ class AthenaRunFinalReadbackTests(unittest.TestCase):
                 raise ServiceError(503, 'SlowDown')
             return real(*args, **kwargs)
         with patch.object(a, 'read_snapshot', side_effect=flaky), self.assertRaises(IngestionError) as caught:
-            self.run_poc()
+            self.run_round()
         self.assertEqual(caught.exception.code, 'GLUE_VIEW_SQL_UNSUPPORTED')
         failure = self.failure()
         self.assertEqual(failure['code'], 'GLUE_VIEW_SQL_UNSUPPORTED')
@@ -390,11 +390,11 @@ class AthenaRunFinalReadbackTests(unittest.TestCase):
             return dict(value, manifest_version_id='changed') if len(calls) % 2 == 0 else value
         self.install(mutated('sbom_inventory_v1', 'INNER JOIN', 'LEFT JOIN'))
         with patch.object(a, 'snapshot_fingerprint', side_effect=changed), self.assertRaisesRegex(IngestionError, 'GLUE_VIEW_SQL'):
-            self.run_poc()
+            self.run_round()
         self.assertEqual(self.failure()['final_readback']['status'], 'CHANGED')
         self.install(real_tables())
         with patch.object(a, 'snapshot_fingerprint', side_effect=changed), self.assertRaises(IngestionError) as caught:
-            self.run_poc()
+            self.run_round()
         self.assertEqual((caught.exception.code, caught.exception.stage), ('ATHENA_SNAPSHOT_CHANGED', 'FINAL_READBACK'))
 
     def test_unread_catalog_is_not_observed_and_snapshot_after_is_still_attempted(self):
@@ -402,7 +402,7 @@ class AthenaRunFinalReadbackTests(unittest.TestCase):
         self.athena.get_work_group = lambda **kw: dict(original(**kw), WorkGroup=dict(
             original(**kw)['WorkGroup'], State='DISABLED'))
         with self.assertRaisesRegex(IngestionError, 'WORKGROUP_DIFFERS'):
-            self.run_poc()
+            self.run_round()
         failure = self.failure()
         self.assertEqual(failure['catalog_readback']['objects'], {k: 'NOT_OBSERVED' for k in a.TABLE_NAMES})
         self.assertEqual(failure['final_readback']['status'], 'UNCHANGED')
@@ -419,13 +419,13 @@ class RealJournalGitHub(GitHub):
 
 
 class AthenaRealSourceResumeTests(unittest.TestCase):
-    setUpClass = classmethod(support.AthenaPocTests.setUpClass.__func__)
+    setUpClass = classmethod(support.AthenaRunTests.setUpClass.__func__)
     seed_known = six.AthenaSixEntryResumeTests.seed_known
     restore = six.AthenaSixEntryResumeTests.restore
     execute = six.AthenaSixEntryResumeTests.execute
 
     def setUp(self):
-        support.AthenaPocTests.setUp(self)
+        support.AthenaRunTests.setUp(self)
         self.raw, self.ancestor = PLAN.read_bytes(), ANCESTOR.read_bytes()
         self.original = (FIXTURE / 'execution-journal.json').read_bytes()
         # Ancestor first: selection is by exact member path and hashes, never order/basename.
