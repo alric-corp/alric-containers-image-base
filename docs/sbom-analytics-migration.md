@@ -2,14 +2,19 @@
 
 Este procedimento substitui a estrutura histórica, criada durante a prova de conceito, pela implantação ativa descrita em [operação](sbom-analytics-operations.md). O owner autorizou a substituição em 2026-10-11 e a remoção integral da estrutura histórica em 2026-10-12, no deployment AWS pessoal (conta `712107929769`, região `us-east-1`).
 
-> **Estado em 2026-10-12:** os passos 1 a 5 foram executados.
+> **Estado em 2026-10-12:** os passos 1 a 7 foram executados. O passo 8 está em revisão.
 >
 > - Policy transitória aplicada, com read-back.
 > - `Infra - Apply`, run `38207106116`: 6 criados, 1 alterado (`force_destroy`), plano pós-apply sem mudanças.
-> - Publicação e recuperação independente, run `38207794810`. Manifesto `5ff03abfbe76e016a7782851b32c9dedfc377e656e397979e544329feebcb829`, VersionId `7nr06MlNa4COnXXN1TCunE_lx3p5yEj2`.
+> - `S3_HOSTED_PROOF=PASS`: publicação e recuperação independente, run `38207794810`. Manifesto `5ff03abfbe76e016a7782851b32c9dedfc377e656e397979e544329feebcb829`, VersionId `7nr06MlNa4COnXXN1TCunE_lx3p5yEj2`.
 > - Workgroup e database `sbom_analytics` criados e relidos.
+> - `policies/analytics/athena.json` integrado (PR #132).
+> - `ATHENA_HOSTED_PROOF=PASS`: rodada `sbom-analytics-v1-r1`.
+>   - Plano no run `38280876391`, SHA-256 `e9fb82327a8542486da0153229c79ec07fd17f790052375da84b985deefb354e`, autorizado pelo owner (`owner-20261012-sbom-analytics-v1-r1-e9fb8232`).
+>   - Execução no run `38283191994`, com `fresh_round=true`: 18/18 instruções verificadas, 454387 bytes examinados, contagens iguais às esperadas e snapshot inalterado. Saldo da rodada: zero.
+> - **Revisão de remoção:** o bloco `module "sbom"` saiu do root `infra/ecr`. Nada foi destruído até o `Infra - Apply` aprovado.
 >
-> Os passos 6 em diante são **futuros**. Os recursos históricos continuam existindo.
+> Os passos 9 em diante são **futuros**. Os recursos históricos continuam existindo.
 
 ## Nomes: antigo → novo
 
@@ -35,8 +40,9 @@ O nome do bucket vem de `policies/pipeline/config.json` (`analytics.bucket`) e e
 | Identificador | Motivo |
 | --- | --- |
 | Rodada `lab-sbom-athena-v1`, runs `38031426478` e `38117928589`, 18/18 instruções, saldo zero | Prova histórica real. É recusada como rodada nova. |
+| Rodada `sbom-analytics-v1-r1`, runs `38280876391` (plano) e `38283191994` (execução), 18/18 instruções, saldo zero | Prova hospedada do bucket definitivo. Encerrada: um novo `fresh_round` com ela é recusado porque os cinco nomes já existem no catálogo. |
 | `tests/fixtures/sbom-analytics/historical-poc-round/`, `lab-frozen-plan.*` e os journals e fixtures Athena | Replays byte a byte do histórico |
-| `infra/s3-legacy` e `module.sbom` com seus seis endereços | Endereços reais no state, só durante a migração. O Terraform precisa deles para destruir exatamente o bucket antigo. |
+| `infra/s3-legacy` e os seis endereços `module.sbom.*` | Na revisão de remoção, o root não declara mais `module "sbom"`, e os seis endereços continuam no state até o apply. É assim que o Terraform destrói exatamente o bucket antigo, com `force_destroy=true` vindo do state. `infra/s3-legacy`, as constantes `LEGACY_*` e a fase `removal` do verificador saem só na revisão final. |
 | Repositório `alric-corp/alric-containers-image-base`, tag `Source` e guards dos workflows | Identidade real do deployment e da proveniência. O núcleo recebe o repositório como entrada. |
 | Environment `lab-image-base-infra` | Identidade OIDC de implantação já existente (subject da trust) |
 | Role `itau-github-repo-factory-distroless-v1` e policy `factory-distroless-v1` | As mesmas entidades. Só os statements de analytics mudam. |
@@ -66,9 +72,13 @@ A nova prova hospedada (S3 e Athena) passa **antes** de qualquer destruição do
    - autorização pelo hash do plano;
    - execução com `fresh_round=true` (`ATHENA_HOSTED_PROOF`).
 8. **Revisão de remoção**, só depois de `S3_HOSTED_PROOF=PASS` e `ATHENA_HOSTED_PROOF=PASS`:
-   - remove o bloco `module.sbom`;
-   - o plano, na fase `removal`, apaga exatamente os seis endereços antigos, com todas as versões;
-   - `Infra - Apply` com aprovação, e o plano pós-apply sem mudanças.
+   - remove o bloco `module "sbom"`;
+   - `verify_plan.py` deriva a fase `removal` da configuração e do state anterior e só aceita:
+     - `delete` nos seis endereços antigos, com a identidade, a policy e o `force_destroy=true` gravados no state;
+     - `no-op` em todo o resto, inclusive em `module.sbom_analytics`, que precisa já estar no state;
+     - nenhuma criação, atualização, `forget`, `moved` ou import;
+   - o owner revisa o `plan.json` do job de plano do `Infra - Apply` e só então aprova o job de apply;
+   - o plano pós-apply precisa vir sem mudanças (fase `steady`).
 9. **Remoção dos objetos Glue e Athena históricos** pelo administrador, via API e sem SQL.
 10. **Revisão final:**
     - retira `infra/s3-legacy`, as constantes `LEGACY_*`, a fase de remoção, os statements transitórios e os caminhos operacionais obsoletos;

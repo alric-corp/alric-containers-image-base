@@ -2,7 +2,7 @@
 
 O Distroless SBOM Analytics guarda os SBOMs SPDX dos builds da Factory em snapshots fechados no S3 e os consulta no Athena. Toda execução é manual (`workflow_dispatch` em `develop`). Não existe ingestão automática a partir do build, e nenhum resultado concede autoridade de publicação ou promoção.
 
-A substituição da estrutura histórica está em [migração](sbom-analytics-migration.md). Os recursos da coluna "Ativo" abaixo existem na AWS desde 2026-10-12. A remoção da estrutura histórica só acontece depois da prova Athena.
+A substituição da estrutura histórica está em [migração](sbom-analytics-migration.md). Os recursos da coluna "Ativo" abaixo existem na AWS desde 2026-10-12. As provas hospedadas S3 e Athena passaram em 2026-10-12. A remoção da estrutura histórica acontece pelo `Infra - Apply` aprovado da revisão de remoção.
 
 ## Implantação atual (AWS pessoal)
 
@@ -62,7 +62,7 @@ O job `recover` recupera o snapshot só pelo S3, sem os insumos originais, e con
 Primeiro o plano, sem executar SQL:
 
 ```sh
-gh workflow run sbom-analytics-athena.yml --ref develop -f mode=plan -f round_id=sbom-analytics-v1-r1
+gh workflow run sbom-analytics-athena.yml --ref develop -f mode=plan -f round_id=<rodada nova>
 ```
 
 O artifact `sbom-athena-<run>-<attempt>` traz `sql-plan.json` e o hash dele: 18 instruções (5 DDL, 11 SELECT e 2 DESCRIBE). A execução exige uma autorização do owner para esse hash.
@@ -74,6 +74,8 @@ O artifact `sbom-athena-<run>-<attempt>` traz `sql-plan.json` e o hash dele: 18 
   Restaura e verifica o journal do run anterior antes do OIDC. Nunca usa `fresh_round`.
 
 A rodada histórica `lab-sbom-athena-v1` é recusada pelo workflow.
+
+A rodada `sbom-analytics-v1-r1` está encerrada, com 18/18 instruções verificadas no run `38283191994` e saldo zero. Ela ainda é o valor padrão de `round_id`, mas um novo `fresh_round` com ela é recusado porque os cinco nomes já existem no catálogo. Uma consulta nova exige outro `round_id` e um novo plano autorizado.
 
 ### 3. Resultado esperado para o corpus conhecido
 
