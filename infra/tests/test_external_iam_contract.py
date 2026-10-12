@@ -4,6 +4,7 @@ This suite reads reference documents; it never initializes an AWS client or
 provisions IAM. Expected grants are independent of the JSON under test.
 """
 
+import copy
 import json
 from pathlib import Path
 import re
@@ -69,7 +70,23 @@ ATHENA_ACTIONS = {
     "athena:GetQueryResults", "athena:StopQueryExecution",
 }
 GLUE_ACTIONS = {"glue:GetDatabase", "glue:GetTable", "glue:GetPartitions", "glue:CreateTable"}
+# Granted only while the replaced bucket was destroyed (Infra - Apply run 38319342150); never again.
 LEGACY_REMOVAL_ACTIONS = {"s3:ListBucketVersions", "s3:DeleteBucketPolicy", "s3:DeleteBucket", "s3:DeleteObjectVersion"}
+
+
+def reaches(resource, bucket_arn):
+    """Whether an S3 resource can match the bucket or any object in it; conservative for wildcards."""
+    literal = re.split(r"[*?]", resource, maxsplit=1)[0]
+    if literal == resource:
+        return resource == bucket_arn or resource.startswith(bucket_arn + "/")
+    return bucket_arn.startswith(literal) or literal.startswith(bucket_arn + "/")
+
+
+def grants_reaching(policy, bucket_arn):
+    """(Sid, action, resource) of every S3 Allow that reaches the bucket or its objects."""
+    return {(item["Sid"], action, resource) for item in policy["Statement"] if item["Effect"] == "Allow"
+            for action in item["Action"] if action.startswith("s3:")
+            for resource in item["Resource"] if reaches(resource, bucket_arn)}
 
 
 class ExternalFactoryIamContractTests(unittest.TestCase):
@@ -85,7 +102,7 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         cls.backend = "arn:aws:s3:::" + cls.config["infra"]["backend"]["bucket"]
         cls.state = cls.backend + "/" + cls.config["infra"]["backend"]["key"]
         cls.analytics = "arn:aws:s3:::" + cls.config["analytics"]["bucket"]
-        # Legacy (historical) bucket: granted only while the migration is transitional.
+        # Replaced bucket, destroyed on 2026-10-12: no grant may reach it again.
         cls.legacy = f"arn:aws:s3:::alric-distroless-sbom-{cls.lab['aws_account_id']}-{cls.lab['aws_region']}"
         cls.analytics_config = json.loads((ROOT / "policies/analytics/s3.json").read_text())
         cls.release = "arn:aws:s3:::" + cls.config["DEV"]["release_bucket"]
@@ -119,7 +136,6 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
             "ExactCatalogEcr", "RegistryAuthentication", "DevReleaseInventory",
             "DevReleaseRecords", "SbomSnapshotObjects", "SbomSnapshotListing",
             "SbomAnalyticsAthenaWorkgroup", "SbomAnalyticsGlueReadAndNewTables", "SbomAnalyticsQueryResults",
-            "TransitionalLegacySbomBucketRemoval", "TransitionalLegacySbomVersionRemoval",
         ])
         self.assertEqual(len(self.statements), len(self.policy["Statement"]))
 
@@ -182,7 +198,7 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
                          {"ReadOnlyRegionalRepositoryInventory", "RegistryAuthentication"})
 
     def test_exact_sbom_bucket_administration_preserves_reviewed_scope(self):
-        self.assert_statement("ExactSbomAnalyticsBucket", ANALYTICS_BUCKET_ACTIONS, [self.analytics, self.legacy],
+        self.assert_statement("ExactSbomAnalyticsBucket", ANALYTICS_BUCKET_ACTIONS, [self.analytics],
                               {"StringEquals": {"aws:RequestedRegion": "us-east-1"}})
 
     def test_dev_release_store_scope(self):
@@ -201,7 +217,7 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
     def test_no_invalid_or_unapproved_actions_and_no_data_deletion(self):
         approved = BACKEND_ACTIONS | ANALYTICS_BUCKET_ACTIONS | ECR_ACTIONS | ATHENA_ACTIONS | GLUE_ACTIONS | {
             "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:GetObjectVersion", "ecr:GetAuthorizationToken",
-        } | LEGACY_REMOVAL_ACTIONS
+        }
         actions = {action for item in self.policy["Statement"] for action in item["Action"]}
         self.assertEqual(actions, approved)
         self.assertNotIn("ecr:ListImageReferrers", actions)
@@ -209,10 +225,9 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         self.assertFalse(any("*" in action for action in actions))
         deletion = {(action, resource) for item in self.policy["Statement"]
                     for action in item["Action"] for resource in item["Resource"] if "Delete" in action}
-        # Besides the state lock, deletion reaches ONLY the legacy bucket, and only while transitional.
-        self.assertEqual(deletion, {("s3:DeleteObject", self.state + ".tflock"),
-                                    ("s3:DeleteBucketPolicy", self.legacy), ("s3:DeleteBucket", self.legacy),
-                                    ("s3:DeleteObjectVersion", self.legacy + "/*")})
+        # The exact state lock is the only deletable resource.
+        self.assertEqual(deletion, {("s3:DeleteObject", self.state + ".tflock")})
+        self.assertFalse(actions & LEGACY_REMOVAL_ACTIONS)
         self.assertNotIn("query-results", json.dumps(self.policy["Statement"][:11]))
 
     def test_athena_complement_keeps_exact_workgroup_catalog_and_five_objects(self):
@@ -238,21 +253,40 @@ class ExternalFactoryIamContractTests(unittest.TestCase):
         for mark in ("poc", "lab", "alric"):
             self.assertNotIn(mark, json.dumps(self.policy["Statement"][9:14]).lower())
         self.assertEqual(self.analytics, "arn:aws:s3:::distroless-sbom-analytics")
-        self.assertEqual(len(json.dumps(self.policy, separators=(",", ":"))), 6771)
+        self.assertEqual(len(json.dumps(self.policy, separators=(",", ":"))), 6193)
 
-    def test_transitional_removal_is_limited_to_the_replaced_bucket(self):
+    def test_no_grant_reaches_the_replaced_bucket(self):
+        self.assertEqual(grants_reaching(self.policy, self.legacy), set())
+        self.assertNotIn("alric-distroless-sbom-", json.dumps(self.policy))
+        self.assertFalse([item["Sid"] for item in self.policy["Statement"] if "Legacy" in item["Sid"]])
+        # Not vacuous: the active bucket is reached by its reviewed statements only.
+        self.assertEqual({sid for sid, _, _ in grants_reaching(self.policy, self.analytics)},
+                         {"ExactSbomAnalyticsBucket", "SbomSnapshotObjects", "SbomSnapshotListing",
+                          "SbomAnalyticsQueryResults"})
+
+    def test_reintroduced_legacy_grants_are_rejected(self):
+        def mutated(change):
+            policy = copy.deepcopy(self.policy)
+            change({item["Sid"]: item for item in policy["Statement"]}, policy["Statement"])
+            return grants_reaching(policy, self.legacy)
+
         region = {"StringEquals": {"aws:RequestedRegion": "us-east-1"}}
-        self.assert_statement("TransitionalLegacySbomBucketRemoval",
-                              {"s3:ListBucketVersions", "s3:DeleteBucketPolicy", "s3:DeleteBucket"}, [self.legacy], region)
-        self.assert_statement("TransitionalLegacySbomVersionRemoval", {"s3:DeleteObjectVersion"},
-                              [self.legacy + "/*"], region)
-        self.assertEqual(self.policy["Statement"][14:], [self.statements["TransitionalLegacySbomBucketRemoval"],
-                                                         self.statements["TransitionalLegacySbomVersionRemoval"]])
-        for statement in self.policy["Statement"]:
-            for resource in statement["Resource"]:
-                if resource.startswith(self.legacy):
-                    self.assertIn(statement["Sid"], {"ExactSbomAnalyticsBucket", "TransitionalLegacySbomBucketRemoval",
-                                                     "TransitionalLegacySbomVersionRemoval"})
+        mutations = {
+            "old ARN back in the bucket administration":
+                lambda by_sid, _: by_sid["ExactSbomAnalyticsBucket"]["Resource"].append(self.legacy),
+            "transitional version removal":
+                lambda _, statements: statements.append({
+                    "Sid": "TransitionalLegacySbomVersionRemoval", "Effect": "Allow",
+                    "Action": ["s3:DeleteObjectVersion"], "Resource": [self.legacy + "/*"], "Condition": region}),
+            "historical object prefix": lambda by_sid, _: by_sid["SbomSnapshotObjects"]["Resource"].append(
+                self.legacy + "/sbom-analytics/poc-v1/snapshots/*"),
+            "bucket name wildcard": lambda by_sid, _: by_sid["SbomSnapshotListing"]["Resource"].append(
+                "arn:aws:s3:::alric-distroless-sbom-*"),
+            "every bucket": lambda by_sid, _: by_sid["DevReleaseRecords"]["Resource"].append("arn:aws:s3:::*"),
+        }
+        for name, change in mutations.items():
+            with self.subTest(name):
+                self.assertTrue(mutated(change))
 
     def test_single_inline_policy_size_excludes_formatting_only(self):
         compact = json.dumps(self.policy, separators=(",", ":"))

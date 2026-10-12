@@ -54,14 +54,14 @@ object; neither can delete the state object or bucket. Only the default
 Terraform workspace is supported. The LAB state key is
 `alric-containers-image-base/terraform.tfstate`.
 
-Both roles also have one statement on the SBOM analytics bucket created by
-`module.sbom` in the shared ECR state: the exact ARN
-`arn:aws:s3:::alric-distroless-sbom-<account>-<region>` (LAB:
-`alric-distroless-sbom-712107929769-us-east-1`), restricted to the ECR region.
-The plan role gets only the reads listed in
-[`infra/s3/permissions.md`](../s3/permissions.md); the apply role adds creation
-and configuration (public access block, ownership, encryption, versioning,
-policy, tags). Neither gets object access or any deletion on that bucket.
+Neither role has permissions on an SBOM analytics bucket. The historical
+bucket grant (`ExactSbomAnalyticsBucket`, put on the apply role outside this
+state on 2026-10-09 and never applied to the plan role) is removed now that the
+bucket is destroyed; the active bucket is administered only by the central
+Factory role. Since that role's cutover, `INFRA_APPLY` resolves to it, so the
+apply role here has no workflow consumer; the plan role stays reserved for the
+disabled PR plan. Reconciliation of this root is described in the
+[migration procedure](../../docs/sbom-analytics-migration.md#reconciliação-iam).
 
 The backend lives in `us-east-2`, independently of ECR in `us-east-1`. S3's
 legacy `us-east-1` CreateBucket behavior can report success for an already owned

@@ -107,56 +107,27 @@ class IamBoundaryTests(unittest.TestCase):
         self.assertRegex(text, r'Sid\s*=\s*"ReadOnlyRegionalRepositoryInventory"\s+Effect\s*=\s*"Allow"\s+Action\s*=\s*\["ecr:DescribeRepositories"\]\s+Resource\s*=\s*\["\*"\]')
         self.assertIn('StringEquals = { "aws:RequestedRegion" = var.aws_region }', text)
 
-    def analytics(self, name):
+    def test_infra_roles_grant_nothing_on_sbom_analytics_buckets(self):
         text = (IAM / "main.tf").read_text()
-        return re.findall(r'"([a-z0-9]+:[A-Za-z]+)"', text.split(f"{name} = [", 1)[1].split("]", 1)[0])
-
-    def test_analytics_bucket_is_one_exact_arn_in_the_ecr_region(self):
-        text = (IAM / "main.tf").read_text()
-        self.assertIn('analytics_bucket_arn = "arn:aws:s3:::alric-distroless-sbom-${var.aws_account_id}-${var.aws_region}"', text)
-        # Rendered with the LAB values: the exact bucket the shared ECR state creates by default.
-        lab = dict(re.findall(r'(?m)^(\w+)\s*=\s*"([^"]*)"', (IAM / "lab.tfvars").read_text()))
-        self.assertEqual(f"arn:aws:s3:::alric-distroless-sbom-{lab['aws_account_id']}-{lab['aws_region']}",
-                         "arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1")
-        # The ECR root no longer declares this replaced bucket (removal revision). This independent
-        # root keeps its grant until its own reconciliation (docs/sbom-analytics-migration.md).
-        self.assertNotIn('alric-distroless-sbom-', (ROOT / "infra/ecr/s3.tf").read_text())
-        self.assertRegex(text, r'Sid\s*=\s*"ExactSbomAnalyticsBucket"\s+Effect\s*=\s*"Allow"\s+'
-                               r'Action\s*=\s*purpose == "plan" \? local.analytics_read_actions : '
-                               r'concat\(local.analytics_read_actions, local.analytics_apply_actions\)\s+'
-                               r'Resource\s*=\s*\[local.analytics_bucket_arn\]\s+Condition\s*=\s*\{\s*'
-                               r'StringEquals\s*=\s*\{ "aws:RequestedRegion" = var.aws_region \}')
-        self.assertEqual(text.count("local.analytics_bucket_arn"), 1)
-
-    def test_analytics_plan_reads_and_apply_only_creates_and_configures(self):
-        reads, writes = self.analytics("analytics_read_actions"), self.analytics("analytics_apply_actions")
-        self.assertEqual(set(reads), {
-            "s3:ListBucket", "s3:GetBucketLocation", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketWebsite",
-            "s3:GetBucketVersioning", "s3:GetBucketLogging", "s3:GetBucketTagging", "s3:ListTagsForResource",
-            "s3:GetBucketRequestPayment", "s3:GetAccelerateConfiguration", "s3:GetReplicationConfiguration",
-            "s3:GetLifecycleConfiguration", "s3:GetEncryptionConfiguration", "s3:GetBucketObjectLockConfiguration",
-            "s3:GetBucketPublicAccessBlock", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy",
+        # The historical bucket grant was removed after its destruction (Infra - Apply run 38319342150).
+        # The active bucket is administered only by the central role; nothing moves to these roles.
+        self.assertNotRegex(text.lower(), r"sbom|analytics")
+        self.assertEqual(re.findall(r"Resource\s*=\s*(\S+)", text), [
+            "local.repository_arns", "[local.bucket_arn]", "[local.state_arn]", "[local.lock_arn]", '["*"]'])
+        s3 = set(re.findall(r'"(s3:[A-Za-z]+)"', text))
+        self.assertEqual(s3, {
+            "s3:ListBucket", "s3:GetBucketLocation", "s3:GetBucketVersioning", "s3:GetEncryptionConfiguration",
+            "s3:GetBucketPublicAccessBlock", "s3:GetBucketOwnershipControls", "s3:CreateBucket",
+            "s3:PutBucketPublicAccessBlock", "s3:PutBucketOwnershipControls", "s3:PutEncryptionConfiguration",
+            "s3:PutBucketVersioning", "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
         })
-        self.assertTrue(all(action.split(":")[1].startswith(("Get", "List")) for action in reads))
-        self.assertEqual(set(writes), {
-            "s3:CreateBucket", "s3:PutBucketPublicAccessBlock", "s3:PutBucketOwnershipControls",
-            "s3:PutEncryptionConfiguration", "s3:PutBucketVersioning", "s3:PutBucketPolicy",
-            "s3:TagResource", "s3:PutBucketTagging",
-        })
-        self.assertEqual(len(reads) + len(writes), len(set(reads) | set(writes)))
-        for action in reads + writes:
-            # No object data access, deletion or wildcard on the analytics bucket.
-            self.assertNotRegex(action, r"^s3:(Get|Put|Delete|Restore)Object|Delete|\*")
-        for action in writes:
-            # Configuration limited to the reviewed controls: no ACL, lifecycle, Object Lock, replication, untagging.
-            self.assertNotRegex(action, r"Acl|Lifecycle|ObjectLock|Replication|Untag|Website|Cors|Logging|Accelerate|RequestPayment")
 
-    def test_existing_statements_keep_their_order_and_the_new_one_is_last(self):
+    def test_statements_keep_the_bootstrap_order(self):
         text = (IAM / "main.tf").read_text()
         sids = re.findall(r'Sid\s*=\s*"([A-Za-z]+)"', text)
         self.assertEqual(sids, ["ExactProductIdentity", "ExactCatalogEcr", "EnsureExactBackendBucket",
                                 "ExactDefaultWorkspaceState", "ExactDefaultWorkspaceLock",
-                                "ReadOnlyRegionalRepositoryInventory", "ExactSbomAnalyticsBucket"])
+                                "ReadOnlyRegionalRepositoryInventory"])
 
 
 if __name__ == "__main__":
