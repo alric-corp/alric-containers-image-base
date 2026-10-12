@@ -20,11 +20,13 @@ The backend remains in `us-east-2`; its region is not the bucket/provider region
 
 Distroless SBOM Analytics replaced the historical bucket
 `alric-distroless-sbom-712107929769-us-east-1` (historical prefixes
-`sbom-analytics/poc-v1`, `query-results/poc-v1/`). While the migration is
-transitional it stays at its real state addresses `module.sbom.<type>.sbom`,
-served by `infra/s3-legacy`, whose only difference is `force_destroy = true`
-and `prevent_destroy = false`. The next revision removes that block and
-Terraform destroys exactly that bucket, every version included. This module
+`sbom-analytics/poc-v1`, `query-results/poc-v1/`). The transition revision
+kept it at its real state addresses `module.sbom.<type>.sbom`, served by
+`infra/s3-legacy`, whose only difference is `force_destroy = true` and
+`prevent_destroy = false`; that `force_destroy = true` is now in the state.
+The removal revision no longer declares `module "sbom"`, so the approved apply
+destroys exactly those six addresses, every version included.
+`infra/s3-legacy` stays unreferenced until the final revision. This module
 never relaxes either safeguard. See the
 [migration procedure](../../docs/sbom-analytics-migration.md); operation is in
 [Distroless SBOM Analytics operations](../../docs/sbom-analytics-operations.md).

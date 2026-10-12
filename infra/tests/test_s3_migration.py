@@ -197,6 +197,39 @@ class RemovalTests(unittest.TestCase):
         with self.assertRaisesRegex(verifier.PlanError, 'policy differs'):
             verify(plan)
 
+    def test_analytics_bucket_stays_managed_and_noop_during_removal(self):
+        active = [c['address'] for c in removal_plan()['resource_changes']
+                  if c['address'].startswith('module.sbom_analytics.')]
+        self.assertEqual(len(active), 6)
+        for address in active:
+            for actions in (['create'], ['update'], ['delete'], ['delete', 'create'], ['create', 'delete']):
+                with self.subTest(address=address, actions=actions):
+                    plan = removal_plan(); change(plan, address)['actions'] = actions
+                    with self.assertRaisesRegex(verifier.PlanError, 'disallowed actions'):
+                        verify(plan)
+        plan = removal_plan()
+        modules = plan['prior_state']['values']['root_module']['child_modules']
+        modules[:] = [m for m in modules if m['address'] != 'module.sbom_analytics']
+        for c in plan['resource_changes']:
+            if c['address'] in active:
+                c['change'].update(actions=['create'], before=None)
+        with self.assertRaisesRegex(verifier.PlanError, 'already managed in prior state'):
+            verify(plan)
+
+    def test_old_bucket_is_deleted_never_forgotten_moved_or_imported(self):
+        for address in LEGACY_ADDRESSES:
+            with self.subTest(address=address, actions=['forget']):
+                plan = removal_plan(); change(plan, address)['actions'] = ['forget']
+                with self.assertRaisesRegex(verifier.PlanError, 'disallowed actions'):
+                    verify(plan)
+            for key, value in (('previous_address', 'module.other.aws_s3_bucket.sbom'), ('importing', {'id': LEGACY})):
+                with self.subTest(address=address, key=key):
+                    plan = removal_plan()
+                    item = next(c for c in plan['resource_changes'] if c['address'] == address)
+                    (item if key == 'previous_address' else item['change'])[key] = value
+                    with self.assertRaisesRegex(verifier.PlanError, 'state migration or import'):
+                        verify(plan)
+
 
 class StateAndSourceTests(unittest.TestCase):
     def setUp(self):
@@ -213,18 +246,22 @@ class StateAndSourceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify_state.verify(self.metadata, state, **self.args)
 
-    def test_only_the_transitional_module_enables_destruction(self):
+    def test_removal_revision_declares_only_the_active_bucket(self):
         active = (ROOT / 'infra/s3/main.tf').read_text()
         self.assertRegex(active, r'force_destroy\s*=\s*false')
         self.assertRegex(active, r'prevent_destroy\s*=\s*true')
+        # The transitional child stays on disk until the final revision; no root references it.
         legacy = (ROOT / 'infra/s3-legacy/main.tf').read_text()
         self.assertRegex(legacy, r'force_destroy\s*=\s*true')
         self.assertIn('"sbom-analytics/poc-v1/snapshots/"', legacy)
-        root = (ROOT / 'infra/ecr/s3.tf').read_text()
-        self.assertEqual(root.count('"../s3-legacy"'), 1)
-        self.assertIn('module "sbom" {\n  source                = "../s3-legacy"\n'
-                      '  bucket_name           = "alric-distroless-sbom-${var.expected_bucket_owner}-${var.aws_region}"', root)
         self.assertEqual(set(re.findall(r'resource "([^"]+)"', legacy)), set(LEGACY_ADDRESSES.values()))
+        root = ''.join(path.read_text() for path in sorted((ROOT / 'infra/ecr').glob('*.tf')))
+        self.assertEqual(set(re.findall(r'^module "([^"]+)"', root, re.M)), {'ecr', 'sbom_analytics'})
+        self.assertNotIn('s3-legacy', root)
+        self.assertNotIn('alric-distroless-sbom-', root)
+        self.assertNotRegex(root, r'module\.sbom\b(?!_)')
+        self.assertIn('module "sbom_analytics" {\n  source                = "../s3"\n'
+                      '  bucket_name           = var.sbom_bucket_name\n', root)
 
 
 class SharedInfrastructureTests(unittest.TestCase):

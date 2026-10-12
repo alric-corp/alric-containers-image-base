@@ -118,7 +118,9 @@ class IamBoundaryTests(unittest.TestCase):
         lab = dict(re.findall(r'(?m)^(\w+)\s*=\s*"([^"]*)"', (IAM / "lab.tfvars").read_text()))
         self.assertEqual(f"arn:aws:s3:::alric-distroless-sbom-{lab['aws_account_id']}-{lab['aws_region']}",
                          "arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1")
-        self.assertIn('"alric-distroless-sbom-${var.expected_bucket_owner}-${var.aws_region}"', (ROOT / "infra/ecr/s3.tf").read_text())
+        # The ECR root no longer declares this replaced bucket (removal revision). This independent
+        # root keeps its grant until its own reconciliation (docs/sbom-analytics-migration.md).
+        self.assertNotIn('alric-distroless-sbom-', (ROOT / "infra/ecr/s3.tf").read_text())
         self.assertRegex(text, r'Sid\s*=\s*"ExactSbomAnalyticsBucket"\s+Effect\s*=\s*"Allow"\s+'
                                r'Action\s*=\s*purpose == "plan" \? local.analytics_read_actions : '
                                r'concat\(local.analytics_read_actions, local.analytics_apply_actions\)\s+'

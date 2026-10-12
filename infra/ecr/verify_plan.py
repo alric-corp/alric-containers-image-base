@@ -10,7 +10,8 @@ The legacy bucket replaced by Distroless SBOM Analytics (2026-10-11) has two all
 phases, both derived from the reviewed configuration, never from a flag:
 TRANSITION while ``module.sbom`` points at ../s3-legacy (only its
 force_destroy may become true; nothing else changes), then REMOVAL once the
-block is gone (exactly its six addresses are deleted). ECR stays no-op.
+block is gone (exactly its six addresses are deleted; the analytics bucket
+must already be managed and stays no-op). ECR stays no-op.
 """
 
 import argparse
@@ -294,6 +295,8 @@ def verify(plan, frameworks_dir=ROOT.parent.parent / "frameworks", mode="sbom-ad
         raise PlanError('the replaced bucket must exist with all six addresses; it is never created or adopted')
     if phase == 'removal' and mode == 'noop':
         raise PlanError('prior state still holds the replaced bucket; a no-op plan cannot remove it')
+    if phase == 'removal' and set(S3_ADDRESSES) - set(prior_addresses):
+        raise PlanError('removal requires the analytics bucket already managed in prior state')
     ecr = expected_resources(frameworks)
     expected = dict(ecr)
     expected.update({address: (None, kind) for address, kind in S3_ADDRESSES.items()})
@@ -332,7 +335,9 @@ def verify(plan, frameworks_dir=ROOT.parent.parent / "frameworks", mode="sbom-ad
             allowed = ({('delete',)} if phase == 'removal' else
                        {('no-op',), ('update',)} if kind == 'aws_s3_bucket' and mode != 'noop' else {('no-op',)})
         else:
-            allowed = {('no-op',)} if framework is not None or mode == 'noop' else {('create',), ('no-op',)}
+            # Removal only deletes the replaced bucket; nothing else is created.
+            allowed = ({('no-op',)} if framework is not None or mode == 'noop' or phase == 'removal'
+                       else {('create',), ('no-op',)})
         if action not in allowed:
             raise PlanError(f"{address}: disallowed actions {action} in {mode} mode ({phase})")
         if item.get("previous_address") or change.get("importing"):
