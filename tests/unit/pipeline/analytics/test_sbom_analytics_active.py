@@ -112,6 +112,20 @@ class ActiveProfileTests(unittest.TestCase):
                 with self.assertRaises(IngestionError):
                     a.config(path)
 
+    def test_versioned_athena_configuration_binds_the_published_manifest(self):
+        # Published by run 38207794810 and read back independently; never inferred.
+        settings = a.config(ROOT / 'policies/analytics/athena.json')
+        self.assertEqual(settings, athena_settings(
+            manifest_sha256='5ff03abfbe76e016a7782851b32c9dedfc377e656e397979e544329feebcb829',
+            manifest_version_id='7nr06MlNa4COnXXN1TCunE_lx3p5yEj2'))
+        for execute in (False, True):
+            self.assertLessEqual(len(json.dumps(a.session_policy(self.expected, settings, execute=execute),
+                                                separators=(',', ':'))), 2048)
+        self.assertEqual(self.marks_free((ROOT / 'policies/analytics/athena.json').read_text()), True)
+
+    def marks_free(self, text):
+        return not MARK.search(text) and not PERSONAL.search(text)
+
     def test_plan_requests_and_session_use_only_the_new_names(self):
         plan = json.loads(self.raw)
         self.assertEqual((plan['database'], plan['workgroup'], plan['catalog']),

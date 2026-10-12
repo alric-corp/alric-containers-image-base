@@ -2,7 +2,14 @@
 
 Este procedimento substitui a estrutura histórica, criada durante a prova de conceito, pela implantação ativa descrita em [operação](sbom-analytics-operations.md). O owner autorizou a substituição em 2026-10-11 e a remoção integral da estrutura histórica em 2026-10-12, no deployment AWS pessoal (conta `712107929769`, região `us-east-1`).
 
-> **Estado:** todos os passos abaixo são **futuros** até serem executados e registrados. Nesta revisão, os recursos históricos continuam existindo. As descrições e os nomes novos ainda não foram aplicados na AWS.
+> **Estado em 2026-10-12:** os passos 1 a 5 foram executados.
+>
+> - Policy transitória aplicada, com read-back.
+> - `Infra - Apply`, run `38207106116`: 6 criados, 1 alterado (`force_destroy`), plano pós-apply sem mudanças.
+> - Publicação e recuperação independente, run `38207794810`. Manifesto `5ff03abfbe76e016a7782851b32c9dedfc377e656e397979e544329feebcb829`, VersionId `7nr06MlNa4COnXXN1TCunE_lx3p5yEj2`.
+> - Workgroup e database `sbom_analytics` criados e relidos.
+>
+> Os passos 6 em diante são **futuros**. Os recursos históricos continuam existindo.
 
 ## Nomes: antigo → novo
 
@@ -42,28 +49,33 @@ O batch não muda: `2da32bfa…`, com 19 objetos e 630308 bytes (seis SPDX e doi
 
 ## Passos
 
-1. **Revisão de transição** (esta revisão):
+A nova prova hospedada (S3 e Athena) passa **antes** de qualquer destruição dos recursos históricos.
+
+1. **Revisão de transição** (PR #131):
    - o bucket novo é criado com proteção total;
    - no bucket antigo, só `force_destroy` muda para `true`;
    - `verify_plan.py` só aceita essa forma, na fase `transition`;
    - a policy inline transitória concede os recursos novos e a remoção restrita ao bucket antigo: `ListBucketVersions`, `DeleteBucketPolicy`, `DeleteBucket` e `DeleteObjectVersion`.
 2. **Policy inline transitória**, aplicada pelo administrador com comparação antes e read-back depois.
 3. **`Infra - Apply`**, com aprovação no environment `lab-image-base-infra`. O preflight confirma que o nome está livre, e o plano pós-apply precisa vir sem mudanças.
-4. **Publicação do snapshot** em `sbom-analytics-s3.yml`, com read-back e recuperação.
-5. **Workgroup e database `sbom_analytics`**, criados pelo administrador a partir de [`docs/examples/sbom-analytics/`](examples/sbom-analytics/).
-6. **Revisão de remoção**:
-   - remove o bloco `module.sbom` e `infra/s3-legacy`;
-   - adiciona `policies/analytics/athena.json` com o manifesto e o VersionId lidos de volta;
-   - o plano, na fase `removal`, apaga exatamente os seis endereços antigos, com todas as versões.
-7. **`Infra - Apply`** da remoção, com aprovação. O plano pós-apply precisa vir sem mudanças.
-8. **Remoção dos objetos Glue e Athena históricos** pelo administrador, via API e sem SQL.
-9. **Revisão final**:
-   - retira as constantes `LEGACY_*`, a fase de remoção e os statements transitórios;
-   - o administrador aplica a policy final, que não tem nenhum grant sobre o bucket antigo.
-10. **Rodada SQL** `sbom-analytics-v1-r1`: plano, autorização pelo hash e execução com `fresh_round=true`, já sob a policy final.
-11. **Drift zero**: `Infra - Apply` sem mudanças sobre a revisão final.
+4. **Publicação do snapshot** em `sbom-analytics-s3.yml`, com read-back e recuperação independente (`S3_HOSTED_PROOF`).
+5. **Workgroup e database `sbom_analytics`**, criados pelo administrador a partir de [`docs/examples/sbom-analytics/`](examples/sbom-analytics/) e relidos.
+6. **`policies/analytics/athena.json`**, em PR próprio, com o SHA-256 e o VersionId do manifesto lidos de volta. Esse PR não remove `module.sbom`.
+7. **Rodada SQL** `sbom-analytics-v1-r1`:
+   - plano;
+   - autorização pelo hash do plano;
+   - execução com `fresh_round=true` (`ATHENA_HOSTED_PROOF`).
+8. **Revisão de remoção**, só depois de `S3_HOSTED_PROOF=PASS` e `ATHENA_HOSTED_PROOF=PASS`:
+   - remove o bloco `module.sbom`;
+   - o plano, na fase `removal`, apaga exatamente os seis endereços antigos, com todas as versões;
+   - `Infra - Apply` com aprovação, e o plano pós-apply sem mudanças.
+9. **Remoção dos objetos Glue e Athena históricos** pelo administrador, via API e sem SQL.
+10. **Revisão final:**
+    - retira `infra/s3-legacy`, as constantes `LEGACY_*`, a fase de remoção, os statements transitórios e os caminhos operacionais obsoletos;
+    - o administrador aplica a policy final, sem nenhum grant sobre o bucket antigo.
+11. **Drift zero:** `Infra - Apply` sem mudanças sobre a revisão final. Também confirma a ausência dos recursos históricos e a preservação das provas hospedadas.
 
 ## Rollback
 
-- **Até o passo 7:** o bucket antigo continua intacto, e basta reverter o código.
-- **Depois do passo 7:** a reconstrução usa os bytes preservados (plano congelado e evidências privadas). Não há recuperação do bucket apagado.
+- **Até o passo 8:** o bucket antigo continua intacto, e basta reverter o código.
+- **Depois do apply do passo 8:** a reconstrução usa os bytes preservados (plano congelado e evidências privadas). Não há recuperação do bucket apagado.
