@@ -1,0 +1,77 @@
+{
+  "$comment": "Contrato de proteção da branch de código `develop` (G02). `lab` é a leitura da API aceita pelo owner para a POC pessoal; `corporate` é proposta, não aplicada. Os blocos `protection` usam o corpo do PUT de branch protection da API do GitHub. Editar este arquivo não altera Settings; ver docs/repository-governance.md.",
+  "schema_version": 1,
+  "repository": "alric-corp/alric-containers-image-base",
+  "branch": "develop",
+  "profiles": {
+    "lab": {
+      "status": "OWNER_ACCEPTED_LAB_EXCEPTION",
+      "evidence": "API GET 2026-10-13T18:08Z; aceite LAB do owner registrado na auditoria de 13/10/2026 (autorização PR124); CODEOWNERS removido pelo owner em 03165e6 (09/10/2026)",
+      "protection": {
+        "required_status_checks": {
+          "strict": true,
+          "checks": [
+            {"context": "Unit & integration tests", "app_id": 15368},
+            {"context": "Repository & workflow lint", "app_id": 15368}
+          ]
+        },
+        "enforce_admins": false,
+        "required_pull_request_reviews": {
+          "dismiss_stale_reviews": true,
+          "require_code_owner_reviews": false,
+          "required_approving_review_count": 0,
+          "require_last_push_approval": false
+        },
+        "restrictions": null,
+        "required_linear_history": false,
+        "allow_force_pushes": false,
+        "allow_deletions": false,
+        "block_creations": false,
+        "required_conversation_resolution": false,
+        "lock_branch": false,
+        "allow_fork_syncing": false
+      },
+      "environments": {
+        "DEV": {"branches": ["develop"], "can_admins_bypass": false, "required_reviewers": false},
+        "HOM": {"branches": ["develop"], "can_admins_bypass": false, "required_reviewers": false},
+        "lab-image-base-infra": {"branches": ["develop"], "can_admins_bypass": false, "required_reviewers": true,
+                                 "prevent_self_review": false, "reviewers": ["TomasAlric"]}
+      }
+    },
+    "corporate": {
+      "status": "PROPOSED_AWAITING_APPROVAL",
+      "evidence": "Proposta da Frente B (13/10/2026); exige time revisor com pelo menos dois membros elegíveis e CODEOWNERS ativo com slugs verificados",
+      "protection": {
+        "required_status_checks": {
+          "strict": true,
+          "checks": [
+            {"context": "Unit & integration tests", "app_id": 15368},
+            {"context": "Repository & workflow lint", "app_id": 15368}
+          ]
+        },
+        "enforce_admins": true,
+        "required_pull_request_reviews": {
+          "dismiss_stale_reviews": true,
+          "require_code_owner_reviews": true,
+          "required_approving_review_count": 1,
+          "require_last_push_approval": true
+        },
+        "restrictions": null,
+        "required_linear_history": false,
+        "allow_force_pushes": false,
+        "allow_deletions": false,
+        "block_creations": false,
+        "required_conversation_resolution": true,
+        "lock_branch": false,
+        "allow_fork_syncing": false
+      },
+      "environments": {
+        "DEV": {"branches": ["develop"], "can_admins_bypass": false, "required_reviewers": false},
+        "HOM": {"branches": ["develop"], "can_admins_bypass": false, "required_reviewers": true,
+                "prevent_self_review": true},
+        "lab-image-base-infra": {"branches": ["develop"], "can_admins_bypass": false, "required_reviewers": true,
+                                 "prevent_self_review": true}
+      }
+    }
+  }
+}
