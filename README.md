@@ -1,6 +1,6 @@
 # image-base
 
-Imagens base **distroless multi-arquitetura** (`amd64`/`arm64`) para **Java, Python, Go, Node.js e .NET** — **17 definições** de runtime/build no catálogo, **16 no lote automático**; a disponibilidade depende dos gates de cada release. Construídas com [apko](https://github.com/chainguard-dev/apko) + [melange](https://github.com/chainguard-dev/melange) (pacotes [Wolfi](https://github.com/wolfi-dev), sem Dockerfile), escaneadas com [Trivy](https://github.com/aquasecurity/trivy) e publicadas no **Amazon ECR** via workflows reusáveis do GitHub Actions, com autenticação por OIDC (sem chave de acesso estática).
+Imagens base **distroless multi-arquitetura** (`amd64`/`arm64`) para **Java, Python, Go, Node.js e .NET** — **16 definições** de runtime/build no catálogo. O build automático (push, cron e dispatch em `develop`) constrói e publica somente o golden path `go1-26`/`go1-26-dev`; o catálogo completo é validado em PRs de impacto compartilhado e certificado por dispatch. A disponibilidade depende dos gates de cada release. Construídas com [apko](https://github.com/chainguard-dev/apko) + [melange](https://github.com/chainguard-dev/melange) (pacotes [Wolfi](https://github.com/wolfi-dev), sem Dockerfile), escaneadas com [Trivy](https://github.com/aquasecurity/trivy) e publicadas no **Amazon ECR** via workflows reusáveis do GitHub Actions, com autenticação por OIDC (sem chave de acesso estática).
 
 ## Índice
 
@@ -31,8 +31,13 @@ veja [`CONTRIBUTING.md`](CONTRIBUTING.md); o índice de documentação está em
 A identidade operacional central `itau-github-repo-factory-distroless-v1` e sua
 única inline policy `factory-distroless-v1` têm [contrato IAM externo e runbook LAB](docs/factory-distroless-v1-iam-runbook.md).
 Sua criação pertence ao operador no LAB e à equipe IAM no corporativo.
-Terraform mantém os recursos e as identidades legadas; a referência operacional
-nos workflows será adotada em um PR separado após read-back IAM aprovado.
+Desde o PR #121 (10/10/2026), os escopos DEV e `Infra - Apply` resolvem para
+essa role; HOM continua com a role própria da conta HOM. Terraform mantém os
+recursos e as identidades legadas.
+
+**Estado atual (13/10/2026):** a publicação DEV de `stable` está pausada por
+uma escrita incompleta de 01/10/2026 (incidente aberto); a promoção HOM está
+desabilitada. Resumo por domínio e documentos canônicos: [índice da documentação](docs/README.md).
 
 ## O que é uma imagem Distroless?
 
@@ -239,7 +244,7 @@ flowchart TD
     Base -- "include:" --> OUT["... Python (runtime) e demais frameworks"]
 ```
 
-(a tabela [Imagens disponíveis](#imagens-disponíveis) acima tem a lista completa e exata dos 12 arquivos)
+(a tabela [Imagens disponíveis](#imagens-disponíveis) acima tem a lista completa e exata dos 16 arquivos)
 
 Critério de escolha das versões (no momento em que este README foi escrito):
 
@@ -423,13 +428,21 @@ habilitação `enabled`, frameworks e soak de `policies/pipeline/promote-hom.jso
 A promoção DEV usa `policies/pipeline/promote-dev.json`, com soak inicial zero
 e retomada horária pelo mesmo digest quando houver espera configurada.
 
+Estado em 13/10/2026: `promote-hom.json` tem `"enabled": false`, então nenhuma
+promoção HOM ocorre. Em DEV, os dois membros do par estão pausados desde a
+tentativa `r36848114957-a1` (01/10/2026): builds novos publicam candidates e
+terminam em `WAITING`, e o cron horário termina em `SKIPPED`, sem mover
+`stable`. Veja o [incidente aberto](docs/dev-hom-promotion.md#estado-atual-de-dev-stable-incidente-aberto).
+
 Veja [DEV → HOM: operação, infraestrutura e ativação](docs/dev-hom-promotion.md)
 para os contratos, limites da atomicidade ECR e critérios de aceite hospedado.
 
 ## Recuperação de `stable` (runbook, M15)
 
-Dispare `recover-stable.yml` em `develop` com `release=r<RUN_ID>-a<ATTEMPT>` e
-`reason`. O destino precisa ter sido promovido com sucesso em HOM. O workflow
+O recovery existe somente em HOM. Dispare `recover-stable.yml` em `develop` com
+`release=r<RUN_ID>-a<ATTEMPT>` e `reason`. O destino precisa ter sido promovido
+com sucesso em HOM pelo lifecycle atual; com a promoção HOM desabilitada, esse
+caminho não tem prova hospedada nesta revisão. O workflow
 revalida trust, SBOM, provenance e Trivy, restaura a release completa por digest
 e confirma as tags. Não exige PR nem rebuild.
 
@@ -437,6 +450,12 @@ Recovery pausa automaticamente novas promoções dos membros afetados. Para
 retomar, dispare a promoção com release explícita e `resume-automation=true`;
 todos os gates continuam obrigatórios. Promoção e recovery compartilham o lock
 HOM. Consulte o [runbook completo](docs/dev-hom-promotion.md#recovery-sem-pr-e-sem-rebuild).
+
+Em DEV não há recovery para release anterior: os bytes de uma release não
+promovida expiram em 7 dias ([retenção no ECR](docs/ecr-retention.md)). Uma
+escrita DEV interrompida é reconciliada por dispatch de `dev-stable.yml` com
+release explícita e `resume-automation=true`, sob todos os gates e com
+autorização do owner.
 
 ## Verificação: assinatura e build provenance
 

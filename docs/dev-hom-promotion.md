@@ -5,10 +5,14 @@ GitHub Environments e contas AWS. Não se cria branch `stable`, nem se usa
 `staging` para promover imagens. Mudanças em workflows, políticas, catálogo,
 certificados, Apko/Melange e Terraform passam por PR.
 
-| Ambiente | Conta | Região | Role OIDC |
+| Ambiente | Conta | Região | Role OIDC dos workflows |
 | --- | --- | --- | --- |
-| DEV | `712107929769` | `us-east-1` | `alric-image-base-factory-dev` |
+| DEV | `712107929769` | `us-east-1` | `itau-github-repo-factory-distroless-v1` (role central, desde 10/10/2026) |
 | HOM | `248908662184` | `sa-east-1` | `alric-image-base-factory-hom` |
+
+`alric-image-base-factory-dev`, ainda em `DEV.role_name` de `config.json`, é a
+identidade legada criada pelo bootstrap `infra/lifecycle`; nenhum workflow DEV
+a assume. O escopo DEV resolve para `factory.operational_role_name`.
 
 O profile local `revolution-dev` autentica a conta **HOM** desta Factory.
 Contas, regiões, roles e buckets têm uma única fonte em
@@ -16,7 +20,9 @@ Contas, regiões, roles e buckets têm uma única fonte em
 somente o catálogo e os manifestos DEV e escreve nos seus próprios recursos.
 Frameworks, habilitação e soak ficam em `promote-dev.json` e `promote-hom.json`
 na mesma pasta. O [contrato dos JSONs](../policies/pipeline/README.md) define validação e migração das variáveis antigas.
-A role DEV não escreve em HOM. Nenhuma delas cria repositórios ou apaga releases.
+A role central não escreve em HOM nem apaga imagens ou registros do Store; ela só
+cria os repositórios do catálogo pelo fluxo `Infra - Apply`, e o publicador não
+cria repositórios. A role HOM não cria repositórios nem apaga releases.
 As trusts exigem o subject imutável do repositório e o Environment exato;
 os Environments permitem somente a branch `develop`.
 
@@ -50,9 +56,10 @@ flowchart LR
    run; com espera ou escopo incompatível, mantém o candidate pendente. O cron
    `7 * * * *` retoma a release elegível por digest, revalida trust e scan,
    atualiza DEV `stable`, confirma todas as tags e persiste `manifest.json`.
-4. `promote-stable.yml` roda no cron `17 * * * *`, com
-   `"enabled": true` em `promote-hom.json`. O soak começa após o último read-back
-   de DEV `stable`. Não há runner aguardando seis horas.
+4. `promote-stable.yml` roda no cron `17 * * * *` e só promove com
+   `"enabled": true` em `promote-hom.json`; hoje o valor é `false` e nenhuma
+   promoção HOM ocorre. O soak começa após o último read-back de DEV `stable`.
+   Não há runner aguardando seis horas.
 5. A seleção lê manifestos aprovados, escolhe a release elegível mais nova e
    fixa seus digests. Não resolve DEV `stable`. Assim, A pode completar o
    soak enquanto DEV já aponta para B, sem promover B por engano.
@@ -133,6 +140,28 @@ O candidate persistido preserva as evidências da tentativa original; o cron
 não remove pausas. Quando a validação inicial ainda não persistiu um candidate,
 reexecute o build completo em nova tentativa se seus artifacts não existirem.
 
+## Estado atual de DEV stable (incidente aberto)
+
+Leitura somente de API e Store em 13/10/2026; nenhum estado foi alterado.
+
+- Em 01/10/2026, a promoção de `r36848114957-a1` gravou as pausas dos dois
+  membros, moveu `stable` de `go1-26` e de `go1-26-dev` e falhou no read-back de
+  `go1-26-dev` com `ambiguous stable read-back`. A mesma leitura, dois segundos
+  depois, já devolveu o digest novo. O lifecycle seguiu o contrato: não gravou
+  recibo de sucesso nem manifesto `DEV_STABLE` e manteve as pausas
+  (`events/r36848114957-a1/failed.json`).
+- O ECR aponta `stable` para os digests dessa tentativa. `state/go1-26.json` e
+  `state/go1-26-dev.json` ainda registram a release anterior `r36822456149-a1`,
+  com `hold=true` e `pending_release=r36848114957-a1`. Os digests da release
+  anterior já expiraram pela [lifecycle de 7 dias](ecr-retention.md).
+- Builds novos persistem candidates validados e terminam em `WAITING`; o cron
+  de `dev-stable.yml` termina em `SKIPPED`. Os workflows ficam verdes sem mover
+  `stable`, e o health acusa a idade de `stable`.
+- A saída suportada é o dispatch acima, com `release` explícita e
+  `resume-automation=true`, que repete trust, re-scan e read-back. A escolha da
+  release e da janela e a autorização da escrita cabem ao owner. Limpar pausas
+  manualmente não é procedimento.
+
 ## Provisionamento e ativação
 
 ```sh
@@ -148,6 +177,11 @@ não o versione. O módulo referencia os OIDC providers já existentes. O state
 DEV de ECR continua em seu backend S3; aplique por ele a política versionada
 que permite leitura à role HOM. Não importe os mesmos repositórios em dois states.
 
+*Estado em 13/10/2026:* `develop` é a default branch e DEV usa a role central
+(PR #121, 10/10/2026). `promote-hom.json` continua com `"enabled": false`: os
+passos 5 e 6 abaixo não foram executados, e a promoção e o recovery HOM não têm
+prova hospedada nesta revisão.
+
 A preparação de infraestrutura não ativa código ainda em revisão. Para concluir
  o cutover após aprovação do PR:
 
@@ -157,9 +191,9 @@ A preparação de infraestrutura não ativa código ainda em revisão. Para conc
    em `policies/pipeline/config.json`; `configure_github.py` mantém os Environments.
 3. Retire a autorização de publicação dos workflows históricos em `main`
    desabilitando a trust da role antiga `alric-github-repo-1360616627`; a nova
-   publicação usa `alric-image-base-factory-dev`. Trate também a role histórica
-   de Infra PR antes de reabilitar esse caminho; veja
-   [retirada de autorização histórica](develop-as-dev.md#retirada-da-autorizacao-historica).
+   publicação usava `alric-image-base-factory-dev` (hoje a role central). Trate
+   também a role histórica de Infra PR antes de reabilitar esse caminho; veja
+   [retirada de autorização histórica](develop-as-dev.md#retirada-da-autorização-histórica).
    Jobs antigos podem pedir novas sessões por reexecução; mudar o YAML atual
    não os revoga. Preserve o Environment de Infra com seus controles de revisão.
 4. Altere a default branch para `develop`. Não crie branches de ambiente.

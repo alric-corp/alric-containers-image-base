@@ -643,7 +643,7 @@ histórica permanece limitada ao commit/run em que foi obtida.
 | M14 | Timeouts / concorrência | IMPLEMENTED | Hardening e grupos por PR/framework; ARM usa emulação quando necessário |
 | M15 | Recovery | IMPLEMENTED | Verificação, re-scan e read-back sem bypass; quarentena exige PR explícito |
 | M16 | Hardening / revisão | PARTIAL | Lint e CODEOWNERS; sem alegar enforcement contra administrador no sandbox |
-| M09/M12 | Reusable workflows | IMPLEMENTED | SHA atual dos chamadores: 7a9b055a462eeb8552d3404c26538b44e8ccd83f; [origem revisada](policies/governance/reusable-workflows.json), checkout, contratos e referências Trivy conferidos localmente |
+| M09/M12 | Reusable workflows | IMPLEMENTED | SHA dos chamadores: o da linha "Biblioteca aprovada" logo abaixo, conferida por teste; [origem revisada](policies/governance/reusable-workflows.json), checkout, contratos e referências Trivy conferidos localmente. O SHA de uma action interna, como `setup-trivy`, é outro pin |
 | — | Requisitos de segurança / scanner | EXTERNAL — a confirmar | [P1-06](docs/adr/0003-controles-seguranca-workflows-federados.md); Trivy continua o gate vigente; aplicabilidade de integração adicional não presumida |
 
 Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@fd44ef512cf2e3ef9c65d0c005a9aa878ee26a69`.

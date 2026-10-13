@@ -1,5 +1,9 @@
 # Distroless — imagens base como produto de plataforma
 
+> **Visão de 28/09/2026.** Explica o produto para o time; não é o estado operacional
+> atual. Estado e documentos canônicos: [índice da documentação](docs/README.md).
+
+
 > **Construir uma vez, testar a imagem produzida e publicar exatamente o que foi validado.**
 
 A Factory centraliza a construção, os testes, a segurança e a distribuição de imagens base. **A plataforma entrega a base; cada time acrescenta sua aplicação.**
