@@ -45,6 +45,7 @@ Baseline: `develop` em `a90f57623aea70482e7fc1b6396473316a0c8182`, leituras de
 | Necessidade | Documento |
 | --- | --- |
 | Lifecycle DEV → HOM, pausas, retomada e recovery | [DEV → HOM por release](dev-hom-promotion.md) |
+| Preparar o aceite hospedado DEV → HOM e recovery | [Aceite hospedado DEV → HOM](dev-hom-hosted-acceptance.md) |
 | Configurar promoção, soak e escopo | [Configuração da Factory](../policies/pipeline/README.md) |
 | Saber por quanto tempo um digest fica disponível no ECR e o que pode ser recuperado | [Retenção no ECR](ecr-retention.md) |
 | Recuperar `stable` em HOM | [Runbook de recuperação](../README.md#recuperação-de-stable-runbook-m15) |
@@ -83,6 +84,7 @@ Baseline: `develop` em `a90f57623aea70482e7fc1b6396473316a0c8182`, leituras de
 | Necessidade | Documento |
 | --- | --- |
 | Operar a fábrica e avaliar alertas, indicadores e SLO/SLA | [Contrato operacional](m11-m04-operational-health.md) |
+| Consultar o evento de alerta, entrega e reconhecimento | [Contrato operacional de alertas](operational-alerting-contract.md) |
 | Acompanhar o incidente aberto de DEV `stable` | [Estado atual de DEV stable](dev-hom-promotion.md#estado-atual-de-dev-stable-incidente-aberto) |
 | Diagnosticar uma imagem distroless em execução | Toolkit `alric-containers-troubleshooting` (produto independente) |
 | Executar os contratos sobre imagens reais | [Runtime](../tests/runtime/README.md) |
@@ -100,6 +102,7 @@ Baseline: `develop` em `a90f57623aea70482e7fc1b6396473316a0c8182`, leituras de
 | Necessidade | Documento |
 | --- | --- |
 | Consultar decisões pontuais e seu estado | [Índice de ADRs](adr/README.md) |
+| Revisão, ownership e required checks (LAB e corporativo) | [Governança do repositório](repository-governance.md) |
 | Consultar `stable`/lifecycle conforme a RFC-013 | [ADR-0005](adr/0005-stable-lifecycle-realinhamento-rfc013.md) |
 | Consultar proposta, estado e prontidão para produção | [RFC-013](../RFC-013-Image-Base-Completa-com-Mermaid.md) |
 | Comparar esta solução com a POC de referência | [RFC-013 — Relação com a POC](../RFC-013-Image-Base-Completa-com-Mermaid.md#relação-com-a-poc-de-referência) |
