@@ -186,9 +186,11 @@ A preparação de infraestrutura não ativa código ainda em revisão. Para conc
  o cutover após aprovação do PR:
 
 1. Integre o PR em `develop`, mantendo checks e revisão das mudanças da Factory.
-2. Configure a proteção de `develop` com os mesmos checks/revisores obrigatórios
-   da branch anterior. Confirme DEV/HOM restritos a `develop` e a configuração
-   em `policies/pipeline/config.json`; `configure_github.py` mantém os Environments.
+2. Mantenha a proteção de `develop` no perfil aprovado
+   ([Governança do repositório](repository-governance.md)) e confirme-a com
+   `repository_protection verify`. Confirme DEV/HOM restritos a `develop` e a
+   configuração em `policies/pipeline/config.json`; `configure_github.py` só
+   mantém os Environments e não altera a proteção da branch.
 3. Retire a autorização de publicação dos workflows históricos em `main`
    desabilitando a trust da role antiga `alric-github-repo-1360616627`; a nova
    publicação usava `alric-image-base-factory-dev` (hoje a role central). Trate
@@ -204,7 +206,9 @@ A preparação de infraestrutura não ativa código ainda em revisão. Para conc
    Valide recovery quando houver uma segunda release HOM aprovada.
 
 Até esse aceite, testes locais e recursos provisionados não comprovam OIDC
-real, cópia cross-account ou promoção completa em GitHub Actions.
+real, cópia cross-account ou promoção completa em GitHub Actions. O roteiro
+proposto, com pré-requisitos, escopo de escrita e critérios de aceite, está em
+[Aceite hospedado DEV → HOM](dev-hom-hosted-acceptance.md).
 
 ## Contrato consumidor
 
