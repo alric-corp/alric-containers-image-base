@@ -32,6 +32,12 @@ condição existir. Mudar `review_by` exige decisão do owner, não do alerta.
 | Recuperar | Procedimentos existentes; holds e recovery são G01/G07 | Sem ação automática | Autorização de cada recuperação |
 | Encerrar | O alerta some quando a condição deixa de existir | O evento deixa de ser emitido; não há notificação `resolved` sem estado entre runs | Registro humano de encerramento |
 
+No `pipeline-health.yml`, o passo `Build alert events without external
+delivery` roda depois das medições, com `continue-on-error`, e grava
+`reports/alert-events.json` no artifact `pipeline-health-<attempt>` (30 dias),
+além de uma tabela no resumo. O passo final continua decidindo o job só por
+pins e métricas; se os eventos não forem gerados, há um aviso no run.
+
 ## 2. Evento v1
 
 Somente estes campos saem do repositório:

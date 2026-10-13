@@ -3,12 +3,17 @@ import contextlib
 from datetime import datetime, timezone
 import hashlib
 import io
+import itertools
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
+import yaml
+
 from scripts.pipeline.operations import alert_events as alerts
+from tests.helpers.subprocess_env import bash_command
 
 NOW = datetime(2026, 10, 13, 12, 56, tzinfo=timezone.utc)
 RUN = {'repository': 'alric-corp/alric-containers-image-base', 'workflow': 'Ops - Pipeline health',
@@ -288,6 +293,41 @@ class CommandLineTests(unittest.TestCase):
         path.write_text(json.dumps(policy))
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(alerts.main(['lint', '--policy', str(path)]), 2)
+
+
+class WorkflowWiringTests(unittest.TestCase):
+    """The health job emits events but keeps deciding its result alone."""
+
+    @classmethod
+    def setUpClass(cls):
+        workflow = yaml.safe_load((alerts.ROOT / '.github/workflows/pipeline-health.yml').read_text())
+        cls.steps = workflow['jobs']['health']['steps']
+        cls.names = [step.get('name') for step in cls.steps]
+
+    def step(self, name):
+        return self.steps[self.names.index(name)]
+
+    def test_events_are_built_after_detection_and_preserved_with_the_evidence(self):
+        emit = self.step('Build alert events without external delivery')
+        order = [self.names.index(name) for name in (
+            'Measure operational health', 'Build alert events without external delivery',
+            'Preserve health evidence', 'Fail on breached thresholds or unavailable pins')]
+        self.assertEqual(order, sorted(order))
+        self.assertEqual((emit['if'], emit['continue-on-error']), ('${{ !cancelled() }}', True))
+        self.assertNotIn('env', emit)
+        self.assertIn('--json reports/alert-events.json', emit['run'])
+        self.assertEqual(self.step('Preserve health evidence')['with']['path'], 'reports/')
+
+    def test_the_job_result_depends_only_on_pins_and_metrics(self):
+        script = self.step('Fail on breached thresholds or unavailable pins')['run']
+        outcomes = ('success', 'failure', 'skipped')
+        for pins_outcome, metrics, emitted in itertools.product(outcomes, outcomes, outcomes):
+            result = subprocess.run(bash_command('-c', script), capture_output=True, text=True,
+                                    env={'PINS': pins_outcome, 'METRICS': metrics, 'ALERTS': emitted,
+                                         'PATH': '/usr/bin:/bin'}, timeout=10)
+            with self.subTest(pins=pins_outcome, metrics=metrics, alerts=emitted):
+                self.assertEqual(result.returncode == 0,
+                                 pins_outcome == 'success' and metrics == 'success')
 
 
 if __name__ == '__main__':
