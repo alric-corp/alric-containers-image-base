@@ -15,7 +15,7 @@ from scripts.pipeline.release.evidence_archive import (
     InvalidEvidence, canonical, document, inventory, make_zip, read_zip, sha256,
 )
 from scripts.pipeline.release.evidence_store import (
-    EvidenceStore, MemoryTransport, ReadStatus, StoredObject, TransportError, WriteStatus,
+    EvidenceStore, MemoryTransport, MissingObject, ReadStatus, StoredObject, TransportError, WriteStatus,
 )
 from tests.unit.pipeline.release.custody_support import (
     POLICY_ID, ORIGINAL_SHA256, TestAuthenticator, TestSigner, fixture_inputs,
@@ -320,6 +320,37 @@ class CustodyTests(unittest.TestCase):
         self.assertEqual(result.state, custody.CustodyState.ERROR)
         self.assertEqual(len([key for key, version in calls if '/payload/' in key]), 1)
         self.assertTrue(all(version is not None for key, version in calls if '/payload/' in key))
+
+    def test_transport_faults_on_a_valid_record_are_errors_not_invalid_evidence(self):
+        self.ready()
+        get = self.store.transport.get
+        for error in (KeyError('x-amz-version-id'), RuntimeError('adapter bug'), ValueError('bad header')):
+            def faulty(key, version_id=None, error=error):
+                if '/payload/' in key:
+                    raise error
+                return get(key, version_id)
+            with self.subTest(error=error), patch.object(self.store.transport, 'get', side_effect=faulty):
+                self.assertEqual(self.read().state, custody.CustodyState.ERROR)
+        self.assertEqual(self.read().state, custody.CustodyState.COMPLETE_VERIFIED)
+        empty = EvidenceStore(MemoryTransport())
+        with patch.object(empty.transport, 'keys', side_effect=MissingObject('NoSuchBucket')):
+            # An absent commit with an unusable inventory never becomes an adoption state.
+            self.assertEqual(self.read(store=empty).state, custody.CustodyState.ERROR)
+
+    def test_commit_write_failure_outside_protocol_is_a_write_error(self):
+        frozen = frozen_fixture(self.store, self.prepared, self.expected, self.signer)
+        put = self.store.transport.put_if_absent
+
+        def missing_bucket(key, content):
+            if key.endswith('commit.json'):
+                raise MissingObject('NoSuchBucket')
+            return put(key, content)
+
+        with patch.object(self.store.transport, 'put_if_absent', side_effect=missing_bucket):
+            result = custody.commit_record(self.store, frozen, self.expected, self.signer.policy(),
+                                           TestAuthenticator(), self.root / 'missing-bucket')
+        self.assertEqual(result.status, WriteStatus.ERROR)
+        self.assertEqual(self.store.get(self.expected.prefix + 'commit.json').status, ReadStatus.MISSING)
 
     def test_payload_altered_after_preparation_cannot_commit(self):
         frozen = frozen_fixture(self.store, self.prepared, self.expected, self.signer)

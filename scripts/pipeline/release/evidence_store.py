@@ -3,6 +3,8 @@
 Application metadata is content; version IDs and service response metadata are
 not. A transport must implement atomic put_if_absent, not HEAD followed by PUT.
 This module deliberately has no overwrite, delete or implicit latest fallback.
+Any transport exception outside this protocol is an operational ERROR: never
+MISSING, CONFLICT, or (for custody readers) invalid evidence.
 """
 from dataclasses import dataclass
 from enum import Enum
@@ -24,6 +26,12 @@ class TransportError(Exception):
 
 class WriteResponseLost(TransportError):
     """A create may have succeeded; reconcile without overwriting."""
+
+
+def _failure(error):
+    if isinstance(error, (TransportError, OSError)):
+        return str(error)
+    return f'unexpected transport failure ({type(error).__name__}): {error}'
 
 
 def metadata_pairs(metadata):
@@ -117,8 +125,8 @@ class EvidenceStore:
             return ReadResult(ReadStatus.FOUND, obj)
         except MissingObject as error:
             return ReadResult(ReadStatus.MISSING, reason=str(error))
-        except (TransportError, OSError, TimeoutError) as error:
-            return ReadResult(ReadStatus.ERROR, reason=str(error))
+        except Exception as error:
+            return ReadResult(ReadStatus.ERROR, reason=_failure(error))
 
     def keys(self, prefix):
         try:
@@ -128,8 +136,8 @@ class EvidenceStore:
                     or keys != tuple(sorted(set(keys)))):
                 raise TransportError('invalid/incomplete bounded inventory')
             return InventoryResult(ReadStatus.FOUND, keys)
-        except (TransportError, OSError, TimeoutError) as error:
-            return InventoryResult(ReadStatus.ERROR, reason=str(error))
+        except Exception as error:  # A missing bucket/prefix response is not an empty inventory.
+            return InventoryResult(ReadStatus.ERROR, reason=_failure(error))
 
     def create_once(self, key, content):
         if not isinstance(content, FrozenObject):
@@ -143,8 +151,8 @@ class EvidenceStore:
             if result.object.content != content:
                 return WriteResult(WriteStatus.CONFLICT, result.object, 'existing bytes/application metadata differ')
             return WriteResult(WriteStatus.ALREADY_PRESENT_IDENTICAL, result.object)
-        except (TransportError, OSError, TimeoutError) as error:
-            return WriteResult(WriteStatus.ERROR, reason=str(error))
+        except Exception as error:
+            return WriteResult(WriteStatus.ERROR, reason=_failure(error))
         if type(version) is not str or not version:
             return WriteResult(WriteStatus.ERROR, reason='create returned no version ID')
         result = self.get(key, version_id=version)
