@@ -28,7 +28,12 @@
 # Uso:
 #   scripts/verify-image.sh <framework> <tag-ou-digest> \
 #     --account <aws-account-id> [--region <aws-region>] \
-#     [--repo <owner/repositorio-fonte>] [--ref <branch-do-assinador>]
+#     [--repo <owner/repositorio-fonte>] [--ref <branch-do-assinador>] \
+#     [--report-dir <diretorio-novo>]
+#
+# As saídas de cada verificador ficam em um diretório privado (0700): o
+# informado em --report-dir, que não pode existir ou precisa estar vazio, ou
+# um novo criado por mktemp. Nunca em nomes fixos de um /tmp compartilhado.
 #
 # Exemplo histórico (Go 1.26, digest comprovado na main antes da migração):
 #   scripts/verify-image.sh go1-26 \
@@ -52,9 +57,10 @@ AWS_ACCOUNT_ID=""
 AWS_REGION="us-east-1"
 SOURCE_REPO="alric-corp/alric-containers-image-base"
 SIGNER_REF="refs/heads/develop"
+REPORT_DIR=""
 
 usage() {
-  echo "Uso: $0 <framework> <tag-ou-digest> --account <aws-account-id> [--region <aws-region>] [--repo <owner/repositorio>] [--ref <ref-do-assinador>]" >&2
+  echo "Uso: $0 <framework> <tag-ou-digest> --account <aws-account-id> [--region <aws-region>] [--repo <owner/repositorio>] [--ref <ref-do-assinador>] [--report-dir <diretorio-novo>]" >&2
   exit 2
 }
 
@@ -68,6 +74,7 @@ while [[ $# -gt 0 ]]; do
     --region) AWS_REGION="$2"; shift 2 ;;
     --repo) SOURCE_REPO="$2"; shift 2 ;;
     --ref) SIGNER_REF="$2"; shift 2 ;;
+    --report-dir) REPORT_DIR="$2"; shift 2 ;;
     *) echo "argumento desconhecido: $1" >&2; usage ;;
   esac
 done
@@ -75,6 +82,15 @@ done
 [[ "$FRAMEWORK" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "framework inválido: $FRAMEWORK" >&2; exit 2; }
 [[ -n "$AWS_ACCOUNT_ID" ]] || { echo "--account é obrigatório: nenhuma conta é assumida por padrão" >&2; exit 2; }
 [[ "$AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || { echo "--account deve ter 12 dígitos: '$AWS_ACCOUNT_ID'" >&2; exit 2; }
+# Um caminho existente só é aceito se for diretório real (não link) e vazio.
+if [[ -n "$REPORT_DIR" ]]; then
+  if [[ -L "$REPORT_DIR" ]] || { [[ -e "$REPORT_DIR" ]] && [[ ! -d "$REPORT_DIR" ]]; }; then
+    echo "--report-dir deve ser um diretório real: '$REPORT_DIR'" >&2; exit 2
+  fi
+  if [[ -d "$REPORT_DIR" ]] && [[ -n "$(ls -A "$REPORT_DIR")" ]]; then
+    echo "--report-dir já contém arquivos; use um diretório novo: '$REPORT_DIR'" >&2; exit 2
+  fi
+fi
 
 check_dependencies() {
   local missing=""
@@ -87,6 +103,13 @@ check_dependencies() {
   fi
 }
 check_dependencies
+
+if [[ -n "$REPORT_DIR" ]]; then
+  mkdir -p "$REPORT_DIR"
+else
+  REPORT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/verify-image.XXXXXX")
+fi
+chmod 700 "$REPORT_DIR"
 
 REPOSITORY="image-base-${FRAMEWORK}"
 REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
@@ -116,6 +139,7 @@ fi
 
 IMAGE_REF="${REGISTRY}/${REPOSITORY}@${DIGEST}"
 echo "referência completa: $IMAGE_REF"
+echo "relatórios: $REPORT_DIR"
 
 echo
 echo "== Login no ECR (necessário para cosign/gh lerem o registry) =="
@@ -129,10 +153,10 @@ echo "== 1/3 Verificando assinatura Cosign keyless =="
 if cosign verify \
   --certificate-identity "$CERT_IDENTITY" \
   --certificate-oidc-issuer "$OIDC_ISSUER" \
-  "$IMAGE_REF" >/tmp/verify-image-signature.json 2>&1; then
+  "$IMAGE_REF" >"$REPORT_DIR/signature.json" 2>&1; then
   echo "PASS: assinatura válida (identidade ${CERT_IDENTITY})"
 else
-  echo "FAIL: assinatura -- ver /tmp/verify-image-signature.json"
+  echo "FAIL: assinatura -- ver $REPORT_DIR/signature.json"
   FAILED="${FAILED}signature "
 fi
 
@@ -142,10 +166,10 @@ if cosign verify-attestation \
   --type spdxjson \
   --certificate-identity "$CERT_IDENTITY" \
   --certificate-oidc-issuer "$OIDC_ISSUER" \
-  "$IMAGE_REF" >/tmp/verify-image-sbom.json 2>&1; then
+  "$IMAGE_REF" >"$REPORT_DIR/sbom.json" 2>&1; then
   echo "PASS: attestation SBOM (spdxjson) válida"
 else
-  echo "FAIL: attestation SBOM -- ver /tmp/verify-image-sbom.json"
+  echo "FAIL: attestation SBOM -- ver $REPORT_DIR/sbom.json"
   FAILED="${FAILED}sbom "
 fi
 
@@ -156,10 +180,10 @@ if gh attestation verify "oci://${IMAGE_REF}" \
   --signer-workflow "$SIGNER_WORKFLOW" \
   --source-ref "$SIGNER_REF" \
   --predicate-type https://slsa.dev/provenance/v1 \
-  --format json >/tmp/verify-image-provenance.json 2>/tmp/verify-image-provenance.err; then
+  --format json >"$REPORT_DIR/provenance.json" 2>"$REPORT_DIR/provenance.err"; then
   echo "PASS: provenance SLSA v1 válida (repo=${SOURCE_REPO}, ref=${SIGNER_REF})"
 else
-  echo "FAIL: provenance -- ver /tmp/verify-image-provenance.err"
+  echo "FAIL: provenance -- ver $REPORT_DIR/provenance.err"
   FAILED="${FAILED}provenance "
 fi
 
