@@ -206,7 +206,10 @@ certificados executam uma única vez. Required check contexts acompanham os
 nomes exibidos e precisam ser alinhados no merge autorizado, sem retirar
 essas exigências.
 
-`CODEOWNERS` cobre os domínios e também arquivos novos pelo dono padrão.
+Não há `CODEOWNERS` ativo no LAB; o template corporativo
+([`policies/governance/CODEOWNERS.template`](../policies/governance/CODEOWNERS.template))
+cobre os domínios, arquivos novos pelo dono padrão e os caminhos privilegiados
+([Governança do repositório](repository-governance.md)).
 Os testes verificam que mudanças nos insumos movidos continuam cobertas pelos
 filtros de build. Evidências geradas ficam em `reports/` (ignorado) e não são
 versionadas; o histórico Git é a fonte de runs/evidências passadas.

@@ -374,10 +374,11 @@ este PR não altera branch protection.
   padrão dos três chamadores diferente de `catálogo − exclusões` ou escrito
   como expressão dinâmica em vez do literal canônico, ou exclusão sem motivo,
   dono, `review_by` e ADR válido em `docs/adr/`).
-- **Uma aprovação**, com revisão de code owner nos caminhos do
-  [CODEOWNERS](.github/CODEOWNERS) (manifests, workflows, actions,
-  automação, testes, políticas de dependência, `melange` e `Makefile`).
-  Aprovações são descartadas a cada novo push.
+- **Revisão:** no LAB, `develop` exige PR com **zero** aprovações e sem
+  revisão de code owner; o owner removeu o `CODEOWNERS` em `03165e6`
+  (09/10/2026). Aprovações são descartadas a cada novo push. O perfil LAB
+  aceito, o perfil corporativo proposto e o template de ownership estão em
+  [Governança do repositório](docs/repository-governance.md).
 
 **CI - Repository checks** é um gate rápido em Linux: testes unitários e
 integração offline, sintaxe/hardening de workflows, pins imutáveis e contratos

@@ -94,7 +94,9 @@ validados. Eles são executados no pipeline de imagens e não fazem parte do
   remover gates. Novos testes precisam ser descobertos pelo comando do CI.
 - Atualize os dois workflows compartilhados juntos, por SHA completo; confira
   também o SHA da action Trivy usado em promoção e recuperação.
-- Políticas e pins passam por PR e revisão dos code owners. Não versione
-  credenciais, chaves privadas, caches, ambientes virtuais ou saídas de build.
+- Políticas e pins passam por PR; a exigência de revisão segue o perfil
+  vigente em [Governança do repositório](docs/repository-governance.md) (no
+  LAB, sem aprovação obrigatória nem CODEOWNERS). Não versione credenciais,
+  chaves privadas, caches, ambientes virtuais ou saídas de build.
 - Registre evidências com commit e escopo da execução. Testes locais não
   equivalem a publicação ECR nem a promoção/recuperação real de stable.
