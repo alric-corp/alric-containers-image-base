@@ -307,6 +307,9 @@ consolidada na [RFC-013](../RFC-013-Image-Base-Completa-com-Mermaid.md) e em
 Essas identidades são configurações da POC, não nomeações corporativas ou
 plantão. O código não usa owner/escalation/channel para encaminhar mensagens.
 Preencher um campo não implementaria envio, confirmação ou escalonamento.
+O evento de alerta, os dados que podem sair do repositório e a diferença
+entre entrega e reconhecimento estão no
+[contrato operacional de alertas](operational-alerting-contract.md).
 
 | Etapa | Implementação / prova necessária | Estado atual |
 | --- | --- | --- |
