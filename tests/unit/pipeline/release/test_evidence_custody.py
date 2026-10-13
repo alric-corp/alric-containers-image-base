@@ -5,6 +5,7 @@ from dataclasses import replace
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 from threading import Barrier
 import unittest
@@ -651,5 +652,24 @@ class CustodyTests(unittest.TestCase):
         occupied.mkdir()
         (occupied / 'sentinel').write_bytes(b'keep')
         result = self.read(target=occupied)
-        self.assertEqual(result.state, custody.CustodyState.INVALID)
+        # A caller-owned destination problem is a local execution failure (ERROR),
+        # never an integrity verdict (INVALID) about a valid record.
+        self.assertEqual(result.state, custody.CustodyState.ERROR)
         self.assertEqual((occupied / 'sentinel').read_bytes(), b'keep')
+
+    def test_unusable_extraction_destinations_are_errors_not_invalid_evidence(self):
+        self.ready()
+        (self.root / 'link').symlink_to(self.root, target_is_directory=True)
+        real_run = subprocess.run
+
+        def no_verifier(args, **kwargs):
+            self.assertNotEqual(args[0], sys.executable, 'verifier must not run without a new destination')
+            return real_run(args, **kwargs)
+
+        for target in (Path('relative-destination'), self.root / 'absent' / 'child', self.root / 'link' / 'child'):
+            with self.subTest(target=target):
+                with patch('subprocess.run', side_effect=no_verifier):
+                    result = self.read(target=target)
+                self.assertEqual(result.state, custody.CustodyState.ERROR)
+                self.assertFalse(target.is_absolute() and target.exists())
+        self.assertEqual(self.read().state, custody.CustodyState.COMPLETE_VERIFIED)

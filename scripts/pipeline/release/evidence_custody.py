@@ -17,7 +17,7 @@ import sys
 from typing import Protocol
 
 from scripts.pipeline.release.evidence_archive import (
-    LIMITS, ExpansionBudget, InvalidEvidence, canonical, check_inventory, digest,
+    LIMITS, ExpansionBudget, InvalidEvidence, UnsafeDestination, canonical, check_inventory, digest,
     document, extract_new, fields, inventory, json_value, make_zip, positive, read_zip, require,
     safe_path, sha256,
 )
@@ -871,6 +871,8 @@ def recover(store, expected, policy, authenticator, target, *, adoption=None):
             return CustodyRead(CustodyState.ADOPTION_UNKNOWN, 'release not classified by external adoption policy')
         require(result.object.content == object_content(result.object.content.data, 'hgc04-commit'), 'commit application metadata differs')
         return _verify_payload(store, result.object.content.data, expected, policy, authenticator, target)
+    except UnsafeDestination as error:  # Local execution failure: no conclusion about the record.
+        return CustodyRead(CustodyState.ERROR, str(error))
     except (InvalidEvidence, ValueError, KeyError, TypeError, AttributeError, OverflowError) as error:
         return CustodyRead(CustodyState.INVALID, str(error))
     except (OSError, subprocess.SubprocessError) as error:
