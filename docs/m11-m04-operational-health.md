@@ -368,10 +368,14 @@ produz digests novos e não recupera artifact vencido. A recuperação de
 `stable` por digest (M15) depende do ECR, não destes artifacts — o prazo aqui
 cobre auditoria e diagnóstico, não recuperação de imagem.
 
-A [lifecycle ECR](../policies/operations/ecr-lifecycle.json) foi aplicada e
-relida nos 15 repositórios do sandbox em 10/09/2026. Seleciona somente imagens
-sem tag após 30 dias; os previews selecionaram zero imagens. Releases e
-assinaturas com tag ficam preservadas.
+A lifecycle ECR vigente é a de 7 dias com proteção de `stable`, aplicada pelo
+root `infra/ecr`; disponibilidade e limites de recovery por ambiente estão em
+[Retenção no ECR](ecr-retention.md).
+
+*Histórico (10/09/2026):* a [lifecycle anterior](../policies/operations/ecr-lifecycle.json)
+foi aplicada e relida nos 15 repositórios então existentes. Selecionava somente
+imagens sem tag após 30 dias, e os previews selecionaram zero imagens. Ela não
+está mais aplicada.
 
 ## 5. Indicadores e semântica do tempo
 

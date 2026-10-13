@@ -9,7 +9,7 @@ em `scripts/pipeline/` aplicam as regras; os workflows controlam a execução.
 | `pipeline/promote-dev.json`, `pipeline/promote-hom.json` | `governance/configuration.py`, `release/lifecycle.py` | Frameworks, habilitação e soak independentes para cada promoção; [contrato](pipeline/README.md) |
 | `governance/reusable-workflows.json` | `governance/workflow_dependencies.py` | Origem GitHub.com aprovada da biblioteca; callers/actions literais por SHA, checkout e grupo Dependabot devem permanecer coerentes |
 | `operations/health.json` | `operations/operational_health.py`, `catalog/default_batch.py` | Donos, alertas, cron e retenção das evidências; `exceptions` é a lista de frameworks fora do lote padrão (motivo, dono, `review_by`, ADR) |
-| `operations/ecr-lifecycle.json` | ECR, após preview revisado | Expira somente imagens sem tag após 30 dias; preserva releases com tag |
+| `operations/ecr-lifecycle.json` | Nenhum (histórico, não aplicado) | Modelo de 10/09/2026 (só imagens sem tag após 30 dias). A lifecycle efetiva é `infra/ecr/policies/ecr-lifecycle-7-days.json`; contrato em [Retenção no ECR](../docs/ecr-retention.md) |
 | `release/promotion-quarantine.json` | `release/find_promotion_candidate.py` | Digests retirados de stable que não podem ser promovidos novamente |
 | `release/signing-identities.json` | `release/verify_promotion.py` | Nome atual, nomes históricos e IDs imutáveis assinados do repositório e da organização |
 | `aws/github-actions-image-base-trust.json` | IAM, role `github-actions-image-base` | Trust policy OIDC desejada, restrita ao subject exato de develop; aplicação externa pendente |

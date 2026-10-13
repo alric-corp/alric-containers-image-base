@@ -121,7 +121,7 @@ completo; **TO_VALIDATE** = depende do ambiente corporativo para ser provado.
 | Preflight fail-closed contra ECR fora do contrato — observado ao vivo rejeitando um repositório ainda não reconciliado | PROVEN |
 | `IMMUTABLE_WITH_EXCLUSION`, `stable` como única tag móvel, build tags imutáveis | PROVEN |
 | OCI index digest como identidade forte; `stable` e build tag como conveniência/versão | PROVEN |
-| Lifecycle de 7 dias com `stable` protegida por prioridade de regra | PROVEN a proteção (preview real, 0 selecionadas); expiração positiva `>7d` ainda não observada contra dado real — genuína limitação de tempo decorrido |
+| Lifecycle de 7 dias com `stable` protegida por prioridade de regra | PROVEN no LAB: em 13/10/2026 nenhuma build tag anterior a 06/10 restava nos 16 ECRs, e o índice `stable` de 01/10 permanecia ([Retenção no ECR](ecr-retention.md)); a janela corporativa não está definida |
 | Candidato → soak → re-scan → `stable` por referência → read-back (`observed == candidate`) → `promoted=true` | PROVEN |
 | Recovery para digest anterior com as mesmas verificações, sem rebuild; quarentena versionada | PROVEN |
 

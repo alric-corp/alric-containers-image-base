@@ -86,6 +86,7 @@ resultados consumidores e recibos persistem no S3; HOM não possui expiração
 por idade que remova silenciosamente um destino de recovery ou suas attestations.
 DEV preserva a política existente de sete dias, além da proteção da stable atual.
 Uma release DEV cujos artifacts expiraram falha fechado na cópia/verificação.
+Janelas, referrers e limites de recovery: [Retenção no ECR](ecr-retention.md).
 
 Promoção e recovery compartilham `stable-mutation-HOM-<repositório>`, com
 `cancel-in-progress: false`. DEV tem seu próprio lock. Não há transação ECR
