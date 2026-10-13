@@ -1,6 +1,8 @@
+# check=skip=InvalidDefaultArgInFrom
 # Exemplo de consumo auditado. As duas bases chegam SOMENTE pelos build args
 # gerados do lock verificado (<registry>/image-base-<framework>@sha256:<índice>).
-# Os ARGs não têm default: sem o lock, o build falha em vez de resolver uma tag.
+# Os ARGs não têm default: sem o lock, o build falha em vez de resolver uma tag
+# (por isso a checagem InvalidDefaultArgInFrom do BuildKit é desligada acima).
 ARG BUILD_IMAGE
 ARG RUNTIME_IMAGE
 
