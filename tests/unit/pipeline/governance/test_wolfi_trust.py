@@ -128,6 +128,46 @@ class WolfiTrustTests(unittest.TestCase):
                 path.write_text(yaml.safe_dump({'contents': {'keyring': keyring}}))
                 self.assertTrue(wolfi_trust.config_errors(self.root))
 
+    def test_added_or_replaced_repository_is_rejected_anywhere(self):
+        # Each http(s) repository is also a key-discovery origin for the pinned Apko.
+        framework = self.root / 'frameworks/example.yaml'
+        for text in ('include: distroless/image-base.yaml\ncontents: {repositories: [https://other.example/os]}\n',
+                     'contents: {repositories: [https://packages.wolfi.dev/os, file:///mirror/os]}\n',
+                     'test: {environment: {contents: {repositories: [https://other.example/os]}}}\n'):
+            with self.subTest(text=text):
+                framework.write_text(text)
+                self.assertTrue(any('repositories must be exactly' in e for e in wolfi_trust.config_errors(self.root)))
+        framework.write_text('include: distroless/image-base.yaml\ncontents: {repositories: [https://packages.wolfi.dev/os]}\n')
+        self.assertEqual(wolfi_trust.config_errors(self.root), [])
+        for relative in ('distroless/image-base.yaml', 'melange/image-base-ca-certificates.yaml'):
+            with self.subTest(config=relative):
+                path = self.root / relative
+                original = path.read_text()
+                path.write_text(original.replace('https://packages.wolfi.dev/os', 'https://mirror.example/os'))
+                self.assertTrue(wolfi_trust.config_errors(self.root))
+                path.write_text(original)
+
+    def test_unreviewed_origins_and_base_images_are_rejected(self):
+        framework = self.root / 'frameworks/example.yaml'
+        for field, value in (('build_repositories', ['https://other.example/os']),
+                             ('runtime_repositories', ['https://packages.wolfi.dev/os']),
+                             ('baseimage', {'image': 'registry.example/base@sha256:' + '0' * 64})):
+            with self.subTest(field=field):
+                framework.write_text(yaml.safe_dump({'include': 'distroless/image-base.yaml', 'contents': {field: value}}))
+                self.assertTrue(any(field in error for error in wolfi_trust.config_errors(self.root)))
+
+    def test_include_must_stay_inside_scanned_shared_configurations(self):
+        framework = self.root / 'frameworks/example.yaml'
+        (self.root / 'img').mkdir()
+        (self.root / 'img/unscanned.yaml').write_text('contents: {keyring: [https://other.example/key.pub]}\n')
+        for include in ('img/unscanned.yaml', '../outside.yaml', '/etc/passwd', 'frameworks/example.yaml',
+                        'distroless/absent.yaml', ['distroless/image-base.yaml']):
+            with self.subTest(include=include):
+                framework.write_text(yaml.safe_dump({'include': include}))
+                self.assertTrue(wolfi_trust.config_errors(self.root))
+        framework.write_text('include: distroless/image-base.yaml\n')
+        self.assertEqual(wolfi_trust.config_errors(self.root), [])
+
     def test_monitor_reports_same_divergent_and_unavailable_without_writes(self):
         entry = wolfi_trust.require_key(self.root)
         initial = (self.key.read_bytes(), self.policy.read_bytes())

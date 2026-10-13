@@ -15,6 +15,12 @@ ROOT = Path(__file__).resolve().parents[3]
 KEY = Path('melange/keys/wolfi-signing.rsa.pub')
 POLICY = KEY.with_name('wolfi-signing-key.json')
 MAX_KEY_BYTES = 16384
+# The pinned Apko also discovers keys from every http(s) repository, so the
+# repository set is part of the reviewed trust surface, like the keyring.
+REPOSITORIES = ['https://packages.wolfi.dev/os']
+# Not part of the reviewed model: extra build/runtime origins, and a base
+# image whose package index Apko installs without signature verification.
+UNREVIEWED_FIELDS = ('build_repositories', 'runtime_repositories', 'baseimage')
 
 
 def local_pin(root=None, run=None):
@@ -68,7 +74,7 @@ def require_key(root=None):
 
 
 def config_errors(root=None):
-    """Check the product's keyring fields with its existing YAML dependency."""
+    """Check the product's trust surface (keyring, origins, includes) with PyYAML."""
     import yaml
     root = Path(root) if root is not None else ROOT
     errors = []
@@ -76,19 +82,22 @@ def config_errors(root=None):
                 root / 'melange/image-base-ca-certificates.yaml'}
     paths = set(required)
 
-    def keyrings(value):
+    def found(value, field):
         if isinstance(value, dict):
             for name, child in value.items():
-                if name == 'keyring':
+                if name == field:
                     yield child
-                yield from keyrings(child)
+                yield from found(child, field)
         elif isinstance(value, list):
             for child in value:
-                yield from keyrings(child)
+                yield from found(child, field)
 
     for directory in ('distroless', 'frameworks', 'melange'):
         for extension in ('*.yaml', '*.yml'):
             paths.update((root / directory).rglob(extension))
+    # Apko resolves include paths itself: only scanned shared configurations
+    # keep the included keyring/repositories inside this check.
+    includable = {path.relative_to(root).as_posix() for path in paths if path.parent == root / 'distroless'}
     for path in sorted(paths):
         relative = path.relative_to(root)
         expected = str(KEY.relative_to('melange')) if relative.parts[0] == 'melange' else str(KEY)
@@ -98,10 +107,18 @@ def config_errors(root=None):
                 if relative.parts[0] == 'melange' else document.get('contents')
             keyring = (contents or {}).get('keyring')
             if (path in required and keyring != [expected]) \
-                    or any(value != [expected] for value in keyrings(document)):
+                    or any(value != [expected] for value in found(document, 'keyring')):
                 errors.append(f'{relative}: keyring must be exactly the local key [{expected}]')
-        except (OSError, ValueError, AttributeError, yaml.YAMLError) as error:
-            errors.append(f'{relative}: cannot verify local keyring ({error})')
+            if (path in required and (contents or {}).get('repositories') != REPOSITORIES) \
+                    or any(value != REPOSITORIES for value in found(document, 'repositories')):
+                errors.append(f'{relative}: repositories must be exactly {REPOSITORIES}')
+            for field in UNREVIEWED_FIELDS:
+                if any(True for _ in found(document, field)):
+                    errors.append(f'{relative}: {field} is outside the reviewed trust surface')
+            if 'include' in document and document['include'] not in includable:
+                errors.append(f'{relative}: include must name a scanned distroless/ configuration')
+        except (OSError, ValueError, AttributeError, TypeError, yaml.YAMLError) as error:
+            errors.append(f'{relative}: cannot verify local trust surface ({error})')
     return errors
 
 
