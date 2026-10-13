@@ -1,0 +1,37 @@
+{
+  "$comment": "Contrato de eventos de alerta (G05). Classifica o que o health já detecta e define os dados mínimos que podem sair do repositório quando um destino externo for aprovado. Canal, donos e `external_destination` continuam em health.json; o destino é null por decisão do owner (02/10/2026). Nenhum valor aqui é SLO ou SLA. Ver docs/operational-alerting-contract.md.",
+  "schema_version": 1,
+  "status": "PROPOSED_AWAITING_OWNER_APPROVAL",
+  "routing_key": "factory-operations",
+  "routed_levels": ["alert", "unknown"],
+  "suppressed_levels": ["known", "out_of_scope"],
+  "severity": {
+    "default": "high",
+    "metrics": {
+      "health_report_missing": "critical",
+      "wolfi_key_status": "critical",
+      "pins_report_missing": "high",
+      "stable_age_hours": "high",
+      "publication_age_hours": "high",
+      "schedule_gap_hours": "high",
+      "pin_unavailable": "high",
+      "job_queries_truncated": "medium",
+      "promotion_evidence": "medium",
+      "execution_scope_review": "medium",
+      "exception_review": "medium",
+      "pin_unverified": "low"
+    }
+  },
+  "payload": {
+    "max_summary_chars": 240
+  },
+  "delivery": {
+    "timeout_seconds": 10,
+    "max_attempts": 3,
+    "backoff_seconds": [2, 8]
+  },
+  "acknowledgement": {
+    "required": true,
+    "record": null
+  }
+}
