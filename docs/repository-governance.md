@@ -41,7 +41,7 @@ não impedem integrar uma regressão de código em `develop`.
 | Aprovação obrigatória | 0 | Mantenedor único: o autor não aprova o próprio PR, e o time `github_xj7_maintainer` tem um membro (API 13/10/2026), sem acesso a este repositório |
 | Revisão de code owner | Desligada; sem CODEOWNERS | O owner removeu `.github/CODEOWNERS` em `03165e6` (edição direta em `develop`, sem PR) |
 | `enforce_admins` | Desligado | Decisão do owner para o sandbox (13/09/2026); controle previsto para o corporativo |
-| Validação FULL como required check | Não | O workflow de validação tem filtro de paths (seção 3) |
+| Validação FULL como required check | Não | Antes do gate agregado (seção 3) o workflow era filtrado por paths; com o gate, exigi-lo no LAB é decisão do owner |
 | Revisor em `DEV`/`HOM` | Nenhum | Aprovação DEV automática após gates; HOM desabilitado (`promote-hom.json`) |
 | `prevent_self_review` no Environment de Infra | `false` | O único revisor é o próprio autor |
 
@@ -111,7 +111,8 @@ revisão; Dependabot e Renovate não fazem automerge.
 | --- | --- | --- | --- |
 | `Unit & integration tests` | `ci.yml` / `test` | Sim | Sim — LAB e corporativo |
 | `Repository & workflow lint` | `ci.yml` / `lint-workflows` | Sim | Sim — LAB e corporativo |
-| `Resolve PR execution profile`, `validate-pr / …`, `Validate full catalog for shared-impact PR / …` | `workflow.yml` | Não: filtro de paths; nomes dos jobs aninhados variam com a matriz | Não, sem um gate agregado sempre reportado |
+| `Factory PR validation gate` | `workflow.yml` / `validation-gate` | Sim | Sim — corporativo; no LAB, decisão do owner |
+| `validate-pr / …`, `Validate full catalog for shared-impact PR / …` | `workflow.yml` | Só quando selecionados; nomes dos jobs aninhados variam com a matriz | Não individualmente; o gate agregado os representa |
 | `Infra contracts and formatting`, `Infra plan (same-repository PR only)` | `infra-pr.yml` | Não: filtro de paths | Não |
 | `go126-requested-batch / …` | `image-trust-scope.yml` | Não: filtro de paths | Não |
 
@@ -121,11 +122,14 @@ Um required check cujo workflow não roda por filtro de paths fica
 não sejam emitidos em todo PR.
 
 **Mudanças que exigem FULL.** `pr_execution_scope.py` seleciona FULL para
-qualquer path de produto fora do recorte Go P0-04 (fail-safe). Hoje essa
-validação é informativa no merge: o revisor precisa confirmá-la verde antes
-de integrar. No perfil corporativo ela deve bloquear o merge por um check
-agregado de nome estável que sempre reporte; enquanto esse check não existir,
-o contrato corporativo não pode exigi-la sem travar PRs de documentação.
+qualquer path de produto fora do recorte Go P0-04 (fail-safe) e `NONE`
+quando nenhum path toca a allow-list do push de `workflow.yml` (mesma lista,
+conferida por teste). O PR de `workflow.yml` roda sem filtro de paths e o
+job `Factory PR validation gate` reporta em todo PR: passa somente se o
+perfil foi resolvido e a validação selecionada (P0-04 ou FULL) concluiu com
+sucesso; em `NONE`, nenhuma validação de imagem roda. O gate não faz checkout
+nem executa código do PR. Enquanto ele não for required, a validação continua
+informativa no merge e o revisor precisa confirmá-la verde antes de integrar.
 
 ## 4. Exceções e mudanças emergenciais
 
@@ -181,9 +185,10 @@ nunca `MATCH`. Rulesets não modelados aparecem como `DRIFT`.
 
 Depois de uma aplicação autorizada, outra pessoa confirma o perfil com
 `verify` e com casos negativos em PR isolado, sem credenciais AWS: PR sem
-aprovação, check obrigatório reprovado, PR com FULL reprovada (quando o gate
-agregado existir) e tentativa de merge administrativo. Esses testes não foram
-executados nesta entrega.
+aprovação, check obrigatório reprovado, PR com FULL reprovada (o gate deve
+reprovar), PR só de documentação (o gate deve passar sem validar imagens) e
+tentativa de merge administrativo. Esses testes não foram executados nesta
+entrega.
 
 ## 8. Decisões pendentes do owner
 
@@ -192,7 +197,8 @@ executados nesta entrega.
    Cloud/IAM, com pelo menos dois mantenedores elegíveis.
 3. Mapeamento final do template (por exemplo, se workflows privilegiados
    exigem Security ou somente mantenedores).
-4. Introdução de um check agregado para tornar FULL bloqueante no merge.
+4. Integrar o `Factory PR validation gate` e torná-lo required (corporativo;
+   opcional no LAB). Todo PR passa a abrir um run curto de `workflow.yml`.
 5. Revisor em `HOM`: com o cron horário, cada execução elegível pediria
    aprovação; alternativa é promover HOM só por dispatch com revisor.
 6. Uso de rulesets (com bypass restrito a break-glass) em vez de proteção

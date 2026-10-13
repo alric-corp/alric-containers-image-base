@@ -46,7 +46,8 @@
           "strict": true,
           "checks": [
             {"context": "Unit & integration tests", "app_id": 15368},
-            {"context": "Repository & workflow lint", "app_id": 15368}
+            {"context": "Repository & workflow lint", "app_id": 15368},
+            {"context": "Factory PR validation gate", "app_id": 15368}
           ]
         },
         "enforce_admins": true,
