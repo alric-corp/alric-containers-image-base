@@ -27,9 +27,10 @@ def manifest():
     artifacts = []
     for candidate in EXPECTED['candidates']:
         name = 'sbom-%s-%d' % (candidate['framework'], EXPECTED['run_attempt'])
-        record = json.loads((RECORDS / (name + '.artifact-api.json')).read_text())
+        record_name = '%s-%d.artifact-api.json' % (candidate['framework'], EXPECTED['run_attempt'])
+        record = json.loads((RECORDS / record_name).read_text())
         artifacts.append(dict(framework=candidate['framework'], name=name, path=name + '.zip',
-                              artifact_id=record['id'], api_record=name + '.artifact-api.json',
+                              artifact_id=record['id'], api_record=record_name,
                               expected_subjects={'index': candidate['digest'], **candidate['platforms']},
                               subjects_source='tests/fixtures/hgc04/expected.json'))
     return dict(schema_version=1, sample_classification='LAB_REAL', origin=dict(ORIGIN),
@@ -50,7 +51,7 @@ class LabArtifactBindingTests(unittest.TestCase):
     def test_real_records_bind_the_real_archives_and_keep_the_normalized_batch(self):
         receipt = bind(manifest(), self.root / 'bound', base_directory=self.inputs)
         for entry in receipt['artifacts']:
-            record = json.loads((self.inputs / (entry['name'] + '.artifact-api.json')).read_text())
+            record = json.loads((self.inputs / (entry['name'][len('sbom-'):] + '.artifact-api.json')).read_text())
             self.assertEqual('sha256:' + entry['archive_sha256'], record['digest'])
             self.assertEqual(set(entry['checks'].values()), {'MATCHED'}, entry['checks'])
             self.assertIs(entry['api_record_expired'], False)
