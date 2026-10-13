@@ -122,6 +122,38 @@ def config_errors(root=None):
     return errors
 
 
+def lock_observation(raw, root=None):
+    """Detection only: keys and origins recorded by one resolved Apko lock.
+
+    The pinned Apko records the configured keys plus those its own discovery
+    request found; the resolver's discovery is a separate request, and
+    --keyring-append keys are not recorded. PINNED_ONLY therefore shows that
+    no extra key was offered to the lock's request, not that every resolved
+    index could only verify with the local key. No caller gates on this.
+    """
+    root = Path(root) if root is not None else ROOT
+    record = {'status': 'INVALID', 'keyring': [], 'repositories': [], 'problems': []}
+    try:
+        contents = json.loads(raw)['contents']
+        record['keyring'] = [entry['url'] for entry in contents['keyring']]
+        record['repositories'] = [entry['url'] for entry in contents['repositories']]
+        local = (root / KEY).read_bytes()
+        if [(entry['name'], entry['url'], entry['content'].encode()) for entry in contents['keyring']] \
+                != [(str(KEY), str(KEY), local)]:
+            record['problems'].append('keyring is not exactly the pinned local key')
+        indexes = {f'{origin}/{arch}/APKINDEX.tar.gz' for origin in REPOSITORIES for arch in ('x86_64', 'aarch64')}
+        if not set(record['repositories']) <= indexes or contents['build_repositories'] \
+                or contents['runtime_repositories']:
+            record['problems'].append('repository outside the reviewed origin')
+        origins = tuple(origin + '/' for origin in REPOSITORIES) + ('melange-repo/packages/',)
+        if any(not package['url'].startswith(origins) for package in contents['packages']):
+            record['problems'].append('package from an unreviewed origin')
+        record['status'] = 'UNEXPECTED' if record['problems'] else 'PINNED_ONLY'
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        record['problems'].append(f'unreadable lock ({error})')
+    return record
+
+
 def upstream_status(entry, fetch=None):
     """Detection only: missing/unreachable upstream is an operational failure."""
     record = dict(entry, available=False, remote_status='local-invalid', remote_sha256=None)

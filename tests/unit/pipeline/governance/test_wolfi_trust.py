@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+import zipfile
 
 import yaml
 
@@ -202,6 +203,52 @@ class WolfiTrustTests(unittest.TestCase):
             self.key.unlink()
             self.assertEqual(pin_inventory.main(), 1)
         remote.assert_not_called()
+
+
+class LockObservationTests(unittest.TestCase):
+    """Offline observation of resolved locks; nothing here gates or blocks a key."""
+
+    def hosted_lock(self, framework='go1-26'):
+        # Original lock bytes from public run 37806495087 (apko v1.4.6), kept as HGC-04 test input.
+        with zipfile.ZipFile(wolfi_trust.ROOT / 'tests/fixtures/hgc04/materials.zip') as materials:
+            return materials.read(f'candidates/{framework}/apko.lock.json')
+
+    def changed(self, mutate):
+        lock = json.loads(self.hosted_lock())
+        mutate(lock['contents'])
+        return json.dumps(lock).encode()
+
+    def test_hosted_locks_recorded_only_the_pinned_key_and_reviewed_origins(self):
+        for framework in ('go1-26', 'go1-26-dev'):
+            with self.subTest(framework=framework), patch.object(wolfi_trust, 'urlopen') as remote:
+                record = wolfi_trust.lock_observation(self.hosted_lock(framework))
+            remote.assert_not_called()
+            self.assertEqual((record['status'], record['keyring'], record['problems']),
+                             ('PINNED_ONLY', [str(wolfi_trust.KEY)], []))
+
+    def test_discovered_or_divergent_key_is_observed_as_unexpected(self):
+        other = '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAdivergent\n-----END PUBLIC KEY-----\n'
+        discovered = dict(name='packages.wolfi.dev/os/other.rsa.pub', url='https://packages.wolfi.dev/os/other.rsa.pub',
+                          content=other)
+        for mutate in (lambda c: c['keyring'].append(discovered),
+                       lambda c: c['keyring'][0].update(content=other),
+                       lambda c: c['keyring'].insert(0, discovered),
+                       lambda c: c.update(keyring=[])):
+            record = wolfi_trust.lock_observation(self.changed(mutate))
+            self.assertEqual(record['status'], 'UNEXPECTED')
+            self.assertIn('keyring is not exactly the pinned local key', record['problems'])
+
+    def test_unreviewed_repository_or_package_origin_is_observed(self):
+        for mutate in (lambda c: c['repositories'].append(dict(name='other', url='https://other.example/os/x86_64/APKINDEX.tar.gz',
+                                                                architecture='x86_64')),
+                       lambda c: c['build_repositories'].append(dict(name='b', url='https://other.example/os')),
+                       lambda c: c['packages'][0].update(url='https://other.example/os/x86_64/a.apk')):
+            self.assertEqual(wolfi_trust.lock_observation(self.changed(mutate))['status'], 'UNEXPECTED')
+
+    def test_unreadable_lock_is_invalid_not_pinned(self):
+        for raw in (b'not json', b'{}', b'{"contents": {"keyring": 1}}', json.dumps({'contents': []}).encode()):
+            with self.subTest(raw=raw):
+                self.assertEqual(wolfi_trust.lock_observation(raw)['status'], 'INVALID')
 
 
 class RepositoryWiringTests(unittest.TestCase):
