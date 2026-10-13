@@ -35,11 +35,12 @@ revisores e demais controles dos Environments continuam sendo controles
 separados; os JSONs não os configuram nem comprovam seu estado aplicado.
 Os IDs são chaves suportadas na [referência OIDC do IAM](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_iam-condition-keys.html#condition-keys-wif).
 
-A inline policy tem onze statements. Seus escopos são os revisados no HEAD
+A inline policy tem catorze statements. Onze têm os escopos revisados no HEAD
 `7781a53ab0d8f937cd3f729c811d28a0072d0e25` do PR #119, com a remoção exclusiva
 de `ecr:ListImageReferrers`: é uma operação de API cuja permissão é
 [`ecr:BatchGetImage`](https://docs.aws.amazon.com/AmazonECR/latest/APIReference/API_ListImageReferrers.html),
-preservada nos mesmos ARNs. Não foi adicionada permissão compensatória.
+preservada nos mesmos ARNs. Não foi adicionada permissão compensatória. Os
+outros três são o complemento Athena ([procedimento](sbom-analytics-athena-iam-runbook.md)).
 
 | Responsabilidade | Statements | Limite |
 | --- | --- | --- |
@@ -48,9 +49,11 @@ preservada nos mesmos ARNs. Não foi adicionada permissão compensatória.
 | Release Store DEV | `DevReleaseInventory`, `DevReleaseRecords` | Listagem do bucket DEV e GetObject/PutObject dos registros; sem exclusão |
 | Distroless SBOM Analytics (S3) | `SbomSnapshotObjects`, `SbomSnapshotListing` | PutObject/GetObject/GetObjectVersion em `sbom-analytics/v1/snapshots/*` do bucket configurado em `policies/pipeline/config.json` (`analytics.bucket`; `distroless-sbom-analytics` neste deployment); statement de listagem com esse prefixo |
 | Distroless SBOM Analytics (Athena) | `SbomAnalyticsAthenaWorkgroup`, `SbomAnalyticsGlueReadAndNewTables`, `SbomAnalyticsQueryResults` | Workgroup e database `sbom_analytics`, as cinco tabelas/views do snapshot ativo e `query-results/sbom-analytics-v1/*`; sem criar workgroup/database |
-| Migração (transitória) | `TransitionalLegacySbomBucketRemoval`, `TransitionalLegacySbomVersionRemoval` | Somente o bucket legado: listar e apagar versões, policy e o próprio bucket; removidos na revisão final ([migração](sbom-analytics-migration.md)) |
 
-Fora da migração, o único DeleteObject permitido é o `.tflock` exato. Não há
+O único DeleteObject permitido é o `.tflock` exato. Nenhum statement alcança o
+bucket substituído `alric-distroless-sbom-712107929769-us-east-1`, excluído em
+2026-10-12; os grants de remoção da migração saíram com ele
+([reconciliação](sbom-analytics-migration.md#reconciliação-iam)). Não há
 permissões IAM administrativas, criação de workgroup/database Athena/Glue, KMS
 ou escrita fora dos prefixos acima.
 As duas permissões ECR com `Resource: "*"` são inventário regional de repositórios
@@ -60,7 +63,7 @@ de snapshots **não restringe a listagem efetiva do bucket inteiro**. Escrita
 condicional dos snapshots é responsabilidade da bucket policy existente;
 esta identity policy não substitui esse controle.
 
-A policy compactada ocupa **4.740 caracteres**. A quota de inline policies de
+A policy compactada ocupa **6.193 caracteres**. A quota de inline policies de
 uma role é agregada: [10.240 caracteres, sem whitespace](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html).
 Por isso o read-back também exige uma única inline policy e nenhuma managed
 policy anexada. Os testes offline verificam ações, ARNs, condições, nomes,

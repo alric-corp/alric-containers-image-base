@@ -1,13 +1,11 @@
 # Infra IAM permissions for the analytics bucket
 
-Implemented in [`infra/iam/main.tf`](../iam/main.tf) as the
-`ExactSbomAnalyticsBucket` statement of both Infra inline policies. The bootstrap
-IAM state applies it separately (see [`infra/iam/README.md`](../iam/README.md));
-versioned policy is not proof of the applied policy.
-
-The existing apply policy of the personal deployment permits S3 administration only on the state bucket.
-It grants nothing on the new analytics bucket. Keep that state/lock policy and
-all OIDC subjects unchanged. No Build/promotion role changes are proposed.
+Granted only by the `ExactSbomAnalyticsBucket` statement of the central Factory
+role's [external inline-policy contract](../../policies/aws/factory-distroless-v1.inline-policy.json),
+on the active bucket alone. The `infra/iam` roles grant nothing on any analytics
+bucket ([`infra/iam/README.md`](../iam/README.md)). A versioned policy is not
+proof of the applied policy. Keep the state/lock statements and all OIDC
+subjects unchanged. No Build/promotion role changes are proposed.
 
 Authorize only the exact ARN obtained from the reviewed bucket configuration:
 `arn:aws:s3:::<AUTHORIZED_ANALYTICS_BUCKET>`, in its configured region. No `s3:*`,

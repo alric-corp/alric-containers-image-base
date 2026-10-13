@@ -96,8 +96,7 @@
         "s3:PutBucketTagging"
       ],
       "Resource": [
-        "arn:aws:s3:::distroless-sbom-analytics",
-        "arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1"
+        "arn:aws:s3:::distroless-sbom-analytics"
       ],
       "Condition": {
         "StringEquals": {
@@ -265,38 +264,6 @@
       "Resource": [
         "arn:aws:s3:::distroless-sbom-analytics/query-results/sbom-analytics-v1/*"
       ]
-    },
-    {
-      "Sid": "TransitionalLegacySbomBucketRemoval",
-      "Effect": "Allow",
-      "Action": [
-        "s3:ListBucketVersions",
-        "s3:DeleteBucketPolicy",
-        "s3:DeleteBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1"
-      ],
-      "Condition": {
-        "StringEquals": {
-          "aws:RequestedRegion": "us-east-1"
-        }
-      }
-    },
-    {
-      "Sid": "TransitionalLegacySbomVersionRemoval",
-      "Effect": "Allow",
-      "Action": [
-        "s3:DeleteObjectVersion"
-      ],
-      "Resource": [
-        "arn:aws:s3:::alric-distroless-sbom-712107929769-us-east-1/*"
-      ],
-      "Condition": {
-        "StringEquals": {
-          "aws:RequestedRegion": "us-east-1"
-        }
-      }
     }
   ]
 }

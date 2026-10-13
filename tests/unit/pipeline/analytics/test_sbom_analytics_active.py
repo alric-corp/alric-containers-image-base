@@ -380,7 +380,7 @@ class ActiveNamingTests(unittest.TestCase):
         self.assertEqual(len(product), 5)
         self.assertFalse(PERSONAL.search(json.dumps(product)))
         bucket = next(s for s in policy['Statement'] if s['Sid'] == 'ExactSbomAnalyticsBucket')
-        self.assertIn('arn:aws:s3:::' + BUCKET, bucket['Resource'])
+        self.assertEqual(bucket['Resource'], ['arn:aws:s3:::' + BUCKET])
 
     def test_entry_documentation_and_module_names(self):
         index = (ROOT / 'docs/README.md').read_text()
