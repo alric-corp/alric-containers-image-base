@@ -21,6 +21,7 @@ não nesta árvore.
 | --- | --- |
 | Escolher e verificar uma base por digest | [Consumer Verification Contract](consumer-verification-contract.md) |
 | Construir imagens e consultar exemplos | [README do produto](../README.md) |
+| Saber se uma variante ainda tem suporte e para onde migrar | [Suporte do catálogo](catalog-support.md) |
 
 ## Operations
 

@@ -62,8 +62,8 @@ A composição e os controles atuais são:
 | Java | 25 (LTS) | `openjdk-25`, `busybox` | `image-base-java25-dev` | `spring` | build stage (JDK completo + shell p/ mvnw/gradlew) |
 | Python | 3.13 | `python-3.13` | `image-base-python3-13` | `appuser` | runtime final |
 | Python | 3.14 | `python-3.14` | `image-base-python3-14` | `appuser` | runtime final |
-| Go | 1.25 | *(nenhum — só a base distroless)* | `image-base-go1-25` | `appuser` | runtime final (binário estático, sem toolchain/shell) |
-| Go | 1.25 | `go-1.25`, `busybox` | `image-base-go1-25-dev` | `appuser` | build stage (toolchain completo + shell) |
+| Go | 1.25 | *(nenhum — só a base distroless)* | `image-base-go1-25` | `appuser` | runtime final (binário estático, sem toolchain/shell); **série sem suporte upstream**, ver [suporte](docs/catalog-support.md) |
+| Go | 1.25 | `go-1.25`, `busybox` | `image-base-go1-25-dev` | `appuser` | build stage (toolchain completo + shell); **sem suporte upstream desde 19/08/2026**, decisão pendente ([suporte](docs/catalog-support.md)) |
 | Go | 1.26 | *(nenhum — só a base distroless)* | `image-base-go1-26` | `appuser` | runtime final (binário estático, sem toolchain/shell) |
 | Go | 1.26 | `go-1.26`, `busybox` | `image-base-go1-26-dev` | `appuser` | build stage (toolchain completo + shell) |
 | Node.js | 22 (LTS) | `nodejs-22` | `image-base-nodejs22` | `appuser` | runtime final (sem npm/shell) |
@@ -249,9 +249,11 @@ Critério de escolha das versões (no momento em que este README foi escrito):
 | Node.js | `nodejs-22` | `nodejs-24` | as duas últimas LTS (22 em Maintenance, 24 em Active LTS; 26 ainda é "Current", não é LTS) |
 | .NET | ~~`dotnet-8-sdk`~~ (removido em 17/09/2026, EOL 11/2026) | `dotnet-10-sdk` | eram as duas últimas LTS (.NET tem LTS a cada 2 anos: 6, 8, 10; a 9 é STS, não LTS); hoje só `dotnet10` está no catálogo |
 | Python | `python-3.13` | `python-3.14` | as duas últimas minors estáveis (Python não tem trilha LTS separada) |
-| Go | `go-1.25` | `go-1.26` | as duas últimas minors estáveis (Go também não tem trilha LTS separada) |
+| Go | `go-1.25` | `go-1.26` | eram as duas últimas minors estáveis (Go não tem trilha LTS). Desde 19/08/2026 (Go 1.27) a 1.25 está fora do suporte upstream; decisão pendente em [suporte do catálogo](docs/catalog-support.md) |
 
 O Wolfi é um repositório rolling-release. Cada build novo resolve um lock com os patches disponíveis; o build e seus replays usam as versões e checksums registrados nesse lock.
+
+Esta tabela registra o critério de escolha, não o suporte vigente. O status de suporte de cada variante, com evidência datada, owner e alvo de migração, fica em [`policies/governance/catalog-support.json`](policies/governance/catalog-support.json) e é explicado em [suporte do catálogo](docs/catalog-support.md).
 
 > **Nota:** o pacote `nodejs-*` do Wolfi não traz `npm` funcional sozinho — o `npm` usa `#!/usr/bin/env node` no shebang e o `/usr/bin/env` só existe se o pacote `busybox` também for instalado. Por isso as variantes `-dev` incluem `busybox` explicitamente — e por isso o `npm`/`busybox` ficam isolados nessa variante em vez de irem para a imagem de runtime final.
 
