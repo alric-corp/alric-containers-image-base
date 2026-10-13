@@ -16,18 +16,16 @@ The child has no account, region or bucket literals. Its caller account precondi
 compares the provider session with the independently supplied expected owner.
 The backend remains in `us-east-2`; its region is not the bucket/provider region.
 
-## Legacy bucket (transitional)
+## Retired bucket
 
 Distroless SBOM Analytics replaced the historical bucket
-`alric-distroless-sbom-712107929769-us-east-1` (historical prefixes
-`sbom-analytics/poc-v1`, `query-results/poc-v1/`). The transition revision
-kept it at its real state addresses `module.sbom.<type>.sbom`, served by
-`infra/s3-legacy`, whose only difference is `force_destroy = true` and
-`prevent_destroy = false`; that `force_destroy = true` is now in the state.
-The removal revision no longer declares `module "sbom"`, so the approved apply
-destroys exactly those six addresses, every version included.
-`infra/s3-legacy` stays unreferenced until the final revision. This module
-never relaxes either safeguard. See the
+`alric-distroless-sbom-712107929769-us-east-1`. The approved removal apply
+(Infra - Apply run 38319342150, 2026-10-12) destroyed its six addresses
+`module.sbom.<type>.sbom` with every version, and the state no longer holds
+them. The final revision removed the transitional child `infra/s3-legacy`
+and the transition/removal phases of `verify_plan.py`. The verifiers now
+reject the old module, its addresses in plans or state, and its name as the
+analytics bucket. This module never relaxes either safeguard. See the
 [migration procedure](../../docs/sbom-analytics-migration.md); operation is in
 [Distroless SBOM Analytics operations](../../docs/sbom-analytics-operations.md).
 

@@ -292,7 +292,7 @@ class ActiveWorkflowTests(unittest.TestCase):
                     self.assertRegex(ref, r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}$')
 
     def test_no_active_input_names_the_historical_namespace(self):
-        # infra/s3-legacy and the LEGACY_* contract constants name the replaced bucket on purpose.
+        # Only infra/s3/contract.py names the retired bucket, and only to refuse it.
         paths = [*(ROOT / 'policies/analytics').glob('*.json'), *(ROOT / 'infra/s3').glob('*.tf'),
                  *(ROOT / 'docs/examples/sbom-analytics').glob('*.json'), ROOT / 'scripts/pipeline/analytics/catalog.py']
         for path in paths:
