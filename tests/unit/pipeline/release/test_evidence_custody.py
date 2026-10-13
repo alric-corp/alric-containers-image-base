@@ -374,6 +374,15 @@ class CustodyTests(unittest.TestCase):
                 self.forge(mutate_files=mutate)
                 self.assertEqual(self.read().state, custody.CustodyState.INVALID)
 
+    def test_external_identity_must_be_canonical_at_configuration_time(self):
+        value = self.expected.value
+        self.assertEqual(custody.ExpectedIdentity.freeze(value), self.expected)
+        # Same identity, another spelling: rejected when configured, instead of
+        # later reporting every valid record as INVALID ("identity differs").
+        for raw in (json.dumps(value, indent=2).encode(), json.dumps(value).encode(), self.expected.raw + b'\n'):
+            with self.subTest(raw=raw[:20]), self.assertRaisesRegex(InvalidEvidence, 'canonical'):
+                custody.ExpectedIdentity(raw)
+
     def test_pr_receipt_release_id_does_not_authorize_release(self):
         zips, materials, origins, expected = fixture_inputs()
         identity = expected.value

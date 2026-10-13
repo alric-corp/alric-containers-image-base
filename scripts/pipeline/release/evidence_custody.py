@@ -108,7 +108,11 @@ class ExpectedIdentity:
         return cls(canonical(value))
 
     def __post_init__(self):
-        _identity(document(self.raw))
+        value = document(self.raw)
+        # Authentication binds sha256(raw): another spelling of the same identity
+        # could never match a signed manifest, so reject it at configuration time.
+        require(canonical(value) == self.raw, 'external identity must be canonical JSON')
+        _identity(value)
 
     @property
     def value(self):
