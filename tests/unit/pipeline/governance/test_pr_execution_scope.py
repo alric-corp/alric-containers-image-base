@@ -1,8 +1,10 @@
 """Independent path/profile tests for PR validation selection."""
 
 import itertools
+import os
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 
 import yaml
@@ -80,6 +82,63 @@ class PRExecutionScopeTests(unittest.TestCase):
         self.assertEqual(events['pull_request'], {})
 
 
+class BaseResolverTests(unittest.TestCase):
+    """The profile comes from the base revision's resolver, not the PR's."""
+
+    RESOLVER = 'scripts/pipeline/governance/pr_execution_scope.py'
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.script = workflow()['jobs']['pr_execution_scope']['steps'][1]['run']
+        self.git('init', '-q')
+        self.write(self.RESOLVER, (ROOT / self.RESOLVER).read_text())
+        self.write('docs/a.md', 'a\n')
+        self.base = self.commit()
+
+    def git(self, *args):
+        environment = dict(os.environ, GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@example.invalid',
+                           GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@example.invalid')
+        return subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', *args],
+                              cwd=self.root, env=environment, check=True, capture_output=True,
+                              text=True).stdout.strip()
+
+    def write(self, path, text):
+        (self.root / path).parent.mkdir(parents=True, exist_ok=True)
+        (self.root / path).write_text(text)
+
+    def commit(self):
+        self.git('add', '-A')
+        self.git('commit', '-q', '-m', 'change')
+        return self.git('rev-parse', 'HEAD')
+
+    def profile(self, base, head):
+        output = self.root / 'github-output'
+        output.write_text('')
+        environment = dict(os.environ, BASE_SHA=base, HEAD_SHA=head, CHANGED_PATHS=str(self.root / 'paths'),
+                           RESOLVER=str(self.root / 'resolver.py'), GITHUB_OUTPUT=str(output))
+        subprocess.run(bash_command('-c', self.script), cwd=self.root, env=environment, check=True,
+                       capture_output=True, text=True, timeout=30)
+        return dict(line.split('=', 1) for line in output.read_text().splitlines())['profile']
+
+    def test_a_pr_cannot_lower_its_own_profile_by_editing_the_resolver(self):
+        self.write(self.RESOLVER, "print('profile=NONE')\nprint('frameworks=null')\n")
+        self.write('scripts/pipeline/runtime/readiness.py', '# changed\n')
+        self.assertEqual(self.profile(self.base, self.commit()), 'FULL')
+
+    def test_base_resolver_still_skips_documentation_only_prs(self):
+        self.write('docs/a.md', 'b\n')
+        self.assertEqual(self.profile(self.base, self.commit()), 'NONE')
+
+    def test_missing_base_resolver_or_history_selects_full(self):
+        self.git('rm', '-q', self.RESOLVER)
+        without = self.commit()
+        self.write('docs/a.md', 'c\n')
+        self.assertEqual(self.profile(without, self.commit()), 'FULL')
+        self.assertEqual(self.profile('0' * 40, self.base), 'FULL')
+
+
 class PRValidationGateTests(unittest.TestCase):
     RESULTS = ('success', 'failure', 'cancelled', 'skipped')
 
@@ -101,6 +160,9 @@ class PRValidationGateTests(unittest.TestCase):
         self.assertNotIn('permissions', self.job)
         self.assertEqual(len(self.job['steps']), 1)
         self.assertNotIn('uses', self.job['steps'][0])
+        # A soft-failing gate would report success with the validation red.
+        self.assertNotIn('continue-on-error', self.job)
+        self.assertNotIn('continue-on-error', self.job['steps'][0])
 
     def test_gate_passes_only_when_the_selected_validation_succeeded(self):
         allowed = {('success', 'NONE', 'skipped', 'skipped'),

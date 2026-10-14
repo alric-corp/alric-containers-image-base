@@ -60,6 +60,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CHANGED_PATHS: ${{ runner.temp }}/pr-changed-paths
+          RESOLVER: ${{ runner.temp }}/pr_execution_scope.py
         run: |
           set -euo pipefail
           # --no-renames lists both sides of a move: moving a script out of
@@ -68,8 +69,13 @@ jobs:
             # Missing/unavailable history is ambiguous and must fail safe to FULL.
             printf '%s\n' '__unknown_changed_path__' > "$CHANGED_PATHS"
           fi
-          python3 -B -m scripts.pipeline.governance.pr_execution_scope \
-            --paths-file "$CHANGED_PATHS" >> "$GITHUB_OUTPUT"
+          # The base revision's resolver decides, so a PR cannot lower its own
+          # validation by editing the resolver; without one, FULL.
+          if git show "$BASE_SHA:scripts/pipeline/governance/pr_execution_scope.py" > "$RESOLVER"; then
+            python3 -I -B "$RESOLVER" --paths-file "$CHANGED_PATHS" >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' 'profile=FULL' 'frameworks=null' >> "$GITHUB_OUTPUT"
+          fi
 
   validate-pr:
     if: github.event_name == 'pull_request' && needs.pr_execution_scope.outputs.profile == 'P0_04'

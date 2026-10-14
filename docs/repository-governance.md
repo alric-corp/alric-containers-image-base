@@ -128,8 +128,18 @@ conferida por teste). O PR de `workflow.yml` roda sem filtro de paths e o
 job `Factory PR validation gate` reporta em todo PR: passa somente se o
 perfil foi resolvido e a validação selecionada (P0-04 ou FULL) concluiu com
 sucesso; em `NONE`, nenhuma validação de imagem roda. O gate não faz checkout
-nem executa código do PR. Enquanto ele não for required, a validação continua
-informativa no merge e o revisor precisa confirmá-la verde antes de integrar.
+nem executa código do PR, e o perfil é calculado pelo resolvedor da revisão
+base (sem ele, FULL), então editar o resolvedor no PR não reduz a validação.
+O próprio `workflow.yml` do PR continua sendo o que roda em `pull_request`:
+mudanças nele exigem revisão. Enquanto o gate não for required, a validação
+continua informativa no merge e o revisor precisa confirmá-la verde antes de
+integrar.
+
+Antes de torná-lo required: prova hospedada com um PR só de docs (`NONE`,
+gate verde), um P0-04 e um FULL (gate verde) e um FULL reprovado (gate
+vermelho). Um commit `[skip ci]` no topo do PR deixa todos os required checks
+pendentes (já vale para os dois atuais), e uma merge queue exigiria o evento
+`merge_group` em `ci.yml` e `workflow.yml` antes de ser ligada.
 
 ## 4. Exceções e mudanças emergenciais
 
