@@ -15,6 +15,19 @@ ROOT = Path(__file__).resolve().parents[3]
 KEY = Path('melange/keys/wolfi-signing.rsa.pub')
 POLICY = KEY.with_name('wolfi-signing-key.json')
 MAX_KEY_BYTES = 16384
+# The pinned Apko also discovers keys from every http(s) repository, so the
+# repository set is part of the reviewed trust surface, like the keyring.
+REPOSITORIES = ['https://packages.wolfi.dev/os']
+# Not part of the reviewed model: extra build/runtime origins, and a base
+# image whose package index Apko installs without signature verification.
+UNREVIEWED_FIELDS = ('build_repositories', 'runtime_repositories', 'baseimage')
+# Build entrypoints must not bypass the reviewed configuration: no disabled
+# signature checks, no untrusted APKs, no remote key/repository appended by CLI.
+INSECURE_FALLBACK = re.compile(
+    r'--(?:ignore-signatures|allow-untrusted)\b'
+    r'|--(?:keyring|repository)-append(?:=|["\',\s]+)https?://'
+    r'|\b(?:keyring|repository)\s*=\s*["\']https?://'
+    r'|add_argument\(\s*["\']--(?:keyring|repository)["\'][^)]*default\s*=\s*["\']https?://')
 
 
 def local_pin(root=None, run=None):
@@ -68,7 +81,7 @@ def require_key(root=None):
 
 
 def config_errors(root=None):
-    """Check the product's keyring fields with its existing YAML dependency."""
+    """Check the product's trust surface (keyring, origins, includes) with PyYAML."""
     import yaml
     root = Path(root) if root is not None else ROOT
     errors = []
@@ -76,19 +89,22 @@ def config_errors(root=None):
                 root / 'melange/image-base-ca-certificates.yaml'}
     paths = set(required)
 
-    def keyrings(value):
+    def found(value, field):
         if isinstance(value, dict):
             for name, child in value.items():
-                if name == 'keyring':
+                if name == field:
                     yield child
-                yield from keyrings(child)
+                yield from found(child, field)
         elif isinstance(value, list):
             for child in value:
-                yield from keyrings(child)
+                yield from found(child, field)
 
     for directory in ('distroless', 'frameworks', 'melange'):
         for extension in ('*.yaml', '*.yml'):
             paths.update((root / directory).rglob(extension))
+    # Apko resolves include paths itself: only scanned shared configurations
+    # keep the included keyring/repositories inside this check.
+    includable = {path.relative_to(root).as_posix() for path in paths if path.parent == root / 'distroless'}
     for path in sorted(paths):
         relative = path.relative_to(root)
         expected = str(KEY.relative_to('melange')) if relative.parts[0] == 'melange' else str(KEY)
@@ -98,11 +114,72 @@ def config_errors(root=None):
                 if relative.parts[0] == 'melange' else document.get('contents')
             keyring = (contents or {}).get('keyring')
             if (path in required and keyring != [expected]) \
-                    or any(value != [expected] for value in keyrings(document)):
+                    or any(value != [expected] for value in found(document, 'keyring')):
                 errors.append(f'{relative}: keyring must be exactly the local key [{expected}]')
-        except (OSError, ValueError, AttributeError, yaml.YAMLError) as error:
-            errors.append(f'{relative}: cannot verify local keyring ({error})')
+            if (path in required and (contents or {}).get('repositories') != REPOSITORIES) \
+                    or any(value != REPOSITORIES for value in found(document, 'repositories')):
+                errors.append(f'{relative}: repositories must be exactly {REPOSITORIES}')
+            for field in UNREVIEWED_FIELDS:
+                if any(True for _ in found(document, field)):
+                    errors.append(f'{relative}: {field} is outside the reviewed trust surface')
+            if 'include' in document and document['include'] not in includable:
+                errors.append(f'{relative}: include must name a scanned distroless/ configuration')
+        except (OSError, ValueError, AttributeError, TypeError, yaml.YAMLError) as error:
+            errors.append(f'{relative}: cannot verify local trust surface ({error})')
+    return errors + insecure_fallback_errors(root)
+
+
+def insecure_fallback_errors(root=None):
+    """Scan the build entrypoints (not tests or docs) for trust bypasses."""
+    root = Path(root) if root is not None else ROOT
+    paths = {root / 'Makefile', *(root / '.github/workflows').glob('*.yml')}
+    for directory in ('scripts', 'distroless', 'frameworks', 'melange'):
+        for pattern in ('*.py', '*.sh', '*.yaml', '*.yml'):
+            paths.update((root / directory).rglob(pattern))
+    paths.discard(root / 'scripts/pipeline/governance/wolfi_trust.py')  # Defines the patterns.
+    errors = []
+    for path in sorted(path for path in paths if path.is_file()):
+        text = path.read_text(errors='replace')
+        for match in INSECURE_FALLBACK.finditer(text):
+            line = text.count('\n', 0, match.start()) + 1
+            errors.append(f'{path.relative_to(root)}:{line}: signature/trust fallback is not allowed ({match[0].strip()})')
     return errors
+
+
+def lock_observation(raw, root=None):
+    """Detection only: keys and origins recorded by one resolved Apko lock.
+
+    The pinned Apko records the configured keys plus those its own discovery
+    request found; the resolver's discovery is a separate request, and
+    --keyring-append keys are not recorded. PINNED_ONLY therefore shows that
+    no extra key was offered to the lock's request, not that every resolved
+    index could only verify with the local key. No caller gates on this.
+    """
+    root = Path(root) if root is not None else ROOT
+    record = {'status': 'INVALID', 'keyring': [], 'repositories': [], 'problems': []}
+    try:
+        contents = json.loads(raw)['contents']
+        record['keyring'] = [entry['url'] for entry in contents['keyring']]
+        record['repositories'] = [entry['url'] for entry in contents['repositories']]
+        local = (root / KEY).read_bytes()
+        if [(entry['name'], entry['url'], entry['content'].encode()) for entry in contents['keyring']] \
+                != [(str(KEY), str(KEY), local)]:
+            record['problems'].append('keyring is not exactly the pinned local key')
+        indexes = {f'{origin}/{arch}/APKINDEX.tar.gz' for origin in REPOSITORIES for arch in ('x86_64', 'aarch64')}
+        if not set(record['repositories']) <= indexes or contents['build_repositories'] \
+                or contents['runtime_repositories']:
+            record['problems'].append('repository outside the reviewed origin')
+        origins = tuple(origin + '/' for origin in REPOSITORIES) + ('melange-repo/packages/',)
+        if any(not package['url'].startswith(origins) for package in contents['packages']):
+            record['problems'].append('package from an unreviewed origin')
+        # Apko installs locked packages by their Q1 control hash; without it nothing is pinned.
+        if not contents['packages'] or any(not re.fullmatch(r'Q1[A-Za-z0-9+/]{27}=', str(package.get('checksum')))
+                                           for package in contents['packages']):
+            record['problems'].append('package without a pinned Q1 checksum')
+        record['status'] = 'UNEXPECTED' if record['problems'] else 'PINNED_ONLY'
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        record['problems'].append(f'unreadable lock ({error})')
+    return record
 
 
 def upstream_status(entry, fetch=None):
