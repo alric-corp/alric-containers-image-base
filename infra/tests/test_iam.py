@@ -107,6 +107,28 @@ class IamBoundaryTests(unittest.TestCase):
         self.assertRegex(text, r'Sid\s*=\s*"ReadOnlyRegionalRepositoryInventory"\s+Effect\s*=\s*"Allow"\s+Action\s*=\s*\["ecr:DescribeRepositories"\]\s+Resource\s*=\s*\["\*"\]')
         self.assertIn('StringEquals = { "aws:RequestedRegion" = var.aws_region }', text)
 
+    def test_infra_roles_grant_nothing_on_sbom_analytics_buckets(self):
+        text = (IAM / "main.tf").read_text()
+        # The historical bucket grant was removed after its destruction (Infra - Apply run 38319342150).
+        # The active bucket is administered only by the central role; nothing moves to these roles.
+        self.assertNotRegex(text.lower(), r"sbom|analytics")
+        self.assertEqual(re.findall(r"Resource\s*=\s*(\S+)", text), [
+            "local.repository_arns", "[local.bucket_arn]", "[local.state_arn]", "[local.lock_arn]", '["*"]'])
+        s3 = set(re.findall(r'"(s3:[A-Za-z]+)"', text))
+        self.assertEqual(s3, {
+            "s3:ListBucket", "s3:GetBucketLocation", "s3:GetBucketVersioning", "s3:GetEncryptionConfiguration",
+            "s3:GetBucketPublicAccessBlock", "s3:GetBucketOwnershipControls", "s3:CreateBucket",
+            "s3:PutBucketPublicAccessBlock", "s3:PutBucketOwnershipControls", "s3:PutEncryptionConfiguration",
+            "s3:PutBucketVersioning", "s3:GetObject", "s3:PutObject", "s3:DeleteObject",
+        })
+
+    def test_statements_keep_the_bootstrap_order(self):
+        text = (IAM / "main.tf").read_text()
+        sids = re.findall(r'Sid\s*=\s*"([A-Za-z]+)"', text)
+        self.assertEqual(sids, ["ExactProductIdentity", "ExactCatalogEcr", "EnsureExactBackendBucket",
+                                "ExactDefaultWorkspaceState", "ExactDefaultWorkspaceLock",
+                                "ReadOnlyRegionalRepositoryInventory"])
+
 
 if __name__ == "__main__":
     unittest.main()

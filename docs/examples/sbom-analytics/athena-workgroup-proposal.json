@@ -1,0 +1,20 @@
+{
+  "Name": "sbom_analytics",
+  "Description": "Distroless SBOM Analytics; manual analytics only, no automatic pipeline ingestion",
+  "Configuration": {
+    "EnforceWorkGroupConfiguration": true,
+    "BytesScannedCutoffPerQuery": 104857600,
+    "PublishCloudWatchMetricsEnabled": false,
+    "RequesterPaysEnabled": false,
+    "EngineVersion": {
+      "SelectedEngineVersion": "Athena engine version 3"
+    },
+    "ResultConfiguration": {
+      "OutputLocation": "s3://distroless-sbom-analytics/query-results/sbom-analytics-v1/",
+      "ExpectedBucketOwner": "712107929769",
+      "EncryptionConfiguration": {
+        "EncryptionOption": "SSE_S3"
+      }
+    }
+  }
+}

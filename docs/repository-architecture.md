@@ -19,6 +19,7 @@ na RFC-013, ["O que significa \"hardened\""](../RFC-013-Image-Base-Completa-com-
 | `scripts/certificates/` | Aquisição, verificação e pins do bundle corporativo |
 | `scripts/pipeline/catalog/` | Validação de framework, soak e digest antes de operações privilegiadas; lote padrão = catálogo − exclusões |
 | `scripts/pipeline/artifacts/` | Índices OCI, referências por digest e execução de scans |
+| `scripts/pipeline/analytics/` | Projeção offline dos SPDX originais em registros e Parquet; sem autoridade de release ou custódia |
 | `scripts/pipeline/runtime/` | Contratos funcionais das imagens e readiness com limite de tempo |
 | `scripts/pipeline/release/` | Seleção de candidatos, publicação, promoção e evidência de CVEs |
 | `scripts/pipeline/operations/` | Saúde, tempos, resumos e versões efetivas das ferramentas |
@@ -69,6 +70,12 @@ canônicos e `catalog/validate_inputs` para validar escopo/soak; o teste limita
 essas duas dependências aos módulos nomeados, sem abrir todo o domínio.
 Imports dentro do próprio domínio são permitidos. Nova dependência exige uma
 mudança explícita nesta documentação e no teste de arquitetura.
+
+`analytics` reutiliza `artifacts` para o contrato de subject SPDX sem ler layers,
+`release/verify_publication` para reconciliar um índice preservado e somente
+o checksum canônico de `release/release_manifest`. Não chama Store, signing,
+lifecycle ou custódia. Seu mapeamento não depende de PyArrow; a serialização
+Parquet usa o schema versionado em `schemas/sbom-analytics/v1.json`.
 
 ## Workflow responsibilities
 
@@ -123,7 +130,7 @@ para o executor compartilhado. O executor compartilhado não recebe comandos
 livres, regras de negócio ou credenciais AWS como parte de seu contrato; ele
 só aceita `workflow_call`, sem cron, dispatch ou secrets próprios.
 
-Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@909b151ada7b0904e725fef3201a94bde5a1ea72`.
+Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@fd44ef512cf2e3ef9c65d0c005a9aa878ee26a69`.
 
 Os dois chamadores usam esse commit. Actions externas e reusable workflows
 exigem SHA completo; imagens de ferramentas usam digest. A origem aprovada

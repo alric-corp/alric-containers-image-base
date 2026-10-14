@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "purpose": "HISTORICAL_ANALYTICS_TEST_INPUT",
+  "source_zip": "tests/fixtures/hgc04/materials.zip",
+  "source_zip_sha256": "7a1f477dcea027f4f8b338d3b50aa50d26c6d9b5b01fb37bb328e23d594003a4",
+  "repository": "alric-corp/alric-containers-image-base",
+  "run_id": 37806495087,
+  "run_attempt": 1,
+  "source_sha": "4c1783e8c2a36e0f79f453b2f080a23a0eeea0d3",
+  "members": [
+    {
+      "member": "candidates/go1-26-dev/sbom/sbom-aarch64.spdx.json",
+      "sha256": "c690a3a6b4cc78bab26c999a1b795cc9b2917ce02af4e22a8df85725b3e0f778",
+      "size": 135894,
+      "packages": 124,
+      "relationships": 190,
+      "artifact_id": 11562923040
+    },
+    {
+      "member": "candidates/go1-26-dev/sbom/sbom-index.spdx.json",
+      "sha256": "e344d91e4257e7c4300bbca3caf147ffd73ead41fcb00f8383f0cbde96eca3f0",
+      "size": 4264,
+      "packages": 3,
+      "relationships": 2,
+      "artifact_id": 11562923040
+    },
+    {
+      "member": "candidates/go1-26-dev/sbom/sbom-x86_64.spdx.json",
+      "sha256": "c8c137eb8292cfe68850d75d6f334e4dae10b6c4726881638d8f3a7d48f6a920",
+      "size": 135871,
+      "packages": 124,
+      "relationships": 190,
+      "artifact_id": 11562923040
+    },
+    {
+      "member": "candidates/go1-26/sbom/sbom-aarch64.spdx.json",
+      "sha256": "90908e34d2e9c4528a04649ed7fd8cc7f8d19f37804e3452521379676071ea39",
+      "size": 22658,
+      "packages": 23,
+      "relationships": 21,
+      "artifact_id": 11562328737
+    },
+    {
+      "member": "candidates/go1-26/sbom/sbom-index.spdx.json",
+      "sha256": "86d4f728ebdb9f3214efff020eb2fcb83fb961b6b6f5a2843d9efcf405a0fbd0",
+      "size": 4252,
+      "packages": 3,
+      "relationships": 2,
+      "artifact_id": 11562328737
+    },
+    {
+      "member": "candidates/go1-26/sbom/sbom-x86_64.spdx.json",
+      "sha256": "30487d1481bcfaa01fed56df9d95bb4e4b24fb13c145983eafaf5dd05393a8c6",
+      "size": 22651,
+      "packages": 23,
+      "relationships": 21,
+      "artifact_id": 11562328737
+    }
+  ]
+}

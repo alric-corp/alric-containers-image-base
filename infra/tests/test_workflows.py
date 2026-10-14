@@ -177,7 +177,8 @@ class InfraWorkflowTests(unittest.TestCase):
         self.assertGreater(readback_index, step_index(apply, '-detailed-exitcode'))
         command = apply['steps'][readback_index]['run']
         self.assertIn('set -euo pipefail', command)
-        self.assertIn('--expect-empty', command)
+        self.assertNotIn('--expect-empty', command)
+        self.assertIn('OPERATIONAL_ECR_CONFIGURATION', command)
         self.assertIn('--account-id "$AWS_ACCOUNT_ID"', command)
         self.assertIn('--region "$AWS_REGION"', command)
         self.assertNotIn('continue-on-error', apply['steps'][readback_index])

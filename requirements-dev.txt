@@ -1,2 +1,4 @@
 # Parser used by pipeline governance checks and regression tests.
 PyYAML==6.0.3
+# Offline SPDX analytics; Arrow 21 retains the project's Python 3.9 support.
+pyarrow==21.0.0

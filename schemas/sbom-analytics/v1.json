@@ -1,0 +1,295 @@
+{
+  "schema_version": 1,
+  "normalizer_version": "1.0.0",
+  "tables": {
+    "observations": [
+      {
+        "name": "observation_id",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "sbom_sha256",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "predicate_digest",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "repository",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "source_sha",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "framework",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "image_repository",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "event",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "ref",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "image_index_digest",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "subject_digest",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "sbom_scope",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "document_namespace",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "spdx_version",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "normalizer_version",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "raw_spdx_path",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "integrity_check",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "subject_check",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "hosted_verification_status",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "cryptographic_authenticity",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "document_platform",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "source_path",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "source_timestamp",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "source_timestamp_origin",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "spdx_created",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "validation_record_sha256",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "validation_record_reference",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "publication_record_sha256",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "publication_record_reference",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "published_index_sha256",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "candidate_identity_sha256",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "candidate_identity_reference",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "hosted_verification_reference",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "validation_record_check",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "publication_record_check",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "candidate_identity_check",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "run_id",
+        "type": "int64",
+        "nullable": false
+      },
+      {
+        "name": "run_attempt",
+        "type": "int64",
+        "nullable": false
+      },
+      {
+        "name": "artifact_id",
+        "type": "int64",
+        "nullable": true
+      },
+      {
+        "name": "schema_version",
+        "type": "int32",
+        "nullable": false
+      },
+      {
+        "name": "package_count",
+        "type": "int32",
+        "nullable": false
+      },
+      {
+        "name": "relationship_count",
+        "type": "int32",
+        "nullable": true
+      },
+      {
+        "name": "publication_authority",
+        "type": "boolean",
+        "nullable": false
+      }
+    ],
+    "packages": [
+      {
+        "name": "schema_version",
+        "type": "int32",
+        "nullable": false
+      },
+      {
+        "name": "normalizer_version",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "sbom_sha256",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "package_spdx_id",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "package_name",
+        "type": "string",
+        "nullable": false
+      },
+      {
+        "name": "package_version",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "purls",
+        "type": "strings",
+        "nullable": true
+      },
+      {
+        "name": "external_references",
+        "type": "references",
+        "nullable": true
+      },
+      {
+        "name": "license_declared",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "license_concluded",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "supplier",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "download_location",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "primary_package_purpose",
+        "type": "string",
+        "nullable": true
+      },
+      {
+        "name": "is_document_subject",
+        "type": "boolean",
+        "nullable": false
+      }
+    ]
+  }
+}

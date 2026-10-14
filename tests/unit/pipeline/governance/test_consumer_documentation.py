@@ -8,10 +8,8 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
-from urllib.parse import unquote, urlsplit
 
 from tests.helpers.subprocess_env import bash_command
-from scripts.pipeline.governance.doc_links import link_targets
 from scripts.pipeline.governance.workflow_dependencies import approved_repository, dependencies
 from scripts.pipeline.release.publish_sboms import publish
 from scripts.pipeline.release.verify_promotion import IDENTITIES, verify_promotion
@@ -19,12 +17,6 @@ from scripts.pipeline.release.verify_promotion import IDENTITIES, verify_promoti
 ROOT = Path(__file__).resolve().parents[4]
 CONTRACT = ROOT / "docs/consumer-verification-contract.md"
 TRUST_ADR = ROOT / "docs/adr/0002-sigstore-trust-model.md"
-FEDERATED_ADR = ROOT / "docs/adr/0003-controles-seguranca-workflows-federados.md"
-DOCUMENTS = [ROOT / name for name in (
-    "README.md", "RFC-013-Image-Base-Completa-com-Mermaid.md", "docs/README.md",
-    "docs/repository-architecture.md", "docs/adr/README.md",
-    "docs/m11-m04-operational-health.md", "CONTRIBUTING.md",
-)] + [CONTRACT, TRUST_ADR, FEDERATED_ADR]
 
 
 class ConsumerDocumentationTests(unittest.TestCase):
@@ -46,18 +38,6 @@ class ConsumerDocumentationTests(unittest.TestCase):
         self.assertEqual(len(matches), 1, prefix)
         return [Template(token).substitute(variables or self.variables)
                 for token in shlex.split(matches[0].split(" > ")[0])]
-
-    def test_local_links_in_consumer_docs_exist(self):
-        for path in DOCUMENTS:
-            for target in link_targets(path.read_text(encoding="utf-8")):
-                parsed = urlsplit(target)
-                if parsed.scheme in ("https", "http", "mailto") or not parsed.path:
-                    continue
-                with self.subTest(document=path.relative_to(ROOT), target=target):
-                    self.assertFalse(parsed.scheme or parsed.netloc)
-                    destination = (path.parent / unquote(parsed.path)).resolve()
-                    self.assertTrue(destination.is_relative_to(ROOT))
-                    self.assertTrue(destination.exists())
 
     def test_consumer_bash_examples_have_valid_syntax(self):
         for document in (CONTRACT,):

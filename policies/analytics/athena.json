@@ -1,0 +1,14 @@
+{
+  "protocol_version": 1,
+  "catalog": "AwsDataCatalog",
+  "database": "sbom_analytics",
+  "workgroup": "sbom_analytics",
+  "table_prefix": "sbom_snapshot",
+  "results_prefix": "query-results/sbom-analytics-v1/",
+  "execution_limit": 18,
+  "scan_cutoff_bytes": 104857600,
+  "timeout_seconds": 120,
+  "result_reuse": false,
+  "manifest_sha256": "5ff03abfbe76e016a7782851b32c9dedfc377e656e397979e544329feebcb829",
+  "manifest_version_id": "7nr06MlNa4COnXXN1TCunE_lx3p5yEj2"
+}

@@ -1,0 +1,1 @@
+{"stage": "OIDC", "outcome": "success", "source_sha": "2702c4010e8d7bff561388bd27e9a6109f878d6d", "run_id": "38080824102", "attempt": "1", "actor": "TomasAlric", "mode": "execute", "round_id": "lab-sbom-athena-v1", "original_inputs_available": false, "cloud_admin_fallback": false}

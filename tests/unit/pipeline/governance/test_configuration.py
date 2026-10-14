@@ -29,10 +29,10 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_each_scope_selects_exact_account_role_and_backend(self):
         expected = {
-            'DEV': ('712107929769', 'us-east-1', 'alric-image-base-factory-dev'),
+            'DEV': ('712107929769', 'us-east-1', 'itau-github-repo-factory-distroless-v1'),
             'HOM': ('248908662184', 'sa-east-1', 'alric-image-base-factory-hom'),
             'INFRA_PLAN': ('712107929769', 'us-east-1', 'alric-github-repo-1360616627-infra-plan'),
-            'INFRA_APPLY': ('712107929769', 'us-east-1', 'alric-github-repo-1360616627-infra-apply'),
+            'INFRA_APPLY': ('712107929769', 'us-east-1', 'itau-github-repo-factory-distroless-v1'),
         }
         for scope, (account, region, role) in expected.items():
             with self.subTest(scope=scope):
@@ -44,6 +44,110 @@ class ConfigurationTests(unittest.TestCase):
                     self.assertEqual(settings['TF_STATE_BUCKET'], '712107929769-alric-containers-image-base-tfstate')
                     self.assertEqual(settings['TF_BACKEND_REGION'], 'us-east-2')
                     self.assertEqual(settings['TF_STATE_KEY'], 'alric-containers-image-base/terraform.tfstate')
+                    self.assertEqual(settings['SBOM_BUCKET_NAME'], 'distroless-sbom-analytics')
+                else:
+                    self.assertNotIn('SBOM_BUCKET_NAME', settings)
+
+    def test_operational_role_configuration_is_required_and_strict(self):
+        for value in (None, {}, {'operational_role_name': True},
+                      {'operational_role_name': 'bad/name'},
+                      {'operational_role_name': 'name\nINJECTED=true'},
+                      {'operational_role_name': 'x' * 65},
+                      {'operational_role_name': self.cfg['DEV']['role_name']},
+                      {'operational_role_name': 'valid', 'role_arn': 'alternative'}):
+            cfg = copy.deepcopy(self.cfg)
+            cfg['factory'] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.load(cfg)
+        cfg = copy.deepcopy(self.cfg)
+        del cfg['factory']
+        with self.assertRaises(ValueError):
+            self.load(cfg)
+
+    def test_analytics_bucket_is_an_exact_separate_name(self):
+        self.assertEqual(self.cfg['analytics'], {'bucket': 'distroless-sbom-analytics'})
+        for value in (None, {}, {'bucket': True}, {'bucket': 'Distroless'}, {'bucket': 'ab'},
+                      {'bucket': 'x' * 64}, {'bucket': 'bad--name'}, {'bucket': 'name\nINJECTED=true'},
+                      {'bucket': self.cfg['DEV']['release_bucket']},
+                      {'bucket': self.cfg['infra']['backend']['bucket']},
+                      {'bucket': 'distroless-sbom-analytics', 'prefix': 'other'}):
+            cfg = copy.deepcopy(self.cfg)
+            cfg['analytics'] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.load(cfg)
+        cfg = copy.deepcopy(self.cfg)
+        del cfg['analytics']
+        with self.assertRaises(ValueError):
+            self.load(cfg)
+
+    def test_enabling_privileged_pr_plan_fails_closed_at_load_and_resolution(self):
+        cfg = copy.deepcopy(self.cfg)
+        cfg['infra']['plan_enabled'] = True
+        with self.assertRaisesRegex(ValueError, 'separately reviewed'):
+            self.load(cfg)
+        for scope in ('INFRA_PLAN', 'INFRA_APPLY', 'DEV'):
+            with self.subTest(scope=scope), self.assertRaisesRegex(ValueError, 'separately reviewed'):
+                config.settings(cfg, scope)
+
+    def test_pull_request_cannot_emit_privileged_settings(self):
+        for event in ('pull_request', 'pull_request_target', 'pull_request_review'):
+            for scope in ('DEV', 'INFRA_APPLY', 'HOM'):
+                output = self.directory / 'output'
+                env = self.directory / 'env'
+                with self.subTest(event=event, scope=scope), patch.dict(os.environ, {
+                        'GITHUB_EVENT_NAME': event, 'GITHUB_OUTPUT': str(output),
+                        'GITHUB_ENV': str(env)}, clear=True), self.assertRaisesRegex(ValueError, 'forbidden'):
+                    config.main(['--scope', scope])
+                self.assertFalse(output.exists())
+                self.assertFalse(env.exists())
+        with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'pull_request'}, clear=True), \
+                contextlib.redirect_stdout(io.StringIO()) as stdout:
+            config.main(['--scope', 'INFRA_PLAN'])
+        result = json.loads(stdout.getvalue())
+        self.assertEqual(result['INFRA_PLAN_ENABLED'], 'false')
+        self.assertNotIn(self.cfg['factory']['operational_role_name'], result['AWS_ROLE_ARN'])
+
+    def test_operational_arn_comes_only_from_versioned_field(self):
+        cfg = copy.deepcopy(self.cfg)
+        cfg['factory']['operational_role_name'] = 'reviewed-external-role'
+        self.load(cfg)
+        with patch.object(config, 'configuration', return_value=cfg), patch.dict(os.environ, {
+                'AWS_ROLE_ARN': 'wrong', 'FACTORY_OPERATIONAL_ROLE_NAME': 'wrong',
+                'GITHUB_EVENT_NAME': 'push'}, clear=True), contextlib.redirect_stdout(io.StringIO()) as stdout:
+            config.main(['--scope', 'DEV'])
+        self.assertEqual(json.loads(stdout.getvalue())['AWS_ROLE_ARN'],
+                         'arn:aws:iam::712107929769:role/reviewed-external-role')
+        self.assertEqual(cfg['DEV']['role_name'], 'alric-image-base-factory-dev')
+        self.assertEqual(config.settings(cfg, 'INFRA_APPLY')['AWS_ROLE_ARN'],
+                         config.settings(cfg, 'DEV')['AWS_ROLE_ARN'])
+
+    def test_protected_infra_plan_and_apply_share_operational_scope(self):
+        doc = yaml.safe_load((config.ROOT / '.github/workflows/infra-apply.yml').read_text())
+        self.assertEqual(doc['concurrency'], {'group': 'image-base-infra-state', 'cancel-in-progress': False})
+        for name in ('plan', 'apply'):
+            job = doc['jobs'][name]
+            self.assertEqual(job['environment'], 'lab-image-base-infra')
+            self.assertEqual(job['if'], "github.ref == 'refs/heads/develop'")
+            loader = next(s for s in job['steps'] if s.get('id') == 'pipeline')
+            self.assertIn('--scope INFRA_APPLY', loader['run'])
+        pr = yaml.safe_load((config.ROOT / '.github/workflows/infra-pr.yml').read_text())
+        self.assertEqual(pr['jobs']['checks']['permissions'], {'contents': 'read'})
+        self.assertIn("needs.checks.outputs.infra_plan_enabled == 'true'", pr['jobs']['plan']['if'])
+
+    def test_app_certification_sessions_remain_read_only(self):
+        doc = yaml.safe_load((config.ROOT / '.github/workflows/app-certification.yml').read_text())
+        expected = {'ecr:GetAuthorizationToken', 'ecr:DescribeImages', 'ecr:DescribeRepositories',
+                    'ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchCheckLayerAvailability'}
+        for name in ('inventory', 'applications'):
+            job = doc['jobs'][name]
+            self.assertEqual(job['environment'], 'DEV')
+            action = next(s for s in job['steps'] if s.get('uses', '').startswith('aws-actions/configure-aws-credentials@'))
+            policy = json.loads(action['with']['inline-session-policy'])
+            self.assertEqual({a for s in policy['Statement'] for a in s['Action']}, expected)
+            self.assertTrue(all(s['Effect'] == 'Allow' for s in policy['Statement']))
+        self.assertIn("github.ref == 'refs/heads/develop'", doc['jobs']['inventory']['if'])
+        self.assertIn("github.event_name == 'workflow_dispatch'", doc['jobs']['inventory']['if'])
+        self.assertIn('inventory', doc['jobs']['applications']['needs'])
 
     def test_disabled_promotion_is_not_overridden_by_environment_variables(self):
         policy = dict(config.promotion_policy('HOM'), enabled=False)
@@ -136,6 +240,15 @@ class ConfigurationTests(unittest.TestCase):
                 for index, step in enumerate(steps):
                     if step.get('uses', '').startswith('aws-actions/configure-aws-credentials@'):
                         with self.subTest(workflow=path.name, job=name):
+                            if path.name == 'factory-central-role-preflight.yml':
+                                # Stage A tests an independently pinned identity before
+                                # the operational resolver cutover. No vars/secrets source.
+                                self.assertEqual(set(workflow['jobs']), {'dev', 'infra'})
+                                self.assertEqual(step['with']['role-to-assume'],
+                                                 'arn:aws:iam::712107929769:role/itau-github-repo-factory-distroless-v1')
+                                self.assertEqual(step['with']['aws-region'], 'us-east-1')
+                                self.assertEqual(step['with']['allowed-account-ids'], '712107929769')
+                                continue
                             loaders = [s for s in steps[:index] if s.get('id') == 'pipeline']
                             self.assertEqual(len(loaders), 1)
                             self.assertIn('scripts.pipeline.governance.configuration --scope ', loaders[0]['run'])
@@ -205,6 +318,125 @@ class ConfigurationTests(unittest.TestCase):
         commands = '\n'.join(s.get('run', '') for s in jobs['promote']['steps'])
         self.assertIn('lifecycle promote-dev', commands)
         self.assertNotIn('build_image', commands)
+
+
+class ExecutionIdentityTests(unittest.TestCase):
+    """Native GitHub identity versus the versioned authorized identity, offline."""
+    IDENTITY = {
+        'GITHUB_REPOSITORY': 'alric-corp/alric-containers-image-base',
+        'GITHUB_REPOSITORY_OWNER': 'alric-corp',
+        'GITHUB_REPOSITORY_ID': '1360616627',
+        'GITHUB_REPOSITORY_OWNER_ID': '178685987',
+        'GITHUB_REF': 'refs/heads/develop',
+        'GITHUB_EVENT_NAME': 'workflow_dispatch',
+    }
+    STRICT = ['--scope', 'DEV', '--authorized-event', 'workflow_dispatch']
+
+    def setUp(self):
+        self.cfg = config.configuration()
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.directory = Path(temp.name)
+        # Offline by construction: any network use fails the test.
+        guard = patch('socket.socket', side_effect=AssertionError('network is not allowed'))
+        guard.start()
+        self.addCleanup(guard.stop)
+
+    def run_cli(self, identity, argv=None):
+        env = dict(identity, GITHUB_ENV=str(self.directory / 'env'), GITHUB_OUTPUT=str(self.directory / 'output'))
+        with patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(io.StringIO()):
+            config.main(argv or self.STRICT)
+        return (self.directory / 'output').read_text()
+
+    def assert_fails_closed(self, identity, message='execution identity', argv=None):
+        with self.assertRaisesRegex(ValueError, message):
+            self.run_cli(identity, argv)
+        # Nothing reaches the job: no role ARN, account or region for OIDC.
+        self.assertFalse((self.directory / 'env').exists())
+        self.assertFalse((self.directory / 'output').exists())
+
+    def test_authorized_identity_comes_from_repository_and_subject_prefix(self):
+        self.assertEqual(config.authorized_identity(self.cfg), {
+            key: value for key, value in self.IDENTITY.items() if key != 'GITHUB_EVENT_NAME'})
+
+    def test_correct_repository_and_ids_emit_the_operational_identity(self):
+        output = self.run_cli(self.IDENTITY)
+        self.assertIn('EXECUTION_IDENTITY=VERIFIED\n', output)
+        self.assertIn('AWS_ROLE_ARN=arn:aws:iam::712107929769:role/itau-github-repo-factory-distroless-v1\n', output)
+        self.assertEqual(config.verify_execution_identity(self.cfg, self.IDENTITY, ['workflow_dispatch']), self.IDENTITY)
+
+    def test_same_repository_name_with_another_repository_id(self):
+        for value in ('1360616628', '1', '178685987'):
+            with self.subTest(value=value):
+                self.assert_fails_closed(dict(self.IDENTITY, GITHUB_REPOSITORY_ID=value), 'GITHUB_REPOSITORY_ID differs')
+
+    def test_owner_id_differs(self):
+        for value in ('178685988', '1360616627'):
+            with self.subTest(value=value):
+                self.assert_fails_closed(dict(self.IDENTITY, GITHUB_REPOSITORY_OWNER_ID=value),
+                                         'GITHUB_REPOSITORY_OWNER_ID differs')
+
+    def test_owner_name_differs(self):
+        self.assert_fails_closed(dict(self.IDENTITY, GITHUB_REPOSITORY_OWNER='other-org'), 'GITHUB_REPOSITORY_OWNER differs')
+        # A fork or transfer keeps the repository name but not the owner.
+        self.assert_fails_closed(dict(self.IDENTITY, GITHUB_REPOSITORY='other-org/alric-containers-image-base',
+                                      GITHUB_REPOSITORY_OWNER='other-org'), 'differs')
+
+    def test_self_consistent_foreign_identity_is_not_authorized(self):
+        # Matching other context fields is not enough; the versioned identity decides.
+        self.assert_fails_closed({
+            'GITHUB_REPOSITORY': 'fork-owner/alric-containers-image-base', 'GITHUB_REPOSITORY_OWNER': 'fork-owner',
+            'GITHUB_REPOSITORY_ID': '999', 'GITHUB_REPOSITORY_OWNER_ID': '888',
+            'GITHUB_REF': 'refs/heads/develop', 'GITHUB_EVENT_NAME': 'workflow_dispatch'}, 'differs')
+
+    def test_missing_or_invalid_identifiers(self):
+        for key in self.IDENTITY:
+            identity = dict(self.IDENTITY)
+            del identity[key]
+            with self.subTest(missing=key):
+                self.assert_fails_closed(identity, 'missing or invalid')
+        for key, values in (
+                ('GITHUB_REPOSITORY_ID', ('', ' ', '0', '01360616627', '1360616627 ', 'abc', '1360616627\nX=1', '9' * 20)),
+                ('GITHUB_REPOSITORY_OWNER_ID', ('', '0', '-178685987', '178685987.0', '1e9')),
+                ('GITHUB_REPOSITORY', ('', 'alric-corp/alric-containers-image-base\nAWS_ROLE_ARN=x', 'ALRIC-CORP/alric-containers-image-base')),
+                ('GITHUB_REPOSITORY_OWNER', ('', 'alric-corp ', 'Alric-Corp')),
+                ('GITHUB_REF', ('', 'develop', 'refs/heads/develop\n'))):
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    self.assert_fails_closed(dict(self.IDENTITY, **{key: value}))
+
+    def test_other_branches_and_refs(self):
+        for ref in ('refs/heads/main', 'refs/heads/develop-x', 'refs/heads/feature/develop', 'refs/tags/develop',
+                    'refs/pull/132/merge'):
+            with self.subTest(ref=ref):
+                self.assert_fails_closed(dict(self.IDENTITY, GITHUB_REF=ref), 'GITHUB_REF differs')
+
+    def test_pull_request_and_unauthorized_events(self):
+        for event in ('pull_request', 'pull_request_target', 'push', 'schedule', 'workflow_run', 'repository_dispatch'):
+            with self.subTest(event=event):
+                self.assert_fails_closed(dict(self.IDENTITY, GITHUB_EVENT_NAME=event))
+        # pull_request can never be declared authorized.
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.run_cli(self.IDENTITY, ['--scope', 'DEV', '--authorized-event', 'pull_request'])
+        with self.assertRaisesRegex(ValueError, 'unsupported authorized event'):
+            config.verify_execution_identity(self.cfg, self.IDENTITY, [])
+
+    def test_identity_follows_the_versioned_configuration_without_code_changes(self):
+        cfg = copy.deepcopy(self.cfg)
+        cfg.update(repository='target-org/target-repository', subject_prefix='repo:target-org@42/target-repository@4242')
+        target = dict(self.IDENTITY, GITHUB_REPOSITORY='target-org/target-repository', GITHUB_REPOSITORY_OWNER='target-org',
+                      GITHUB_REPOSITORY_ID='4242', GITHUB_REPOSITORY_OWNER_ID='42')
+        self.assertEqual(config.verify_execution_identity(cfg, target, ['workflow_dispatch']), target)
+        with self.assertRaisesRegex(ValueError, 'differs'):
+            config.verify_execution_identity(cfg, self.IDENTITY, ['workflow_dispatch'])
+
+    def test_without_the_strict_flag_other_scopes_keep_their_semantics(self):
+        for scope in ('DEV', 'HOM', 'INFRA_APPLY'):
+            with self.subTest(scope=scope):
+                output = self.run_cli({'GITHUB_REPOSITORY': self.IDENTITY['GITHUB_REPOSITORY'],
+                                       'GITHUB_EVENT_NAME': 'schedule'}, ['--scope', scope])
+                self.assertNotIn('EXECUTION_IDENTITY', output)
+                (self.directory / 'env').unlink(); (self.directory / 'output').unlink()
 
 
 if __name__ == '__main__':

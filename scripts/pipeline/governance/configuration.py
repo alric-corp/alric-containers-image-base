@@ -36,7 +36,8 @@ def match(value, pattern, label):
 def configuration(path=None):
     cfg = json.loads((CONFIG if path is None else Path(path)).read_text(),
                      object_pairs_hook=object_pairs)
-    keys(cfg, ('schema_version', 'repository', 'branch', 'subject_prefix', 'DEV', 'HOM', 'infra'), 'pipeline')
+    keys(cfg, ('schema_version', 'repository', 'branch', 'subject_prefix', 'DEV', 'HOM', 'infra', 'factory', 'analytics'),
+         'pipeline')
     require(type(cfg['schema_version']) is int and cfg['schema_version'] == 1, 'unsupported pipeline schema')
     match(cfg['repository'], r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', 'repository')
     # Entrypoint branch guards and OIDC Environments are reviewed boundaries.
@@ -53,18 +54,34 @@ def configuration(path=None):
         match(item['release_bucket'], r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', f'{env}.release_bucket')
     require(cfg['DEV']['account_id'] != cfg['HOM']['account_id'], 'DEV and HOM accounts must differ')
     require(cfg['DEV']['release_bucket'] != cfg['HOM']['release_bucket'], 'release buckets must differ')
+    keys(cfg['factory'], ('operational_role_name',), 'factory')
+    match(cfg['factory']['operational_role_name'], r'[A-Za-z0-9+=,.@_-]{1,64}',
+          'factory.operational_role_name')
     infra = cfg['infra']
     keys(infra, ('plan_enabled', 'plan_role_name', 'apply_role_name', 'backend'), 'infra')
     require(type(infra['plan_enabled']) is bool, 'infra.plan_enabled must be boolean')
+    require(infra['plan_enabled'] is False,
+            'privileged PR planning requires a separately reviewed authorization design')
     for field in ('plan_role_name', 'apply_role_name'):
         match(infra[field], r'[A-Za-z0-9+=,.@_-]{1,64}', 'infra.' + field)
     require(len({infra['plan_role_name'], infra['apply_role_name'], cfg['DEV']['role_name']}) == 3,
-            'infra and publication roles must be distinct')
+            'legacy Terraform role names must be distinct')
+    require(cfg['factory']['operational_role_name'] not in
+            {infra['plan_role_name'], infra['apply_role_name'], cfg['DEV']['role_name'], cfg['HOM']['role_name']},
+            'external operational role must remain separate from legacy Terraform identities')
     keys(infra['backend'], ('bucket', 'region', 'key'), 'infra.backend')
     match(infra['backend']['bucket'], r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', 'infra.backend.bucket')
     match(infra['backend']['region'], r'[a-z]{2}-[a-z]+-[0-9]+', 'infra.backend.region')
     match(infra['backend']['key'], r'[A-Za-z0-9_-]+(?:/[A-Za-z0-9_.-]+)*', 'infra.backend.key')
     require('..' not in infra['backend']['key'].split('/'), 'backend key cannot traverse directories')
+    # Distroless SBOM Analytics bucket of this deployment: an exact name, never
+    # derived from the account, region or organization.
+    keys(cfg['analytics'], ('bucket',), 'analytics')
+    match(cfg['analytics']['bucket'], r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]', 'analytics.bucket')
+    require('--' not in cfg['analytics']['bucket'], 'analytics.bucket is not a plain bucket name')
+    require(cfg['analytics']['bucket'] not in {cfg['DEV']['release_bucket'], cfg['HOM']['release_bucket'],
+                                               infra['backend']['bucket']},
+            'analytics bucket must be separate from release and state buckets')
     return cfg
 
 
@@ -92,12 +109,52 @@ def promotion_policy(environment, path=None):
     return policy
 
 
+# Observed execution identity: the runner's native variables for the github.*
+# contexts (repository, repository_owner, repository_id, repository_owner_id,
+# ref, event_name). The authorized identity is never another observed field.
+EXECUTION_IDENTITY = ('GITHUB_REPOSITORY', 'GITHUB_REPOSITORY_OWNER', 'GITHUB_REPOSITORY_ID',
+                      'GITHUB_REPOSITORY_OWNER_ID', 'GITHUB_REF', 'GITHUB_EVENT_NAME')
+# Privileged entry points never run for pull_request events, whatever the caller asks.
+AUTHORIZABLE_EVENTS = ('workflow_dispatch', 'push', 'schedule')
+
+
+def authorized_identity(cfg):
+    """Identity this deployment authorizes: versioned repository and immutable OIDC subject IDs."""
+    owner, repo = cfg['repository'].split('/')
+    found = re.fullmatch(rf'repo:{re.escape(owner)}@([1-9][0-9]*)/{re.escape(repo)}@([1-9][0-9]*)',
+                         cfg['subject_prefix'])
+    require(found is not None, 'immutable repository subject: invalid value')
+    return {'GITHUB_REPOSITORY': cfg['repository'], 'GITHUB_REPOSITORY_OWNER': owner,
+            'GITHUB_REPOSITORY_ID': found.group(2), 'GITHUB_REPOSITORY_OWNER_ID': found.group(1),
+            'GITHUB_REF': 'refs/heads/' + cfg['branch']}
+
+
+def verify_execution_identity(cfg, environ, events):
+    """Fail closed unless the observed identity equals the authorized one, before any credential."""
+    require(events and set(events) <= set(AUTHORIZABLE_EVENTS), 'unsupported authorized event')
+    observed = {key: environ.get(key) for key in EXECUTION_IDENTITY}
+    for key, value in observed.items():
+        require(isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9_./-]{1,200}', value) is not None,
+                f'execution identity {key} is missing or invalid')
+    for key in ('GITHUB_REPOSITORY_ID', 'GITHUB_REPOSITORY_OWNER_ID'):
+        require(re.fullmatch(r'[1-9][0-9]{0,18}', observed[key]) is not None, f'execution identity {key} is invalid')
+    for key, expected in authorized_identity(cfg).items():
+        require(observed[key] == expected, f'execution identity {key} differs from the authorized identity')
+    require(observed['GITHUB_EVENT_NAME'] in events, 'execution identity GITHUB_EVENT_NAME is not authorized')
+    return observed
+
+
 def settings(cfg, scope):
     require(scope in ('DEV', 'HOM', 'INFRA_PLAN', 'INFRA_APPLY'), 'unknown pipeline scope')
     item = cfg['DEV' if scope.startswith('INFRA_') else scope]
     role = item['role_name']
-    if scope.startswith('INFRA_'):
-        role = cfg['infra'][scope.removeprefix('INFRA_').lower() + '_role_name']
+    require(cfg['infra']['plan_enabled'] is False,
+            'privileged PR planning requires a separately reviewed authorization design')
+    if scope in ('DEV', 'INFRA_APPLY'):
+        role = cfg['factory']['operational_role_name']
+    elif scope == 'INFRA_PLAN':
+        # Disabled PR checks retain the legacy name, never the central role.
+        role = cfg['infra']['plan_role_name']
     values = {
         'AWS_ACCOUNT_ID': item['account_id'], 'AWS_REGION': item['region'],
         'AWS_ROLE_ARN': f'arn:aws:iam::{item["account_id"]}:role/{role}',
@@ -112,7 +169,7 @@ def settings(cfg, scope):
     if scope.startswith('INFRA_'):
         backend = cfg['infra']['backend']
         values.update(TF_STATE_BUCKET=backend['bucket'], TF_STATE_KEY=backend['key'],
-                      TF_BACKEND_REGION=backend['region'])
+                      TF_BACKEND_REGION=backend['region'], SBOM_BUCKET_NAME=cfg['analytics']['bucket'])
     return values
 
 
@@ -120,14 +177,22 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scope', choices=('DEV', 'HOM', 'INFRA_PLAN', 'INFRA_APPLY'), required=True)
     parser.add_argument('--require-promotion', action='store_true')
+    parser.add_argument('--authorized-event', action='append', choices=AUTHORIZABLE_EVENTS,
+                        help='require the complete native execution identity to match the versioned one')
     args = parser.parse_args(argv)
     cfg = configuration()
+    if args.authorized_event:
+        verify_execution_identity(cfg, os.environ, args.authorized_event)
     if os.environ.get('GITHUB_REPOSITORY'):
         require(os.environ['GITHUB_REPOSITORY'] == cfg['repository'], 'pipeline repository mismatch')
+    if os.environ.get('GITHUB_EVENT_NAME', '').startswith('pull_request'):
+        require(args.scope == 'INFRA_PLAN', 'privileged role resolution is forbidden for pull requests')
     if args.require_promotion:
         require(args.scope in ('DEV', 'HOM') and promotion_policy(args.scope)['enabled'],
                 f'{args.scope} promotion is disabled in promotion policy')
     values = settings(cfg, args.scope)
+    if args.authorized_event:
+        values['EXECUTION_IDENTITY'] = 'VERIFIED'
     # Validate everything before writing either file. Only validated single-line
     # values enter the Actions command files, never arbitrary JSON keys or env.
     payload = ''.join(f'{key}={value}\n' for key, value in values.items())

@@ -91,6 +91,23 @@ run "separate_roles_exact_trust_and_permissions" {
     ])
     error_message = "The only global-resource Infra grant must be regional read-only repository inventory."
   }
+
+  assert {
+    condition = alltrue([
+      for purpose, policy in aws_iam_role_policy.infra : (
+        !strcontains(policy.policy, "sbom") &&
+        alltrue([
+          for statement in jsondecode(policy.policy).Statement : alltrue([
+            for resource in statement.Resource : (
+              startswith(resource, "arn:aws:ecr:") || resource == "*" ||
+              startswith(resource, "arn:aws:s3:::712107929769-alric-containers-image-base-tfstate")
+            )
+          ])
+        ])
+      )
+    ])
+    error_message = "Infra roles reach only the catalog ECR repositories and the backend; no SBOM analytics bucket."
+  }
 }
 
 run "reject_mismatched_subject_owner" {

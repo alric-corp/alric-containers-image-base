@@ -1,0 +1,218 @@
+{
+  "Table": {
+    "Name": "poc_snapshot_6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6_sbom_observation_rows_v1",
+    "DatabaseName": "poc_distroless_sbom",
+    "Owner": "hadoop",
+    "CreateTime": "2026-10-10T16:42:30-03:00",
+    "UpdateTime": "2026-10-10T16:42:30-03:00",
+    "LastAccessTime": "1969-12-31T21:00:00-03:00",
+    "Retention": 0,
+    "StorageDescriptor": {
+      "Columns": [
+        {
+          "Name": "observation_id",
+          "Type": "string"
+        },
+        {
+          "Name": "sbom_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "predicate_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "repository",
+          "Type": "string"
+        },
+        {
+          "Name": "source_sha",
+          "Type": "string"
+        },
+        {
+          "Name": "framework",
+          "Type": "string"
+        },
+        {
+          "Name": "image_repository",
+          "Type": "string"
+        },
+        {
+          "Name": "event",
+          "Type": "string"
+        },
+        {
+          "Name": "ref",
+          "Type": "string"
+        },
+        {
+          "Name": "image_index_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "subject_digest",
+          "Type": "string"
+        },
+        {
+          "Name": "sbom_scope",
+          "Type": "string"
+        },
+        {
+          "Name": "document_namespace",
+          "Type": "string"
+        },
+        {
+          "Name": "spdx_version",
+          "Type": "string"
+        },
+        {
+          "Name": "normalizer_version",
+          "Type": "string"
+        },
+        {
+          "Name": "raw_spdx_path",
+          "Type": "string"
+        },
+        {
+          "Name": "integrity_check",
+          "Type": "string"
+        },
+        {
+          "Name": "subject_check",
+          "Type": "string"
+        },
+        {
+          "Name": "hosted_verification_status",
+          "Type": "string"
+        },
+        {
+          "Name": "cryptographic_authenticity",
+          "Type": "string"
+        },
+        {
+          "Name": "document_platform",
+          "Type": "string"
+        },
+        {
+          "Name": "source_path",
+          "Type": "string"
+        },
+        {
+          "Name": "source_timestamp",
+          "Type": "string"
+        },
+        {
+          "Name": "source_timestamp_origin",
+          "Type": "string"
+        },
+        {
+          "Name": "spdx_created",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "published_index_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_sha256",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "hosted_verification_reference",
+          "Type": "string"
+        },
+        {
+          "Name": "validation_record_check",
+          "Type": "string"
+        },
+        {
+          "Name": "publication_record_check",
+          "Type": "string"
+        },
+        {
+          "Name": "candidate_identity_check",
+          "Type": "string"
+        },
+        {
+          "Name": "run_id",
+          "Type": "bigint"
+        },
+        {
+          "Name": "run_attempt",
+          "Type": "bigint"
+        },
+        {
+          "Name": "artifact_id",
+          "Type": "bigint"
+        },
+        {
+          "Name": "schema_version",
+          "Type": "int"
+        },
+        {
+          "Name": "package_count",
+          "Type": "int"
+        },
+        {
+          "Name": "relationship_count",
+          "Type": "int"
+        },
+        {
+          "Name": "publication_authority",
+          "Type": "boolean"
+        }
+      ],
+      "Location": "s3://alric-distroless-sbom-712107929769-us-east-1/sbom-analytics/poc-v1/snapshots/6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6/analytics/sbom_observations",
+      "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+      "OutputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+      "Compressed": false,
+      "NumberOfBuckets": -1,
+      "SerdeInfo": {
+        "SerializationLibrary": "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+        "Parameters": {
+          "serialization.format": "1"
+        }
+      },
+      "BucketColumns": [],
+      "SortColumns": [],
+      "Parameters": {},
+      "SkewedInfo": {
+        "SkewedColumnNames": [],
+        "SkewedColumnValues": [],
+        "SkewedColumnValueLocationMaps": {}
+      },
+      "StoredAsSubDirectories": false
+    },
+    "PartitionKeys": [],
+    "TableType": "EXTERNAL_TABLE",
+    "Parameters": {
+      "EXTERNAL": "TRUE",
+      "transient_lastDdlTime": "1791661350"
+    },
+    "CreatedBy": "arn:aws:sts::712107929769:assumed-role/itau-github-repo-factory-distroless-v1/sbom-athena-38080824102-1",
+    "IsRegisteredWithLakeFormation": false,
+    "CatalogId": "712107929769",
+    "VersionId": "0",
+    "IsMultiDialectView": false
+  }
+}

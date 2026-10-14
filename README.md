@@ -28,6 +28,12 @@ de automação fica em [`scripts/README.md`](scripts/README.md). Para contribuir
 veja [`CONTRIBUTING.md`](CONTRIBUTING.md); o índice de documentação está em
 [`docs/README.md`](docs/README.md).
 
+A identidade operacional central `itau-github-repo-factory-distroless-v1` e sua
+única inline policy `factory-distroless-v1` têm [contrato IAM externo e runbook LAB](docs/factory-distroless-v1-iam-runbook.md).
+Sua criação pertence ao operador no LAB e à equipe IAM no corporativo.
+Terraform mantém os recursos e as identidades legadas; a referência operacional
+nos workflows será adotada em um PR separado após read-back IAM aprovado.
+
 ## O que é uma imagem Distroless?
 
 <p align="center">
@@ -544,7 +550,7 @@ fixada abaixo. A instalação do Trivy é uma
 composite action comum à validação, promoção e recuperação. Gatilhos, catálogo,
 scripts/testes de domínio e decisões de release permanecem neste repositório.
 
-Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@909b151ada7b0904e725fef3201a94bde5a1ea72`.
+Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@fd44ef512cf2e3ef9c65d0c005a9aa878ee26a69`.
 
 Veja a [divisão de responsabilidades, contrato e adoção](docs/repository-architecture.md#fronteira-entre-produto-e-workflows-compartilhados).
 A [policy de origem revisada](policies/governance/reusable-workflows.json)

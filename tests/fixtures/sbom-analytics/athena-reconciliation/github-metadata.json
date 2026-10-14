@@ -1,0 +1,166 @@
+{
+  "repository": {
+    "id": 1360616627,
+    "full_name": "alric-corp/alric-containers-image-base"
+  },
+  "run": {
+    "id": 38080824102,
+    "run_attempt": 1,
+    "workflow_id": 380758196,
+    "path": ".github/workflows/sbom-analytics-athena-lab-poc.yml",
+    "head_sha": "2702c4010e8d7bff561388bd27e9a6109f878d6d",
+    "event": "workflow_dispatch",
+    "head_branch": "develop",
+    "status": "completed",
+    "conclusion": "failure",
+    "repository": {
+      "id": 1360616627,
+      "full_name": "alric-corp/alric-containers-image-base"
+    },
+    "head_repository": {
+      "id": 1360616627,
+      "full_name": "alric-corp/alric-containers-image-base"
+    }
+  },
+  "artifact": {
+    "id": 11679714087,
+    "name": "sbom-athena-38080824102-1",
+    "size_in_bytes": 50980,
+    "digest": "sha256:28d12a47b8488dc4ee83511c91f989272900180152271c69509b655093676edf",
+    "created_at": "2026-10-10T19:42:36Z",
+    "expired": false,
+    "workflow_run": {
+      "id": 38080824102,
+      "repository_id": 1360616627,
+      "head_repository_id": 1360616627,
+      "head_branch": "develop",
+      "head_sha": "2702c4010e8d7bff561388bd27e9a6109f878d6d"
+    }
+  },
+  "jobs": {
+    "total_count": 1,
+    "jobs": [
+      {
+        "id": 114297196683,
+        "run_id": 38080824102,
+        "run_attempt": 1,
+        "head_sha": "2702c4010e8d7bff561388bd27e9a6109f878d6d",
+        "name": "athena",
+        "steps": [
+          {
+            "name": "Set up job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 1,
+            "started_at": "2026-10-10T19:41:59Z",
+            "completed_at": "2026-10-10T19:42:01Z"
+          },
+          {
+            "name": "Checkout reader and SQL without producer inputs",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 2,
+            "started_at": "2026-10-10T19:42:01Z",
+            "completed_at": "2026-10-10T19:42:03Z"
+          },
+          {
+            "name": "Python compatibility target",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 3,
+            "started_at": "2026-10-10T19:42:03Z",
+            "completed_at": "2026-10-10T19:42:03Z"
+          },
+          {
+            "name": "Check intent and install pinned isolated dependencies",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 4,
+            "started_at": "2026-10-10T19:42:03Z",
+            "completed_at": "2026-10-10T19:42:10Z"
+          },
+          {
+            "name": "Load versioned operational identity",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 5,
+            "started_at": "2026-10-10T19:42:10Z",
+            "completed_at": "2026-10-10T19:42:10Z"
+          },
+          {
+            "name": "Bound session policy independently from the role policy",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 6,
+            "started_at": "2026-10-10T19:42:10Z",
+            "completed_at": "2026-10-10T19:42:10Z"
+          },
+          {
+            "name": "Assume central analytics session through OIDC",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 7,
+            "started_at": "2026-10-10T19:42:10Z",
+            "completed_at": "2026-10-10T19:42:11Z"
+          },
+          {
+            "name": "Recover S3 snapshot and plan or execute the separately authorized SQL",
+            "status": "completed",
+            "conclusion": "failure",
+            "number": 8,
+            "started_at": "2026-10-10T19:42:11Z",
+            "completed_at": "2026-10-10T19:42:35Z"
+          },
+          {
+            "name": "Preserve execution and authentication context even on failure",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 9,
+            "started_at": "2026-10-10T19:42:35Z",
+            "completed_at": "2026-10-10T19:42:35Z"
+          },
+          {
+            "name": "Upload diagnostics, frozen SQL and journal including failure",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 10,
+            "started_at": "2026-10-10T19:42:35Z",
+            "completed_at": "2026-10-10T19:42:36Z"
+          },
+          {
+            "name": "Post Assume central analytics session through OIDC",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 18,
+            "started_at": "2026-10-10T19:42:36Z",
+            "completed_at": "2026-10-10T19:42:36Z"
+          },
+          {
+            "name": "Post Python compatibility target",
+            "status": "completed",
+            "conclusion": "skipped",
+            "number": 19,
+            "started_at": "2026-10-10T19:42:36Z",
+            "completed_at": "2026-10-10T19:42:36Z"
+          },
+          {
+            "name": "Post Checkout reader and SQL without producer inputs",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 20,
+            "started_at": "2026-10-10T19:42:36Z",
+            "completed_at": "2026-10-10T19:42:36Z"
+          },
+          {
+            "name": "Complete job",
+            "status": "completed",
+            "conclusion": "success",
+            "number": 21,
+            "started_at": "2026-10-10T19:42:36Z",
+            "completed_at": "2026-10-10T19:42:36Z"
+          }
+        ]
+      }
+    ]
+  }
+}

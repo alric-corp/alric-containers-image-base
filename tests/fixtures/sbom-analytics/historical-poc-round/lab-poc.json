@@ -1,0 +1,33 @@
+{
+  "protocol_version": 1,
+  "destination": {
+    "bucket": "alric-distroless-sbom-712107929769-us-east-1",
+    "prefix": "sbom-analytics/poc-v1",
+    "region": "us-east-1",
+    "expected_bucket_owner": "712107929769"
+  },
+  "expected_role_arn": "arn:aws:iam::712107929769:role/itau-github-repo-factory-distroless-v1",
+  "expected_role_id": "AROA2LTHQWCU2N3H2OE3L",
+  "batch_id": "2da32bfa4c095802a7ae7c84cdbf421cedd5529412b2b6b55f0e51119302bd5a",
+  "snapshot_id": "6ae0d5a463a20961e4431cb86d7d969ff2157bf25428a22dd08aa119632548b6",
+  "payload_objects": 19,
+  "payload_bytes": 630308,
+  "golden": {
+    "observations": 6,
+    "packages": 300,
+    "runtime_framework": "go1-26",
+    "dev_framework": "go1-26-dev",
+    "component": "wolfi-baselayout",
+    "platform_components": {
+      "go1-26:linux/amd64": 22,
+      "go1-26:linux/arm64": 22,
+      "go1-26-dev:linux/amd64": 123,
+      "go1-26-dev:linux/arm64": 123
+    },
+    "comparison": {
+      "SAME_REPORTED_NAME_VERSION": 20,
+      "ONLY_RUNTIME": 2,
+      "ONLY_DEV": 103
+    }
+  }
+}
