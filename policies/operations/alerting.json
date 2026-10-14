@@ -33,5 +33,19 @@
   "acknowledgement": {
     "required": true,
     "record": null
+  },
+  "adapters": {
+    "github-issues": {
+      "enabled": false,
+      "status": "RECOMMENDED_AWAITING_OWNER_INPUTS",
+      "repository": null,
+      "assignees": [],
+      "acknowledgers": [],
+      "automation_actors": ["github-actions[bot]"],
+      "base_label": "factory-alert",
+      "event_label_prefix": "factory-alert-",
+      "ack_label": "factory-alert-ack",
+      "resolved_label": "factory-alert-resolved"
+    }
   }
 }

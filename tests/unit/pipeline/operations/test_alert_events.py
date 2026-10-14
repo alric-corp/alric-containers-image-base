@@ -280,19 +280,40 @@ class CommandLineTests(unittest.TestCase):
         health_policy.write_text(json.dumps(policy))
         code, errors = self.run_cli('--health-policy', str(health_policy))
         self.assertEqual(code, 2)
-        self.assertIn('approved transport', errors)
+        self.assertIn('approved adapter', errors)
         self.assertFalse((self.root / 'alert-events.json').exists())
+
+    def test_an_enabled_adapter_defers_delivery_to_its_own_job(self):
+        policy = json.loads(alerts.POLICY.read_text())
+        policy['adapters']['github-issues'].update(enabled=True, repository='alric-corp/factory-ops',
+                                                   assignees=['owner'], acknowledgers=['owner'])
+        (self.root / 'alerting.json').write_text(json.dumps(policy))
+        health_policy = json.loads(alerts.HEALTH_POLICY.read_text())
+        health_policy['channel']['external_destination'] = 'github-issues'
+        (self.root / 'health.json').write_text(json.dumps(health_policy))
+        code, _ = self.run_cli('--policy', str(self.root / 'alerting.json'),
+                               '--health-policy', str(self.root / 'health.json'))
+        report = json.loads((self.root / 'alert-events.json').read_text())
+        self.assertEqual(code, 0)
+        self.assertEqual({record['status'] for record in report['delivery']}, {'DEFERRED_TO_DELIVERY_JOB'})
+        self.assertEqual(report['acknowledgement']['status'], 'NOT_PROVEN')
 
     def test_repository_policy_preserves_the_owner_decision(self):
         self.assertIsNone(alerts.external_destination())
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(alerts.main(['lint']), 0)
         policy = json.loads(alerts.POLICY.read_text())
-        policy['acknowledgement']['record'] = 'http-200'
-        path = self.root / 'alerting.json'
-        path.write_text(json.dumps(policy))
-        with contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(alerts.main(['lint', '--policy', str(path)]), 2)
+        self.assertFalse(policy['adapters']['github-issues']['enabled'])
+        for mutate in (lambda p: p['acknowledgement'].update(record='http-200'),
+                       lambda p: p['adapters']['github-issues'].update(enabled=True),
+                       lambda p: p['adapters']['github-issues'].update(ack_label='factory-alert'),
+                       lambda p: p['adapters'].update(teams={'enabled': False})):
+            changed = json.loads(alerts.POLICY.read_text())
+            mutate(changed)
+            path = self.root / 'alerting.json'
+            path.write_text(json.dumps(changed))
+            with self.subTest(mutate=mutate), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(alerts.main(['lint', '--policy', str(path)]), 2)
 
 
 class WorkflowWiringTests(unittest.TestCase):

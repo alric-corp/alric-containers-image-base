@@ -114,21 +114,60 @@ alertaria se ele faltar por mais que o limite aprovado (o atual é 30 h).
 Depende de destino, credencial, dono e aprovação. O observador também pode
 falhar; dependências comuns com o canal de alerta precisam ser avaliadas.
 
-## 6. Ativar um destino quando aprovado
+## 6. Ciclo de vida e transporte plugável
 
-1. O owner aprova canal, destinatários, classificação e retenção dos dados,
-   janela de atendimento e escalonamento.
-2. Um PR revisado implementa o transporte desse canal (timeout, campo de
-   recibo, idempotência) e guarda a credencial em Actions secret com escopo
-   mínimo; o lint passa a aceitar o destino somente com esse transporte.
-3. `health.json` recebe em `external_destination` o identificador do destino,
-   nunca o segredo.
-4. Aceite controlado: emitir `--test-event`, obter `ACCEPTED` com recibo,
-   registrar o ACK humano no destino e guardar run, `event_id`, recibo, papel
-   e horário do ACK. Repetir com credencial inválida e confirmar
-   `FAILED_AUTH` registrado com o health inalterado.
+[`alert_delivery.py`](../scripts/pipeline/operations/alert_delivery.py) consome
+`alert-events.json` num job próprio, separado do health, e registra:
 
-## 7. Decisões do owner
+| Estado | Quando | Nunca a partir de |
+| --- | --- | --- |
+| `EVENT_CREATED` | O evento existe no run | — |
+| `DELIVERY_ATTEMPTED` | Cada tentativa, com status e erro mascarado | — |
+| `DELIVERED` | O destino aceitou e devolveu referência, ou uma criação ambígua foi encontrada ao reler o destino | Suposição após timeout |
+| `ACKNOWLEDGED` | Ação humana lida do destino: pessoa da lista `acknowledgers`, tipo `User`, fora de `automation_actors`, depois da entrega e com referência verificável | Entrega, recibo, HTTP 2xx, health verde ou ação de bot |
+| `RESOLVED` | A condição sumiu de um run posterior e o destino foi atualizado | — |
+
+O destino é a fonte de verdade entre runs: o alerta já aberto recebe um
+comentário em vez de nova criação; uma lista ilegível do destino impede
+qualquer escrita (`FAILED_RECONCILE`); uma criação com resultado incerto é
+reconciliada relendo o destino antes de outra tentativa; falha ao atualizar um
+alerta aberto não é repetida e aparece como `last_attempt`. Retry limitado a
+três tentativas (2 s, 8 s) somente para 408/429/5xx e falhas de conexão.
+`resolved_without_ack` evidencia alertas que se resolveram sem reconhecimento.
+
+**Opção recomendada: Issues do GitHub** (adapter `github-issues`), porque
+mantém o canal já decidido pelo owner (GitHub), não exige fornecedor nem
+licença e dá um ACK auditável na timeline da issue. Uma issue por `event_id`
+(rótulo `factory-alert-<16 hex>` e marcador `event_id:` no corpo); ACK é o
+rótulo `factory-alert-ack` aplicado por uma pessoa autorizada; resolução
+comenta, rotula `factory-alert-resolved` e fecha. Issues não criadas pelo
+adapter nunca são alteradas. Limite: não é plantão nem escalonamento.
+
+O adapter está declarado em `alerting.json` com `enabled: false`. Informações
+mínimas que o owner precisa fornecer para habilitá-lo:
+
+1. Repositório das issues. Neste repositório público as issues são públicas;
+   um repositório privado de operação exige token com escrita de issues
+   nele (o `GITHUB_TOKEN` só escreve no próprio repositório).
+2. `assignees`: quem é notificado.
+3. `acknowledgers`: quem pode reconhecer (logins).
+4. Se falha de entrega deve reprovar o job de entrega (hoje reprova; o health não muda).
+5. Expectativa de tempo até o ACK, se houver, sem virar SLO automaticamente.
+
+## 7. Ativar o destino quando aprovado
+
+1. PR com os valores acima em `alerting.json` (`enabled: true`) e
+   `external_destination: "github-issues"` em `health.json`; o lint recusa
+   adapter habilitado sem repositório, destinatários e `acknowledgers`.
+2. Job `deliver` em `pipeline-health.yml`, depois do health, com `issues: write`
+   só nele, baixando o artifact do run e enviando `alert-delivery-<attempt>`
+   como evidência (retenção declarada em `health.json`).
+3. Aceite controlado: dispatch com `--test-event`, issue `[TESTE]` criada
+   (`DELIVERED`), rótulo de ACK aplicado pela pessoa autorizada, próximo run
+   registra `ACKNOWLEDGED` com autor, horário e referência; com token sem
+   permissão, `FAILED_AUTH` aparece e o health não muda.
+
+## 8. Decisões do owner
 
 - Canal externo e destinatários (o registro de 02/10/2026 cita Teams via
   Power Automate só como possibilidade futura).

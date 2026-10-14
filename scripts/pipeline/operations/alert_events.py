@@ -37,6 +37,9 @@ HEALTH_POLICY = ROOT / 'policies/operations/health.json'
 SCHEMA_VERSION = 1
 SEVERITIES = ('critical', 'high', 'medium', 'low')
 CHANNEL = 'github-actions-run'
+ADAPTER_KEYS = {'github-issues': {'enabled', 'status', 'repository', 'assignees', 'acknowledgers',
+                                  'automation_actors', 'base_label', 'event_label_prefix', 'ack_label',
+                                  'resolved_label'}}
 # Statuses a destination can produce; none of them is a human acknowledgement.
 NOT_CONFIGURED, ACCEPTED, AMBIGUOUS = 'NOT_CONFIGURED', 'ACCEPTED', 'AMBIGUOUS'
 NOT_PROVEN = 'NOT_PROVEN'
@@ -73,7 +76,7 @@ def require(condition, message):
 
 def load_policy(path=POLICY):
     policy = json.loads(Path(path).read_text())
-    require(isinstance(policy, dict) and set(policy) - {'$comment'} == {
+    require(isinstance(policy, dict) and set(policy) - {'$comment', 'adapters'} == {
         'schema_version', 'status', 'routing_key', 'routed_levels', 'suppressed_levels',
         'severity', 'payload', 'delivery', 'acknowledgement'}, 'alerting policy: unexpected keys')
     require(policy['schema_version'] == SCHEMA_VERSION, 'alerting policy: unsupported schema')
@@ -95,7 +98,31 @@ def load_policy(path=POLICY):
     # Until an owner-approved record exists, ACK can only be NOT_PROVEN.
     require(policy['acknowledgement'] == {'required': True, 'record': None},
             'alerting policy: acknowledgement must stay required and unrecorded')
+    for name, adapter in (policy.get('adapters') or {}).items():
+        require(name in ADAPTER_KEYS and isinstance(adapter, dict) and set(adapter) == ADAPTER_KEYS[name]
+                and type(adapter['enabled']) is bool, f'alerting policy: invalid adapter {name}')
+        labels = [adapter[key] for key in ('base_label', 'event_label_prefix', 'ack_label', 'resolved_label')]
+        require(all(isinstance(label, str) and re.fullmatch(r'[a-z0-9][a-z0-9-]{0,40}', label)
+                    for label in labels) and len(set(labels)) == 4,
+                f'alerting policy: {name} labels must be distinct lowercase names')
+        if adapter['enabled']:
+            # An enabled adapter needs the owner's inputs: where, who is
+            # notified and who may acknowledge.
+            require(isinstance(adapter['repository'], str)
+                    and re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', adapter['repository'])
+                    and adapter['acknowledgers'] and adapter['assignees'],
+                    f'alerting policy: enabled {name} needs repository, assignees and acknowledgers')
     return policy
+
+
+def destination_adapter(policy, destination):
+    """The enabled adapter for a configured destination; null means none."""
+    if destination is None:
+        return None
+    adapter = (policy.get('adapters') or {}).get(destination)
+    require(adapter is not None and adapter['enabled'] is True,
+            f'external destination {destination!r} has no enabled, approved adapter')
+    return adapter
 
 
 def external_destination(path=HEALTH_POLICY):
@@ -295,14 +322,18 @@ def read_json(path):
 
 def emit(health_path, pins_path, policy, destination, run, now, test_event=False):
     events, suppressed = build(read_json(health_path), read_json(pins_path), policy, run, now, test_event)
-    if destination is not None:
-        # No transport has been approved; refuse instead of implying delivery.
-        raise ValueError('external destination configured without an approved transport')
+    # Without an enabled, approved adapter a destination is refused instead of
+    # implying delivery; with one, delivery belongs to its own job.
+    adapter = destination_adapter(policy, destination)
+    delivery = (deliver(events, None, policy['delivery']) if adapter is None else
+                [{'event_id': event['event_id'], 'occurrence_id': event['occurrence_id'],
+                  'destination': destination, 'status': 'DEFERRED_TO_DELIVERY_JOB', 'attempts': 0,
+                  'acknowledged': False} for event in events])
     return {'schema_version': SCHEMA_VERSION, 'contract_status': policy['status'],
             'generated_at': now.isoformat(), 'run': run,
             'channel': {'current': CHANNEL, 'external_destination': destination},
             'events': events, 'suppressed': suppressed,
-            'delivery': deliver(events, destination, policy['delivery']),
+            'delivery': delivery,
             'acknowledgement': {'required': True, 'status': NOT_PROVEN, 'records': []},
             'counts': {'routed': len(events), 'blocking': sum(event['blocking'] for event in events),
                        'suppressed': len(suppressed)}}
@@ -324,8 +355,8 @@ def main(argv=None):
         policy = load_policy(args.policy)
         destination = external_destination(args.health_policy)
         if args.mode == 'lint':
-            require(destination is None, 'external destination requires an approved transport first')
-            print('Contrato de alertas conferido; destino externo null.')
+            destination_adapter(policy, destination)
+            print(f'Contrato de alertas conferido; destino externo {json.dumps(destination)}.')
             return 0
         report = emit(args.health, args.pins, policy, destination, run_context(),
                       datetime.now(timezone.utc), args.test_event)
