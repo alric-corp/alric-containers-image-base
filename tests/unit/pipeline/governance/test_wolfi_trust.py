@@ -169,6 +169,38 @@ class WolfiTrustTests(unittest.TestCase):
         framework.write_text('include: distroless/image-base.yaml\n')
         self.assertEqual(wolfi_trust.config_errors(self.root), [])
 
+    def test_signature_or_remote_trust_fallback_in_build_entrypoints_is_rejected(self):
+        cases = {
+            'scripts/pipeline/artifacts/build_image.py': "run(apko + ['lock', config, '--ignore-signatures'])\n",
+            '.github/workflows/build.yml': 'run: ./apko build --ignore-signatures frameworks/x.yaml\n',
+            'Makefile': 'build:\n\tapko lock x.yaml --ignore-signatures=true\n',
+            'scripts/install.sh': 'apk add --allow-untrusted package.apk\n',
+            'scripts/pipeline/artifacts/remote.py': "common = ['--keyring-append',\n          'https://other.example/key.rsa.pub']\n",
+            'scripts/pipeline/artifacts/defaults.py': "def build(repository='https://other.example/os'):\n    pass\n",
+            'scripts/pipeline/artifacts/cli.py': "parser.add_argument('--keyring', default='https://other.example/k.rsa.pub')\n",
+        }
+        for relative, text in cases.items():
+            with self.subTest(path=relative):
+                path = self.root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text)
+                errors = wolfi_trust.config_errors(self.root)
+                self.assertTrue(any(e.startswith(relative + ':') and 'fallback' in e for e in errors), errors)
+                path.unlink()
+        recipe = self.root / 'melange/image-base-ca-certificates.yaml'
+        original = recipe.read_text()
+        recipe.write_text(original.replace('set -eu', 'set -eu\n      apk add --allow-untrusted /tmp/x.apk', 1))
+        self.assertTrue(any('fallback' in e for e in wolfi_trust.config_errors(self.root)))
+        recipe.write_text(original)
+        # Local appends, as the locked build uses today, stay allowed.
+        local = self.root / 'scripts/pipeline/artifacts/build_image.py'
+        local.write_text("common = ['--repository-append', repository, '--keyring-append', keyring]\n")
+        self.assertEqual(wolfi_trust.config_errors(self.root), [])
+        local.write_text("run(apko + ['lock', config, '--ignore-signatures'])\n")
+        with patch.object(pin_inventory, 'ROOT', self.root), patch('sys.argv', ['pin_inventory', 'trust']), \
+                patch('builtins.print'):
+            self.assertEqual(pin_inventory.main(), 1)
+
     def test_monitor_reports_same_divergent_and_unavailable_without_writes(self):
         entry = wolfi_trust.require_key(self.root)
         initial = (self.key.read_bytes(), self.policy.read_bytes())

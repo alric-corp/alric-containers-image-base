@@ -74,6 +74,14 @@ escaneadas de `distroless/`. Assim, uma mudança de configuração não amplia
 origem de pacotes nem de discovery sem revisão explícita desta regra. Isso
 não bloqueia chaves que a origem venha a anunciar.
 
+O mesmo check varre os entrypoints de build deste repositório (`scripts/`,
+`Makefile`, workflows e receitas; não testes nem docs) e rejeita fallback
+inseguro: `--ignore-signatures`, `--allow-untrusted` e chave ou repositório
+remoto acrescentado por linha de comando ou default. Os appends locais usados
+hoje (`melange-repo/packages`, `melange-repo/melange.rsa.pub`) continuam
+permitidos. O executor compartilhado valida seus próprios comandos no
+repositório dele.
+
 `wolfi_trust.lock_observation` classifica offline um `apko.lock.json` como
 `PINNED_ONLY`, `UNEXPECTED` ou `INVALID`. Os locks originais do run público
 37806495087 (fixture HGC-04) registram somente a chave fixada e as origens

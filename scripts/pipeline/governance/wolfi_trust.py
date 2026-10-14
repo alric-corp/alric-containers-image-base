@@ -21,6 +21,13 @@ REPOSITORIES = ['https://packages.wolfi.dev/os']
 # Not part of the reviewed model: extra build/runtime origins, and a base
 # image whose package index Apko installs without signature verification.
 UNREVIEWED_FIELDS = ('build_repositories', 'runtime_repositories', 'baseimage')
+# Build entrypoints must not bypass the reviewed configuration: no disabled
+# signature checks, no untrusted APKs, no remote key/repository appended by CLI.
+INSECURE_FALLBACK = re.compile(
+    r'--(?:ignore-signatures|allow-untrusted)\b'
+    r'|--(?:keyring|repository)-append(?:=|["\',\s]+)https?://'
+    r'|\b(?:keyring|repository)\s*=\s*["\']https?://'
+    r'|add_argument\(\s*["\']--(?:keyring|repository)["\'][^)]*default\s*=\s*["\']https?://')
 
 
 def local_pin(root=None, run=None):
@@ -119,6 +126,23 @@ def config_errors(root=None):
                 errors.append(f'{relative}: include must name a scanned distroless/ configuration')
         except (OSError, ValueError, AttributeError, TypeError, yaml.YAMLError) as error:
             errors.append(f'{relative}: cannot verify local trust surface ({error})')
+    return errors + insecure_fallback_errors(root)
+
+
+def insecure_fallback_errors(root=None):
+    """Scan the build entrypoints (not tests or docs) for trust bypasses."""
+    root = Path(root) if root is not None else ROOT
+    paths = {root / 'Makefile', *(root / '.github/workflows').glob('*.yml')}
+    for directory in ('scripts', 'distroless', 'frameworks', 'melange'):
+        for pattern in ('*.py', '*.sh', '*.yaml', '*.yml'):
+            paths.update((root / directory).rglob(pattern))
+    paths.discard(root / 'scripts/pipeline/governance/wolfi_trust.py')  # Defines the patterns.
+    errors = []
+    for path in sorted(path for path in paths if path.is_file()):
+        text = path.read_text(errors='replace')
+        for match in INSECURE_FALLBACK.finditer(text):
+            line = text.count('\n', 0, match.start()) + 1
+            errors.append(f'{path.relative_to(root)}:{line}: signature/trust fallback is not allowed ({match[0].strip()})')
     return errors
 
 
