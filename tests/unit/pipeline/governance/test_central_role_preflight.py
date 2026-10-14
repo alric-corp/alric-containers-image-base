@@ -11,6 +11,7 @@ import unittest
 import yaml
 
 from scripts.pipeline.governance import configuration, lint_workflow_hardening
+from tests.helpers.subprocess_env import python3_test_environment
 from scripts.pipeline.governance.pr_execution_scope import NONE, profile_for_paths
 
 
@@ -149,7 +150,10 @@ class CentralRolePreflightTests(unittest.TestCase):
                        GITHUB_REF='refs/heads/develop', GITHUB_EVENT_NAME='workflow_dispatch',
                        GITHUB_RUN_ID='123', GITHUB_RUN_ATTEMPT='1',
                        FAKE_STS_RESPONSE=json.dumps(identity), FAKE_AWS_EXIT=str(aws_exit))
-            result = subprocess.run(['bash', '-c', job['steps'][1]['run']], env=env, capture_output=True, text=True)
+            # The step runs `python3` as on the runner; bind it to this interpreter, not the developer's PATH.
+            with python3_test_environment(env) as shimmed:
+                result = subprocess.run(['bash', '-c', job['steps'][1]['run']], env=shimmed,
+                                        capture_output=True, text=True)
             report = json.loads(result.stdout) if result.stdout.strip() else None
             return result.returncode, report
 
