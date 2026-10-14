@@ -20,6 +20,7 @@ import shutil
 import sys
 import tempfile
 
+from scripts.pipeline.analytics.artifact_identity import IdentityError, verify_identity
 from scripts.pipeline.analytics.artifact_input import stage
 from scripts.pipeline.analytics.spdx import (
     AnalyticsError, LIMITS, canonical, digest, document, fields, integer, read_local, require, sha256, text,
@@ -69,7 +70,7 @@ def _manifest(value):
     check(type(artifacts) is list and artifacts, 'BINDING_MANIFEST_INVALID', 'artifacts must be a non-empty list')
     for item in artifacts:
         fields(item, ('framework', 'name', 'path', 'artifact_id', 'api_record', 'expected_subjects',
-                      'subjects_source'), label='bound artifact')
+                      'subjects_source'), ('producer_workflow', 'run_record'), label='bound artifact')
         integer(item['artifact_id'], 'artifact_id')
         for key in ('framework', 'name', 'path', 'api_record', 'subjects_source'):
             check(text(item[key], key) != '', 'BINDING_MANIFEST_INVALID', key + ' required')
@@ -81,38 +82,41 @@ def _manifest(value):
 
 
 def _api_record(raw, item, manifest):
-    """Compare the saved GitHub artifact record with the declared identity; never fill gaps."""
+    """Cross-check the saved GitHub artifact record through the single identity contract.
+
+    The actual comparison lives in `artifact_identity.verify_identity`, shared
+    with the D2 intake, so there is one contract and one set of negatives. The
+    artifacts endpoint cannot prove the run attempt or the producing workflow;
+    `verify_identity` records them as declared-not-verifiable, and the binding
+    receipt carries that verdict. `IdentityError` and this module's
+    `AnalyticsError` share the exact `CODE: message` shape, so error codes and
+    the CLI's code extraction are unchanged.
+    """
     record = document(raw, limit=LIMITS['context_bytes'])
     origin, framework = manifest['origin'], item['framework']
-    check(all(key in record for key in RECORD_KEYS) and type(record['workflow_run']) is dict
-          and all(key in record['workflow_run'] for key in RUN_KEYS), 'ARTIFACT_RECORD_INCOMPLETE',
-          framework + ': API record lacks id/name/workflow_run.{id,repository_id,head_sha}')
-    run = record['workflow_run']
-    checks = {}
-    check(type(record['id']) is int and record['id'] == item['artifact_id'], 'ARTIFACT_ID_DIFFERS',
-          framework + ': API record id differs from artifact_id')
-    check(record['name'] == item['name'], 'ARTIFACT_NAME_DIFFERS', framework + ': API record name differs')
-    check(type(run['id']) is int and run['id'] == origin['run_id'], 'ARTIFACT_RUN_DIFFERS',
-          framework + ': artifact belongs to run %s, origin declares %s' % (run['id'], origin['run_id']))
-    check(type(run['repository_id']) is int and run['repository_id'] == manifest['repository_id'],
-          'ARTIFACT_REPOSITORY_DIFFERS', framework + ': artifact run repository_id differs')
-    check(run['head_sha'] == origin['source_sha'], 'ARTIFACT_SOURCE_DIFFERS',
-          framework + ': artifact run head_sha differs from origin source_sha')
-    checks.update(artifact_id='MATCHED', name='MATCHED', run='MATCHED', repository='MATCHED', source='MATCHED')
-    if 'head_repository_id' in run:
-        check(run['head_repository_id'] == manifest['repository_id'], 'ARTIFACT_REPOSITORY_DIFFERS',
-              framework + ': artifact run head repository differs (fork)')
-        checks['head_repository'] = 'MATCHED'
-    else:
-        checks['head_repository'] = 'NOT_PROVIDED'
-    ref = origin.get('ref')
-    if type(ref) is str and ref.startswith('refs/heads/') and 'head_branch' in run:
-        check(run['head_branch'] == ref[len('refs/heads/'):], 'ARTIFACT_BRANCH_DIFFERS',
-              framework + ': artifact run head_branch differs from origin ref')
-        checks['branch'] = 'MATCHED'
-    else:
-        checks['branch'] = 'NOT_PROVIDED' if 'head_branch' not in run else 'NOT_APPLICABLE'
-    return record, checks
+    declared = dict(framework=framework, artifact_id=item['artifact_id'], artifact_name=item['name'],
+                    repository_id=manifest['repository_id'], run_id=origin['run_id'],
+                    run_attempt=origin['run_attempt'], source_sha=origin['source_sha'], ref=origin.get('ref'))
+    if type(item.get('producer_workflow')) is dict:
+        declared['workflow'] = item['producer_workflow']
+    run_record = None
+    if 'run_record' in item:
+        run_record = document(read_local(Path(manifest['_base']) / item['run_record'],
+                                         LIMITS['context_bytes']), limit=LIMITS['context_bytes'])
+    try:
+        identity = verify_identity(declared, record, run_record)
+    except IdentityError as error:
+        refuse(error.code, str(error).split(': ', 1)[1])
+    # Translate the shared verified tier back to this module's receipt keys.
+    verified = identity['verified']
+    checks = dict(artifact_id='MATCHED', name='MATCHED', run='MATCHED', repository='MATCHED', source='MATCHED',
+                  head_repository=verified['head_repository_id'],
+                  branch={'MATCHED': 'MATCHED', 'NOT_PROVIDED': 'NOT_PROVIDED',
+                          'NOT_APPLICABLE': 'NOT_APPLICABLE'}[verified['head_branch']])
+    if 'run_attempt' in verified:
+        checks['run_attempt'] = verified['run_attempt']
+        checks['workflow_identity'] = verified['workflow_path']
+    return record, checks, identity
 
 
 def _archive(source, record, policy, framework, copies):
@@ -153,19 +157,21 @@ def bind(manifest, work, *, base_directory=Path('.')):
     check(not work.exists() and not work.is_symlink(), 'BINDING_WORK_EXISTS', 'staging directory must not exist')
     work.parent.mkdir(parents=True, exist_ok=True)
     origin, base = manifest['origin'], Path(base_directory)
+    manifest['_base'] = str(base)  # so _api_record can resolve an optional run_record path
     with tempfile.TemporaryDirectory(prefix='.sbom-artifact-binding-', dir=work.parent) as temporary:
         root = Path(temporary)
         copies = root / 'inputs'
         copies.mkdir()
         selection, bound, frameworks = [], [], set()
+        producer_identity_verified = True
         for item in manifest['artifacts']:
             framework = item['framework']
             check(framework not in frameworks, 'BINDING_MANIFEST_INVALID', 'duplicate framework ' + framework)
             frameworks.add(framework)
-            check(item['name'] == 'sbom-%s-%d' % (framework, origin['run_attempt']), 'ARTIFACT_ATTEMPT_DIFFERS',
-                  framework + ': artifact name does not carry the origin run attempt')
+            # The attempt-name check now lives in the shared identity contract.
             api_raw = read_local(base / item['api_record'], LIMITS['context_bytes'])
-            record, checks = _api_record(api_raw, item, manifest)
+            record, checks, identity = _api_record(api_raw, item, manifest)
+            producer_identity_verified = producer_identity_verified and identity['producer_identity_verified']
             source = base / item['path']
             check(not source.is_symlink(), 'BINDING_MANIFEST_INVALID', framework + ': artifact path is a symlink')
             target, archive_sha, archive_checks = _archive(source, record, manifest['archive_digest_policy'],
@@ -177,7 +183,10 @@ def bind(manifest, work, *, base_directory=Path('.')):
             bound.append(dict(framework=framework, name=item['name'], artifact_id=item['artifact_id'],
                               api_record_sha256=sha256(api_raw), archive_sha256=archive_sha,
                               api_record_expired=record.get('expired', 'NOT_PROVIDED'),
-                              subjects_source=item['subjects_source'], checks=checks))
+                              subjects_source=item['subjects_source'],
+                              producer_identity_verified=identity['producer_identity_verified'],
+                              corporate_acceptance=identity['corporate_acceptance'],
+                              identity=identity, checks=checks))
         staged = root / 'staged'
         try:
             receipt = stage(dict(schema_version=1, origin=origin, image_registry=manifest['image_registry'],
@@ -199,6 +208,8 @@ def bind(manifest, work, *, base_directory=Path('.')):
                        sample_classification=manifest['sample_classification'], origin=origin,
                        repository_id=manifest['repository_id'],
                        archive_digest_policy=manifest['archive_digest_policy'], artifacts=bound,
+                       producer_identity_verified=producer_identity_verified,
+                       corporate_acceptance='ELIGIBLE' if producer_identity_verified else 'FORBIDDEN',
                        staging_receipt_sha256=sha256(read_local(staged / 'staging-receipt.json', LIMITS['context_bytes'])),
                        batch_id=receipt['batch_id'], network_calls=0, cloud_calls=0,
                        cryptographic_authenticity='NOT_REVALIDATED', publication_authority=False,

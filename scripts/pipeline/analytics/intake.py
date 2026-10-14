@@ -18,6 +18,7 @@ import re
 import tempfile
 
 from scripts.pipeline.analytics import artifact_input
+from scripts.pipeline.analytics.artifact_identity import IdentityError, verify_identity
 from scripts.pipeline.analytics.ingest import _report_destination, _write_report
 from scripts.pipeline.analytics.ingestion_types import Destination, IngestionError, Limits, check
 from scripts.pipeline.analytics.normalize import export, prepare, read_completed
@@ -130,27 +131,43 @@ def _call(operation, identity, *args):
                              observed={'exception': type(error).__name__}) from error
 
 
+# The shared identity contract splits id/name into distinct codes; intake
+# keeps its coarser ARTIFACT_IDENTITY_DIFFERS, and its expiry and archive-byte
+# checks stay local. Everything else (run, repository/fork, source, branch) is
+# the one canonical cross-check in artifact_identity.verify_identity.
+_IDENTITY_CODE = dict(ARTIFACT_ID_DIFFERS='ARTIFACT_IDENTITY_DIFFERS',
+                      ARTIFACT_NAME_DIFFERS='ARTIFACT_IDENTITY_DIFFERS')
+
+
+def _verify_shared_identity(metadata, item, request, context):
+    """Delegate the run-identity cross-check to the single contract; map codes to intake's dialect."""
+    origin = request['origin']
+    declared = dict(framework=item['framework'], artifact_id=item['artifact_id'], artifact_name=item['name'],
+                    repository_id=request['repository_id'], run_id=origin['run_id'],
+                    run_attempt=origin['run_attempt'], source_sha=origin['source_sha'], ref=origin['ref'])
+    run_record = metadata.get('workflow_run_record')
+    try:
+        return verify_identity(declared, metadata, run_record)
+    except IdentityError as error:
+        raise IngestionError(_IDENTITY_CODE.get(error.code, error.code), **context) from error
+
+
 def _acquire(source, item, request):
     """The source's report must match the declared identity before its bytes are kept."""
     origin, identity = request['origin'], item['artifact_id']
     context = dict(stage='ACQUIRE', key=str(identity))
     metadata = _call(source.describe, identity)
     check(type(metadata) is dict and type(metadata.get('workflow_run')) is dict, 'ARTIFACT_METADATA_INVALID', **context)
-    check(metadata.get('id') == identity and metadata.get('name') == item['name'], 'ARTIFACT_IDENTITY_DIFFERS', **context)
+    # Expiry and archive bytes are intake-specific; the artifacts endpoint
+    # reports both and neither is part of the producer-identity contract.
     check(metadata.get('expired', False) is False, 'ARTIFACT_EXPIRED', **context)
     check(metadata.get('size_in_bytes') == item['archive_bytes']
           and metadata.get('digest') in (None, 'sha256:' + item['archive_sha256']), 'ARCHIVE_DIGEST_DIFFERS', **context)
-    run = metadata['workflow_run']
-    check(run.get('id') == origin['run_id'], 'ARTIFACT_RUN_DIFFERS', **context)
-    check(run.get('head_sha') == origin['source_sha'], 'ARTIFACT_SOURCE_DIFFERS', **context)
-    check(run.get('repository_id') == run.get('head_repository_id') == request['repository_id'],
-          'ARTIFACT_REPOSITORY_DIFFERS', **context)
-    check(not origin['ref'].startswith('refs/heads/') or run.get('head_branch') == origin['ref'][len('refs/heads/'):],
-          'ARTIFACT_BRANCH_DIFFERS', **context)
+    identity_block = _verify_shared_identity(metadata, item, request, context)
     raw = _call(source.read, identity, item['archive_bytes'])
     check(type(raw) is bytes and len(raw) == item['archive_bytes'] and sha256(raw) == item['archive_sha256'],
           'ARCHIVE_DIGEST_DIFFERS', **context)
-    return raw
+    return raw, identity_block
 
 
 def _coverage(data):
@@ -241,9 +258,12 @@ def process(request, config, source, root):
             stage = Path(temporary) / lot_id
             (stage / 'originals').mkdir(parents=True)
             selected = []
+            producer_identity_verified = True
             for item in request['artifacts']:
                 path = 'originals/%d.zip' % item['artifact_id']
-                (stage / path).write_bytes(_acquire(source, item, request))  # The raw original, kept as acquired.
+                raw, identity_block = _acquire(source, item, request)  # The raw original, kept as acquired.
+                (stage / path).write_bytes(raw)
+                producer_identity_verified = producer_identity_verified and identity_block['producer_identity_verified']
                 selected.append(dict(framework=item['framework'], name=item['name'], path=path,
                                      artifact_id=item['artifact_id'], expected_index_digest=item['expected_index_digest']))
             staged = _contract('STAGING_REJECTED', 'STAGE', artifact_input.stage, dict(
@@ -268,6 +288,8 @@ def process(request, config, source, root):
                             archives=[{k: item[k] for k in ('framework', 'artifact_id', 'name', 'archive_sha256', 'archive_bytes')}
                                       for item in request['artifacts']],
                             artifacts=artifacts, observation_ids=observation_ids,
+                            producer_identity_verified=producer_identity_verified,
+                            corporate_acceptance='ELIGIBLE' if producer_identity_verified else 'FORBIDDEN',
                             coverage=dict(scope='SELECTED_ARTIFACTS_ONLY', complete_factory_inventory=False,
                                           frameworks=sorted(expected))), **FLAGS)
             (stage / 'lot.json').write_bytes(canonical(lot))
