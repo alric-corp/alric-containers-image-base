@@ -409,6 +409,12 @@ class NegativeConsumptionTests(AuditedConsumerTestCase):
             verification_level='simplified', factory_checkout_commit=None, verifier_script_sha256=file_sha256(silent),
             bases={'runtime': {'framework': 'go1-26', 'build_arg': 'RUNTIME_IMAGE'}})), 'INSUFFICIENT_EVIDENCE')
 
+    def test_ecr_authentication_failure_is_refused_without_lock(self):
+        self.world['exit'] = {'aws': 254}
+        policy = self.policy(verification_level='simplified', factory_checkout_commit=None)
+        self.assertBlocked(self.verify('--runtime', RUNTIME, policy=policy), 'VERIFIER_FAILED')
+        self.assertEqual(self.calls('cosign'), [])
+
     def test_verifier_failure_or_timeout_is_refused(self):
         self.world['delays'] = {'cosign': 30}
         started = time.monotonic()
