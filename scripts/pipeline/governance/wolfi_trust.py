@@ -172,6 +172,10 @@ def lock_observation(raw, root=None):
         origins = tuple(origin + '/' for origin in REPOSITORIES) + ('melange-repo/packages/',)
         if any(not package['url'].startswith(origins) for package in contents['packages']):
             record['problems'].append('package from an unreviewed origin')
+        # Apko installs locked packages by their Q1 control hash; without it nothing is pinned.
+        if not contents['packages'] or any(not re.fullmatch(r'Q1[A-Za-z0-9+/]{27}=', str(package.get('checksum')))
+                                           for package in contents['packages']):
+            record['problems'].append('package without a pinned Q1 checksum')
         record['status'] = 'UNEXPECTED' if record['problems'] else 'PINNED_ONLY'
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
         record['problems'].append(f'unreadable lock ({error})')

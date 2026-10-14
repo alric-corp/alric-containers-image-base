@@ -277,6 +277,14 @@ class LockObservationTests(unittest.TestCase):
                        lambda c: c['packages'][0].update(url='https://other.example/os/x86_64/a.apk')):
             self.assertEqual(wolfi_trust.lock_observation(self.changed(mutate))['status'], 'UNEXPECTED')
 
+    def test_missing_or_malformed_package_checksum_is_observed(self):
+        for checksum in ('', None, 'sha1-qyFV0NZAQAnaHoGFhRwUQlzoQC0=', 'Q1short'):
+            with self.subTest(checksum=checksum):
+                record = wolfi_trust.lock_observation(self.changed(lambda c: c['packages'][0].update(checksum=checksum)))
+                self.assertEqual(record['status'], 'UNEXPECTED')
+                self.assertIn('package without a pinned Q1 checksum', record['problems'])
+        self.assertEqual(wolfi_trust.lock_observation(self.changed(lambda c: c.update(packages=[])))['status'], 'UNEXPECTED')
+
     def test_unreadable_lock_is_invalid_not_pinned(self):
         for raw in (b'not json', b'{}', b'{"contents": {"keyring": 1}}', json.dumps({'contents': []}).encode()):
             with self.subTest(raw=raw):
