@@ -11,7 +11,7 @@ import yaml
 
 from scripts.pipeline.governance import pr_execution_scope as scope
 from scripts.pipeline.governance.pr_execution_scope import profile_for_paths
-from tests.helpers.subprocess_env import bash_command
+from tests.helpers.subprocess_env import bash_command, python3_test_environment
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -118,8 +118,10 @@ class BaseResolverTests(unittest.TestCase):
         output.write_text('')
         environment = dict(os.environ, BASE_SHA=base, HEAD_SHA=head, CHANGED_PATHS=str(self.root / 'paths'),
                            RESOLVER=str(self.root / 'resolver.py'), GITHUB_OUTPUT=str(output))
-        subprocess.run(bash_command('-c', self.script), cwd=self.root, env=environment, check=True,
-                       capture_output=True, text=True, timeout=30)
+        # The step calls `python3` as on the runner; bind it to this interpreter, not the developer's PATH.
+        with python3_test_environment(environment) as shimmed:
+            subprocess.run(bash_command('-c', self.script), cwd=self.root, env=shimmed, check=True,
+                           capture_output=True, text=True, timeout=30)
         return dict(line.split('=', 1) for line in output.read_text().splitlines())['profile']
 
     def test_a_pr_cannot_lower_its_own_profile_by_editing_the_resolver(self):
