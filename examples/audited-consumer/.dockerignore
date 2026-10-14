@@ -1,0 +1,3 @@
+# Somente a aplicação entra no contexto; o lock e as evidências não.
+*
+!app/
