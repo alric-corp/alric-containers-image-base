@@ -387,6 +387,47 @@ class CustodyTests(unittest.TestCase):
         self.assertEqual(json.loads(completed.stdout), dict(state='COMPLETE_VERIFIED', profile='TEST_ONLY',
                          production_authority=False, result='READBACK_VERIFIED', reason=''))
 
+    def test_missing_preparation_inputs_are_typed_evidence_errors(self):
+        for drop in ('acquisition/context.json', 'candidates/go1-26/sbom-publication.json', 'melange-repo'):
+            with self.subTest(drop=drop):
+                zips, materials, origins, expected = fixture_inputs()
+                if drop in zips:
+                    zips.pop(drop)
+                else:
+                    materials.pop(drop)
+                    origins.pop(drop)
+                with self.assertRaises(InvalidEvidence):
+                    custody.prepare_payload(zips, materials, origins, expected, POLICY_ID)
+
+    def test_lock_diverging_from_build_inputs_is_rejected_even_when_repacked(self):
+        def mutate(files):
+            path = 'candidates/go1-26/apko.lock.json'
+            lock = document(files[path])
+            lock['contents']['packages'].pop()
+            files[path] = canonical(lock)
+        self.forge(mutate_files=mutate)
+        result = self.read()
+        self.assertEqual(result.state, custody.CustodyState.INVALID)
+        self.assertIn('build input binding', result.reason)
+
+    def test_valid_commit_cannot_be_replayed_as_another_release(self):
+        self.ready()
+        identity = self.expected.value
+        other = custody.ExpectedIdentity.freeze(dict(identity, run_attempt=2, release_id=f'r{identity["run_id"]}-a2',
+                                                     publisher=dict(identity['publisher'], run_attempt=2)))
+        self.store.transport._objects[other.prefix + 'commit.json'] = \
+            self.store.transport._objects[self.expected.prefix + 'commit.json']
+        result = self.read(expected=other)
+        self.assertEqual(result.state, custody.CustodyState.INVALID)
+        self.assertIn('payload location differs', result.reason)
+        self.assertEqual(self.read().state, custody.CustodyState.COMPLETE_VERIFIED)
+
+    def test_legacy_classification_never_hides_a_partial_custody(self):
+        custody.store_payload(self.store, self.prepared, self.expected)
+        key = f'{self.expected.value["repository_id"]}/{self.expected.value["release_id"]}'
+        legacy = custody.AdoptionPolicy(frozenset(), frozenset({key}))
+        self.assertEqual(self.read(adoption=legacy).state, custody.CustodyState.PARTIAL)
+
     def test_orphan_payload_is_partial_and_is_never_deleted(self):
         custody.store_payload(self.store, self.prepared, self.expected)
         before = self.store.keys(self.expected.prefix).keys

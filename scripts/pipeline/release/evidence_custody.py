@@ -670,6 +670,7 @@ def prepare_payload(core_zips, materials, origins, expected, policy_id):
     require(isinstance(expected, ExpectedIdentity), 'external identity required')
     require(type(core_zips) is dict and set(core_zips) == set(CORE) and type(materials) is dict
             and type(origins) is dict and set(origins) == set(materials), 'input/origin sets differ')
+    require('acquisition/context.json' in materials, 'external acquisition missing')
     context, jobs, artifacts = _acquisition(materials['acquisition/context.json'], expected)
     files = dict(materials)
     for name, raw in core_zips.items():
