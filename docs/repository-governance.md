@@ -203,3 +203,50 @@ entrega.
    aprovação; alternativa é promover HOM só por dispatch com revisor.
 6. Uso de rulesets (com bypass restrito a break-glass) em vez de proteção
    clássica no ambiente corporativo.
+
+## 9. Seleção, aplicação e rollback de Settings
+
+**Perfil vigente:** LAB (`OWNER_ACCEPTED_LAB_EXCEPTION`). Ele continua o padrão
+operacional até uma decisão diferente do owner; nenhum passo abaixo é
+executado por merge, workflow ou script deste repositório. O perfil
+corporativo não pode ser aplicado enquanto houver menos de dois mantenedores
+elegíveis com escrita.
+
+Diferenças do LAB para o corporativo (saída de `verify --profile corporate`
+sobre o estado vivo do LAB):
+
+| Controle | LAB | Corporativo |
+| --- | --- | --- |
+| `enforce_admins` | `false` | `true` |
+| Aprovações / code owner / último push | 0 / não / não | 1 / sim / sim |
+| Resolução de conversas | não | sim |
+| Required checks | 2 | 3 com o gate agregado (só depois de integrado e provado) |
+| Environment `HOM` | sem revisor | revisor com `prevent_self_review` |
+| Environment de Infra | revisor, `prevent_self_review=false` | revisor, `prevent_self_review=true` |
+| CODEOWNERS | ausente | ativo a partir do template, com slugs reais |
+
+**Aplicação** (administrador, com autorização específica; `<perfil>` é `lab` ou `corporate`):
+
+1. Pré-checagem: `verify --profile lab --json before.json` deve dar `MATCH`
+   (estado conhecido) e o perfil escolhido deve passar no `lint`.
+2. Corpo do PUT a partir do arquivo versionado:
+   `jq '.profiles.<perfil>.protection' policies/governance/develop-protection.json > body.json`.
+3. `gh api --method PUT repos/alric-corp/alric-containers-image-base/branches/develop/protection --input body.json`.
+4. Somente no corporativo: Environments `HOM` e `lab-image-base-infra` com
+   `reviewers` (ids numéricos de times/usuários), `prevent_self_review: true` e
+   a mesma `deployment_branch_policy` personalizada, via
+   `PUT repos/.../environments/<nome>`; CODEOWNERS ativo por PR.
+5. Pós-checagem: `verify --profile <perfil>` deve dar `MATCH`. Qualquer
+   `DRIFT` ou leitura inconclusiva aciona o rollback.
+
+**Gate agregado (opcional):** primeiro um PR acrescenta
+`Factory PR validation gate` ao perfil desejado no JSON; depois
+`PATCH repos/.../branches/develop/protection/required_status_checks` com
+`{"strict": true, "checks": [...]}` (três checks, `app_id` 15368) e `verify`.
+Rollback: o mesmo `PATCH` com os dois checks do LAB.
+
+**Rollback:** `jq '.profiles.lab.protection' ... > lab.json` e `PUT` dele;
+nos Environments, `reviewers: []` mantendo a política de branch; `verify
+--profile lab` deve voltar a `MATCH`. Administradores conseguem editar a
+proteção mesmo com `enforce_admins` ligado, então o rollback não depende de
+outro revisor. Alterar Settings não dispara workflows.
