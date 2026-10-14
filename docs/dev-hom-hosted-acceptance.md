@@ -164,3 +164,63 @@ manualmente: inspecionar `events/` e holds, registrar e decidir com o owner.
 ECR não oferece transação entre repositórios; um par parcial fica em hold
 até a retomada explícita. Rollback é recovery para uma release HOM aprovada
 anterior ou manter HOM pausado e desabilitar `promote-hom.json` por PR.
+
+## 16. Modos operacionais
+
+| Aspecto | M1 — promoção sujeita a revisor humano | M2 — promoção automática por cron e policy |
+| --- | --- | --- |
+| Mecanismo | `promote-hom.json` habilitado e revisor obrigatório no Environment `HOM` (`promote` e `recover` usam esse Environment) | `promote-hom.json` habilitado; o cron `17 * * * *` promove a release elegível mais nova depois do soak de 6 h |
+| Quem decide o momento | O revisor aprova o run planejado e rejeita os demais | O scheduler, de melhor esforço |
+| Candidato | O operador confere a release antes de aprovar; dispatch com `release=<id>` | A seleção mais nova elegível, que pode mudar se outra release completar o soak |
+| Gates técnicos | Todos (manifesto, soak, quarentena, trust, re-scan, cópia, read-back, holds) | Os mesmos |
+| Settings | Revisor em `HOM`. No LAB, sem `prevent_self_review` (com ele, quem dispara não aprova e o owner único trava) | Nenhuma |
+| Riscos | Aprovação do próprio autor não é segregação de funções; cada run horário que chegar ao job pede aprovação até o fim da janela; esquecer de aprovar só adia (falha segura) | Promoção em horário não controlado; uma release diferente da planejada pode ser promovida; sem ponto humano antes da escrita |
+| Saída | Remover o revisor, se o owner não o quiser permanente | Desabilitar `promote-hom.json` por PR |
+
+**Recomendação para a primeira homologação: M1.** Na primeira escrita real em
+HOM, controlar o momento e o candidato vale mais que a automação; o revisor
+também cobre a recuperação (`recover-stable.yml` usa o mesmo Environment). M2
+só depois de um aceite M1 completo e de decisão do owner sobre operação
+contínua.
+
+## 17. Monitoramento durante a janela
+
+- Runs de `promote-stable.yml` e `recover-stable.yml`: conclusão e o passo de
+  lifecycle (`release-outcome.json` em `release-hom-<attempt>` e `recovery-<attempt>`).
+- `promotion-batch-<attempt>`: o health lê esse artifact do job
+  `Authorize and promote stable candidates`; com HOM habilitado, o alerta
+  `stable_age_hours` passa a refletir as promoções HOM confirmadas.
+- Eventos de alerta do health (`alert-events.json`) e, se o destino externo já
+  estiver aprovado, as entregas e ACKs correspondentes.
+- Leitura pontual do Store HOM (`state/*.json`, `events/`) e das tags `stable`
+  no ECR HOM depois de cada operação.
+
+## 18. Falha parcial: diagnóstico e decisão
+
+1. Não reexecutar. Ler `events/r<run>-a<attempt>/` (`started`, `failed`), o
+   `state/*.json` dos dois membros (hold e `pending_release`) e as duas tags
+   `stable` no ECR HOM.
+2. Classificar: falha antes de qualquer escrita (sem hold novo; corrigir a
+   causa e repetir o dispatch), escrita parcial (holds nos dois membros) ou
+   escrita completa com falha de metadado (holds, `completed` e `failed` no
+   mesmo evento).
+3. Decidir com o owner: retomar a mesma release com `release=<id>` e
+   `resume-automation=true` depois de corrigir a causa, ou recovery para a
+   release HOM aprovada anterior. Nunca editar tags ou `state/` à mão.
+4. Registrar o diagnóstico, a decisão e o run que reconciliou o par.
+
+## 19. Cobertura do roteiro
+
+| Requisito | Seções | Regressão local (`test_lifecycle_acceptance.py`) |
+| --- | --- | --- |
+| Pré-requisitos da G01 | 8 | — (operação da Frente A) |
+| Environment HOM e revisores | 3, 16 | `test_disabled_hom_promotion_exits_without_touching_the_store` |
+| Cron e automação | 3, 16 | `test_resume_requires_an_explicit_manual_dispatch` |
+| Candidato autorizado | 4, 5, 10 | `test_missing_dev_approval_is_rejected_before_any_copy`, `test_quarantined_digest_is_rejected_before_copy`, `test_one_corrupted_dev_record_stops_selection_instead_of_splitting`, `test_release_identity_must_be_exact` |
+| Read-back | 10, 13 | `test_target_tag_resolving_to_another_digest_blocks_the_release`, `test_persistent_ambiguous_readback_keeps_every_member_held`, `test_readback_failures_are_never_treated_as_no_stable` |
+| Estados de hold | 12, 15, 18 | `test_abrupt_interruption_after_one_member_leaves_holds_and_no_pass`, `test_metadata_failure_after_the_tag_writes_re_holds_the_pair`, `test_stable_changed_outside_the_factory_blocks_before_holds_and_writes` |
+| Recuperação | 12 | `test_receipt_bound_to_other_content_is_not_a_recovery_target`, `test_expired_bytes_invalid_trust_or_new_vulnerability_block_recovery`, `test_recovery_requires_an_operational_reason`, `test_successful_recovery_keeps_the_post_recovery_pause` |
+| Falha parcial e reexecução | 15, 18 | `test_interruption_between_manifest_and_writes_completes_exactly_once`, `test_explicit_rerun_of_a_completed_promotion_is_refused_without_copy`, `test_divergent_hom_manifest_for_the_same_release_is_rejected` |
+| Rollback | 15, 18 | `test_successful_recovery_keeps_the_post_recovery_pause` |
+| Monitoramento | 17 | `test_failed_gate_never_reports_promotion_to_operational_health` |
+| Evidências finais | 13, 14 | — (verificação hospedada por leitura) |

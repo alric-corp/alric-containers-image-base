@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -391,6 +392,17 @@ class EntrypointTests(AcceptanceCase):
         for release in ('latest', 'r12345', 'r12345-a1; rm -rf /', ''):
             with self.subTest(release=release):
                 self.assertEqual(self.run_main('recover-hom', '--release', release, '--reason', 'x'), 1)
+
+
+class RunbookCoverageTests(unittest.TestCase):
+    def test_every_scenario_cited_by_the_hosted_runbook_exists(self):
+        runbook = (Path(__file__).resolve().parents[4] / 'docs/dev-hom-hosted-acceptance.md').read_text()
+        cited = set(re.findall(r'`(test_[a-z0-9_]+)`', runbook))
+        defined = {name for case in (PromotionPreWriteTests, StableWriteTests, ReexecutionTests,
+                                     RecoveryTests, EntrypointTests) for name in dir(case)
+                   if name.startswith('test_')}
+        self.assertTrue(cited)
+        self.assertEqual(cited - defined, set())
 
 
 if __name__ == '__main__':
