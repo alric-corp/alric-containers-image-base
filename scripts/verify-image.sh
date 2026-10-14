@@ -31,9 +31,12 @@
 #     [--repo <owner/repositorio-fonte>] [--ref <branch-do-assinador>] \
 #     [--report-dir <diretorio-novo>]
 #
-# As saídas de cada verificador ficam em um diretório privado (0700): o
-# informado em --report-dir, que não pode existir ou precisa estar vazio, ou
-# um novo criado por mktemp. Nunca em nomes fixos de um /tmp compartilhado.
+# As saídas de cada verificador ficam em um diretório privado (0700) e
+# exclusivo desta verificação, nunca em nomes fixos de um /tmp compartilhado.
+# Com --report-dir, o caminho precisa ser NOVO: qualquer coisa preexistente
+# (arquivo, diretório mesmo vazio ou link simbólico, inclusive quebrado) é
+# recusada com saída 2 antes de qualquer verificação, e um pai inexistente
+# também falha. Sem --report-dir, um diretório exclusivo é criado por mktemp.
 #
 # Exemplo histórico (Go 1.26, digest comprovado na main antes da migração):
 #   scripts/verify-image.sh go1-26 \
@@ -82,15 +85,6 @@ done
 [[ "$FRAMEWORK" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || { echo "framework inválido: $FRAMEWORK" >&2; exit 2; }
 [[ -n "$AWS_ACCOUNT_ID" ]] || { echo "--account é obrigatório: nenhuma conta é assumida por padrão" >&2; exit 2; }
 [[ "$AWS_ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || { echo "--account deve ter 12 dígitos: '$AWS_ACCOUNT_ID'" >&2; exit 2; }
-# Um caminho existente só é aceito se for diretório real (não link) e vazio.
-if [[ -n "$REPORT_DIR" ]]; then
-  if [[ -L "$REPORT_DIR" ]] || { [[ -e "$REPORT_DIR" ]] && [[ ! -d "$REPORT_DIR" ]]; }; then
-    echo "--report-dir deve ser um diretório real: '$REPORT_DIR'" >&2; exit 2
-  fi
-  if [[ -d "$REPORT_DIR" ]] && [[ -n "$(ls -A "$REPORT_DIR")" ]]; then
-    echo "--report-dir já contém arquivos; use um diretório novo: '$REPORT_DIR'" >&2; exit 2
-  fi
-fi
 
 check_dependencies() {
   local missing=""
@@ -104,12 +98,26 @@ check_dependencies() {
 }
 check_dependencies
 
+# Contrato único de diretório de relatórios (G21): cada verificação escreve em
+# um diretório privado (0700) e exclusivo; nunca em nomes fixos de um /tmp
+# compartilhado. Com --report-dir, o caminho precisa ser novo: qualquer coisa
+# preexistente (arquivo, diretório mesmo vazio ou link simbólico, inclusive
+# quebrado) é recusada antes de qualquer verificação -- fecha a janela de corrida
+# em que outro processo popularia um diretório "vazio". Sem --report-dir, um
+# diretório exclusivo é criado por mktemp. Um pai inexistente faz o mkdir falhar
+# (sem -p): comportamento fechado e determinístico.
+umask 077
 if [[ -n "$REPORT_DIR" ]]; then
-  mkdir -p "$REPORT_DIR"
+  if [[ -e "$REPORT_DIR" || -L "$REPORT_DIR" ]]; then
+    echo "--report-dir já existe; informe um caminho novo: '$REPORT_DIR'" >&2
+    exit 2
+  fi
+  mkdir -m 700 -- "$REPORT_DIR" 2>/dev/null \
+    || { echo "não foi possível criar --report-dir (pai inexistente?): '$REPORT_DIR'" >&2; exit 2; }
 else
-  REPORT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/verify-image.XXXXXX")
+  REPORT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/verify-image.XXXXXXXX") \
+    || { echo "não foi possível criar o diretório de relatórios" >&2; exit 2; }
 fi
-chmod 700 "$REPORT_DIR"
 
 REPOSITORY="image-base-${FRAMEWORK}"
 REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"

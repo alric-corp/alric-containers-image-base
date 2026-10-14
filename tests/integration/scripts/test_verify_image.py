@@ -242,16 +242,27 @@ class VerifyImageReportDirectoryTests(unittest.TestCase):
             self.assertTrue((directory / 'signature.json').is_file())
 
     def test_unsafe_report_directory_is_refused_before_any_external_command(self):
+        # Unified G21 contract: --report-dir must be a brand-new path. Any
+        # pre-existing path -- occupied dir, empty dir, regular file, or symlink
+        # (even broken) -- is refused before any external command, and a missing
+        # parent fails closed. This removes the check-then-use race where another
+        # process could populate an "empty" directory between the test and writes.
         occupied = self.work / 'occupied'
         occupied.mkdir()
         (occupied / 'stale.json').write_text('{}')
+        empty = self.work / 'empty'
+        empty.mkdir()
         regular = self.work / 'file'
         regular.write_text('x')
-        cases = [occupied, regular]
+        missing_parent = self.work / 'absent' / 'reports'
+        cases = [occupied, empty, regular, missing_parent]
         if os.name != 'nt':
             link = self.work / 'link'
             link.symlink_to(self.work / 'elsewhere', target_is_directory=True)
             cases.append(link)
+            broken = self.work / 'broken-link'
+            broken.symlink_to(self.work / 'does-not-exist')
+            cases.append(broken)
         for path in cases:
             with self.subTest(path=path.name):
                 result = self._run('--report-dir', str(path))
@@ -259,6 +270,8 @@ class VerifyImageReportDirectoryTests(unittest.TestCase):
                 self.assertIn('--report-dir', result.stderr)
                 self.assertFalse(self.log.exists(), self.log.read_text() if self.log.exists() else '')
         self.assertEqual((occupied / 'stale.json').read_text(), '{}')
+        self.assertEqual(sorted(p.name for p in empty.iterdir()), [])
+        self.assertFalse((self.work / 'absent').exists())
 
 
 if __name__ == '__main__':
