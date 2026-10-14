@@ -127,6 +127,17 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual((ack['status'], ack['by']), ('ACKNOWLEDGED', 'owner'))
         self.assertTrue(ack['reference'].startswith('https://github.com/x/y/issues/1#event-'))
 
+    def test_acknowledgement_needs_a_reference_and_a_readable_time(self):
+        record = delivery.Record('e', 'https://github.com/x/y/issues/1', 1, NOW.isoformat())
+        later, reference = (NOW + timedelta(minutes=1)).isoformat(), 'https://github.com/x/y/issues/1#event-1'
+        cases = {'no verifiable reference': delivery.Ack('owner', 'User', later, ''),
+                 'unreadable timestamp': delivery.Ack('owner', 'User', 'yesterday', reference)}
+        for reason, ack in cases.items():
+            with self.subTest(reason=reason):
+                self.assertEqual(delivery.verify_ack(ack, record, {'owner'}, set()), (False, reason))
+        self.assertEqual(delivery.verify_ack(delivery.Ack('owner', 'User', later, reference), record, {'owner'}, set()),
+                         (True, ''))
+
     def test_a_repeated_condition_updates_the_open_alert_instead_of_duplicating(self):
         routed = events()
         self.cycle(routed)
@@ -182,6 +193,19 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual((summary['delivery'], summary['last_attempt']), ('ALREADY_DELIVERED', 'FAILED_AUTH'))
         self.assertEqual(self.client.calls.count('comment'), 1)
         self.assertNotIn(TOKEN, json.dumps(result))
+
+    def test_failed_update_of_an_open_alert_is_never_retried_or_reconciled(self):
+        # Only creation is retried or reconciled; repeating an update could duplicate it.
+        [event] = events(health(('alert', 'stable_age_hours', 'go1-26', 'x')))
+        for error in (delivery.HttpError(429), delivery.HttpError(503), alerts.TransportError('refused', sent=False)):
+            self.setUp()
+            self.cycle([event])
+            self.client.fail('comment', error)
+            with self.subTest(error=repr(error)):
+                result = self.cycle([event])
+                self.assertEqual(result['summary'][event['event_id']]['delivery'], 'ALREADY_DELIVERED')
+                self.assertEqual((self.client.calls.count('comment'), self.sleeps), (1, []))
+                self.assertNotIn('DELIVERED', self.states(result, event['event_id']))
 
     def test_cleared_condition_resolves_and_reports_missing_acknowledgement(self):
         [event] = events(health(('alert', 'stable_age_hours', 'go1-26', 'x')))
