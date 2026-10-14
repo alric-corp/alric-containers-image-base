@@ -11,6 +11,7 @@ import unittest
 import yaml
 
 from scripts.pipeline.governance import configuration, lint_workflow_hardening
+from scripts.pipeline.governance.pr_execution_scope import NONE, profile_for_paths
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -106,12 +107,14 @@ class CentralRolePreflightTests(unittest.TestCase):
     def test_preflight_changes_do_not_match_publication_paths_but_cutover_will(self):
         publisher = yaml.safe_load((ROOT / '.github/workflows/workflow.yml').read_text())
         events = publisher.get('on', publisher.get(True))
-        for event in ('push', 'pull_request'):
-            patterns = events[event]['paths']
-            for name in CHANGED_PATHS:
-                self.assertFalse(any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns), (event, name))
-            for name in ('scripts/pipeline/governance/configuration.py', 'policies/pipeline/config.json'):
-                self.assertTrue(any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns), name)
+        patterns = events['push']['paths']
+        # PRs run unfiltered; the resolver decides whether images are validated.
+        for name in CHANGED_PATHS:
+            self.assertFalse(any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns), ('push', name))
+            self.assertEqual(profile_for_paths([name]), NONE, ('pull_request', name))
+        for name in ('scripts/pipeline/governance/configuration.py', 'policies/pipeline/config.json'):
+            self.assertTrue(any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns), name)
+            self.assertNotEqual(profile_for_paths([name]), NONE, ('pull_request', name))
 
     def test_preflight_identity_matches_operational_reference_after_stage_b(self):
         cfg = configuration.configuration()
