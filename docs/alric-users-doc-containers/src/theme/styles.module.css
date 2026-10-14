@@ -1,0 +1,3 @@
+.withoutNavbar :global(.navbar) {
+  display: none;
+}

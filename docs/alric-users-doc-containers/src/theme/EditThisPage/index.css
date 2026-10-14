@@ -1,0 +1,14 @@
+/* Botão "Edit this page" */
+.theme-edit-this-page {
+  background-color: transparent;
+  border: none;
+  color: var(--ifm-color-primary);
+  cursor: pointer;
+  transition: color 0.2s ease, text-decoration 0.2s ease;
+}
+
+/* Efeito hover */
+.theme-edit-this-page:hover {
+  color: var(--ifm-color-primary-dark);
+  text-decoration: underline;
+}

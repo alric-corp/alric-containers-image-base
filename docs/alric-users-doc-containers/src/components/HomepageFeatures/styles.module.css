@@ -1,0 +1,108 @@
+/* ========================
+   Features estáticas
+   ======================== */
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
+.feature {
+  background: var(--ifm-card-background); /* usado pelo tema */
+  padding: 1.5rem;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+}
+
+.feature:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.feature img {
+  width: 64px;
+  margin-bottom: 1rem;
+}
+
+.feature h3 {
+  margin-bottom: 0.5rem;
+  font-size: 1.3rem;
+  color: var(--ifm-font-color-base); /* adaptável ao tema */
+}
+
+.feature p {
+  margin-bottom: 1rem;
+  color: var(--ifm-font-color); /* adaptável ao tema */
+  font-size: 0.95rem;
+}
+
+.feature .link {
+  color: var(--ifm-color-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.feature .link:hover {
+  text-decoration: underline;
+}
+
+/* ========================
+   Runners - Carrossel
+   ======================== */
+.runners {
+  margin: 3rem 0;
+  text-align: center;
+}
+
+.runnerCard {
+  background: var(--ifm-card-background); /* usado pelo tema */
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  transition: background 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.runnerCard:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.runnerCard h3 {
+  margin-bottom: 1rem;
+  font-size: 1.4rem;
+  color: var(--ifm-font-color-base);
+}
+
+.runnerCard p {
+  font-size: 1rem;
+  color: var(--ifm-font-color);
+}
+
+/* ========================
+   Títulos e seção
+   ======================== */
+.runners h2,
+.features h2 {
+  margin-top: 3rem;
+  margin-bottom: 2rem;
+  color: var(--ifm-font-color-base);
+}
+
+/* ========================
+   Ajustes Swiper
+   ======================== */
+.swiper-button-prev,
+.swiper-button-next {
+  color: var(--ifm-color-primary);
+}
+
+.swiper-pagination-bullet {
+  background: var(--ifm-color-primary);
+}
+
+.swiper-pagination-bullet-active {
+  background: var(--ifm-color-primary-dark);
+}

@@ -1,0 +1,251 @@
+/* Paleta de cores do Itaú */
+:root {
+  --ifm-color-primary: #ec7000;
+  --ifm-color-primary-dark: #d46300;
+  --ifm-color-primary-darker: #c55d00;
+  --ifm-color-primary-darkest: #a34c00;
+  --ifm-color-primary-light: #ef7e1a;
+  --ifm-color-primary-lighter: #f08829;
+  --ifm-color-primary-lightest: #f4a855;
+
+  /* Gradientes corporativos */
+  --gradient-primary: linear-gradient(135deg, #ec7000, #d46300);
+  --gradient-secondary: linear-gradient(135deg, #2196f3, #1976d2);
+
+  /* Fonte corporativa */
+  --ifm-font-family-base: "Inter", "Segoe UI", system-ui, sans-serif;
+  --ifm-heading-font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+
+  /* Espaçamentos */
+  --ifm-spacing-horizontal: 1.5rem;
+  --ifm-global-radius: 8px;
+}
+
+/* Dark mode */
+[data-theme="dark"] {
+  --ifm-color-primary: #ff8c42;
+  --ifm-color-primary-dark: #ff7a24;
+  --ifm-color-primary-darker: #ff6f17;
+  --ifm-color-primary-darkest: #e85a00;
+  --ifm-color-primary-light: #ff9e60;
+  --ifm-color-primary-lighter: #ffa96d;
+  --ifm-color-primary-lightest: #ffc397;
+}
+
+/* Customizações do header */
+.navbar {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.navbar__title {
+  font-weight: 700;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Cards customizados */
+.custom-card {
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: var(--ifm-global-radius);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.custom-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Botões customizados */
+.button--itau {
+  background: var(--gradient-primary);
+  border: none;
+  color: white;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.button--itau:hover {
+  background: var(--gradient-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(236, 112, 0, 0.3);
+}
+
+/* Animações */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+/* Responsividade melhorada */
+@media screen and (max-width: 768px) {
+  :root {
+    --ifm-spacing-horizontal: 1rem;
+  }
+}
+
+/* Lista numerada com círculos preenchidos */
+ol.circle-numbers {
+  counter-reset: section; /* reinicia contador */
+  list-style: none; /* remove numeração padrão */
+  padding-left: 0;
+}
+
+ol.circle-numbers li {
+  counter-increment: section; /* incrementa contador */
+  margin-bottom: 0.5em;
+  position: relative;
+  padding-left: 2.5em; /* espaço para o círculo */
+}
+
+ol.circle-numbers li::before {
+  content: counter(section); /* mostra o número */
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 50%; /* deixa circular */
+  background-color: #0366d6; /* cor do círculo */
+  color: white; /* cor do número */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+/* Animações */
+.anim-rotate {
+  animation: rotate 2s linear infinite;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ...existing code... */
+
+/* Modo Foco */
+.focus-mode .navbar {
+  display: none !important;
+}
+
+.focus-mode .theme-doc-sidebar-container {
+  display: none !important;
+}
+
+.focus-mode .main-wrapper {
+  margin-left: 0 !important;
+  max-width: 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+}
+
+.focus-mode .container {
+  max-width: 900px !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+  padding: 2rem 3rem !important;
+}
+
+.focus-mode .theme-doc-toc-desktop {
+  display: none !important;
+}
+
+.focus-mode .theme-doc-breadcrumbs {
+  display: none !important;
+}
+
+.focus-mode .theme-edit-this-page {
+  display: none !important;
+}
+
+.focus-mode .pagination-nav {
+  margin-top: 3rem !important;
+  max-width: 900px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.focus-mode .theme-doc-markdown {
+  max-width: none !important;
+}
+
+.focus-mode .row {
+  justify-content: center !important;
+}
+
+.focus-mode .col {
+  max-width: 900px !important;
+  flex: none !important;
+}
+
+/* Animação suave para transições */
+.navbar,
+.theme-doc-sidebar-container,
+.main-wrapper,
+.container,
+.theme-doc-toc-desktop {
+  transition: all 0.3s ease;
+}
+
+/* Responsivo para modo foco */
+@media (max-width: 768px) {
+  .focus-mode .container {
+    padding: 1.5rem 2rem !important;
+    max-width: 100% !important;
+  }
+}
+
+/* ...existing code... */ /* ...existing code... */
+
+/* Controle de tamanho de fonte */
+:root {
+  --content-font-size: 16px;
+}
+
+.theme-doc-markdown p,
+.theme-doc-markdown li,
+.theme-doc-markdown td,
+.theme-doc-markdown blockquote {
+  font-size: var(--content-font-size) !important;
+  line-height: 1.6 !important;
+}
+
+.theme-doc-markdown h1 {
+  font-size: calc(var(--content-font-size) * 2.2) !important;
+}
+
+.theme-doc-markdown h2 {
+  font-size: calc(var(--content-font-size) * 1.8) !important;
+}
+
+.theme-doc-markdown h3 {
+  font-size: calc(var(--content-font-size) * 1.4) !important;
+}
+
+.theme-doc-markdown h4 {
+  font-size: calc(var(--content-font-size) * 1.2) !important;
+}
+
+.theme-doc-markdown h5,
+.theme-doc-markdown h6 {
+  font-size: calc(var(--content-font-size) * 1.1) !important;
+}
