@@ -5,7 +5,9 @@
 > abaixo não estão mais ativos. Nomes, workflows e operação atuais:
 > [Distroless SBOM Analytics — operação](sbom-analytics-operations.md); transição:
 > [migração](sbom-analytics-migration.md). Caminhos de arquivos citados abaixo
-> refletem o layout histórico.
+> refletem o layout histórico. O bucket da POC foi excluído em 2026-10-12; o
+> workgroup e o database `poc_distroless_sbom` ainda existem, sem uso
+> operacional, e aguardam remoção autorizada.
 
 The manual executor calls the merged normalizer/snapshot/S3 APIs. It does not add
 implicit upload to the offline planner. `sbom-analytics-lab-poc.yml` uses only

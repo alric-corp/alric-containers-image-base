@@ -1,0 +1,68 @@
+# PROPOSTA CORPORATIVA (G02) — NÃO ATIVA.
+#
+# O GitHub só lê CODEOWNERS em .github/, na raiz ou em docs/; este template
+# fica em policies/governance/ de propósito. Os donos `@<org>/<...>` são
+# placeholders sintaticamente inválidos: substitua-os pelos slugs verificados
+# dos times corporativos (com permissão de escrita) antes de copiar o arquivo
+# para .github/CODEOWNERS. O teste de governança rejeita um CODEOWNERS ativo
+# que ainda contenha placeholders.
+#
+# Semântica do GitHub: vale a última linha que casa com o arquivo, e qualquer
+# um dos donos listados nessa linha satisfaz a revisão de code owner. Para
+# exigir Security ou Cloud/IAM num caminho, a linha lista somente esse time.
+#
+# No LAB, o owner removeu o CODEOWNERS em 03165e6 (09/10/2026): o time do
+# sandbox tem um único membro e revisão obrigatória travaria o mantenedor.
+# Ver docs/repository-governance.md.
+
+# Padrão: qualquer arquivo novo tem dono.
+*                                              @<org>/<factory-maintainers>
+
+# Produto, regras de pipeline e gates de publicação.
+/frameworks/                                   @<org>/<factory-maintainers>
+/distroless/                                   @<org>/<factory-maintainers>
+/melange/                                      @<org>/<factory-maintainers>
+/scripts/                                      @<org>/<factory-maintainers>
+/policies/                                     @<org>/<factory-maintainers>
+/schemas/                                      @<org>/<factory-maintainers>
+/sql/                                          @<org>/<factory-maintainers>
+/infra/                                        @<org>/<factory-maintainers>
+/tests/runtime/                                @<org>/<factory-maintainers>
+/tests/consumer-apps/                          @<org>/<factory-maintainers>
+/.github/                                      @<org>/<factory-maintainers>
+/Makefile                                      @<org>/<factory-maintainers>
+/renovate.json                                 @<org>/<factory-maintainers>
+/requirements-dev.txt                          @<org>/<factory-maintainers>
+/requirements-sbom-analytics.txt               @<org>/<factory-maintainers>
+
+# Workflows com `id-token: write` (OIDC/AWS, publicação, promoção, recovery,
+# Infra e analytics) ou que recebem secrets: aprovação de Security obrigatória.
+/.github/workflows/app-certification.yml       @<org>/<security-reviewers>
+/.github/workflows/build-base-images.yml       @<org>/<security-reviewers>
+/.github/workflows/catalog-certification.yml   @<org>/<security-reviewers>
+/.github/workflows/dev-stable.yml              @<org>/<security-reviewers>
+/.github/workflows/factory-central-role-preflight.yml @<org>/<security-reviewers>
+/.github/workflows/infra-apply.yml             @<org>/<security-reviewers>
+/.github/workflows/infra-pr.yml                @<org>/<security-reviewers>
+/.github/workflows/promote-stable.yml          @<org>/<security-reviewers>
+/.github/workflows/recover-stable.yml          @<org>/<security-reviewers>
+/.github/workflows/renovate.yml                @<org>/<security-reviewers>
+/.github/workflows/sbom-analytics-athena.yml   @<org>/<security-reviewers>
+/.github/workflows/sbom-analytics-s3.yml       @<org>/<security-reviewers>
+/.github/workflows/workflow.yml                @<org>/<security-reviewers>
+
+# Âncoras de confiança da cadeia de suprimentos e identidades de assinatura.
+/melange/keys/                                 @<org>/<security-reviewers>
+/melange/certificates/                         @<org>/<security-reviewers>
+/policies/release/signing-identities.json      @<org>/<security-reviewers>
+/scripts/pipeline/governance/wolfi_trust.py    @<org>/<security-reviewers>
+/scripts/verify-image.sh                       @<org>/<security-reviewers>
+
+# IAM, trust OIDC e state de infraestrutura: aprovação de Cloud/IAM obrigatória.
+/policies/aws/                                 @<org>/<cloud-iam-reviewers>
+/infra/iam/                                    @<org>/<cloud-iam-reviewers>
+/infra/backend.py                              @<org>/<cloud-iam-reviewers>
+
+# Contratos de governança e o próprio arquivo de ownership.
+/policies/governance/                          @<org>/<security-reviewers>
+/.github/CODEOWNERS                            @<org>/<security-reviewers>

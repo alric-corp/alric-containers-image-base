@@ -69,26 +69,3 @@ run "reject_invalid_bucket" {
   }
   expect_failures = [var.bucket_name]
 }
-
-# Transitional legacy child for the replaced historical bucket: same controls and policy,
-# only destruction enabled. The active child above keeps both safeguards.
-run "transitional_legacy_bucket" {
-  command = plan
-  module {
-    source = "../s3-legacy"
-  }
-  variables {
-    bucket_name           = "example-distroless-sbom-legacy"
-    bucket_region         = "us-east-1"
-    expected_bucket_owner = "123456789012"
-    tags                  = { ManagedBy = "Terraform", Source = "alric-corp/alric-containers-image-base" }
-  }
-  assert {
-    condition     = aws_s3_bucket.sbom.force_destroy == true && aws_s3_bucket.sbom.object_lock_enabled == false
-    error_message = "Only the transitional bucket may be force-destroyed."
-  }
-  assert {
-    condition     = jsondecode(aws_s3_bucket_policy.sbom.policy).Statement[1].Resource == "arn:aws:s3:::example-distroless-sbom-legacy/sbom-analytics/poc-v1/snapshots/*" && one(aws_s3_bucket_versioning.sbom.versioning_configuration).status == "Enabled"
-    error_message = "The replaced bucket keeps its original policy and versioning until removal."
-  }
-}

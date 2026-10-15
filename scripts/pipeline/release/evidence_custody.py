@@ -17,7 +17,7 @@ import sys
 from typing import Protocol
 
 from scripts.pipeline.release.evidence_archive import (
-    LIMITS, ExpansionBudget, InvalidEvidence, canonical, check_inventory, digest,
+    LIMITS, ExpansionBudget, InvalidEvidence, UnsafeDestination, canonical, check_inventory, digest,
     document, extract_new, fields, inventory, json_value, make_zip, positive, read_zip, require,
     safe_path, sha256,
 )
@@ -108,7 +108,11 @@ class ExpectedIdentity:
         return cls(canonical(value))
 
     def __post_init__(self):
-        _identity(document(self.raw))
+        value = document(self.raw)
+        # Authentication binds sha256(raw): another spelling of the same identity
+        # could never match a signed manifest, so reject it at configuration time.
+        require(canonical(value) == self.raw, 'external identity must be canonical JSON')
+        _identity(value)
 
     @property
     def value(self):
@@ -666,6 +670,7 @@ def prepare_payload(core_zips, materials, origins, expected, policy_id):
     require(isinstance(expected, ExpectedIdentity), 'external identity required')
     require(type(core_zips) is dict and set(core_zips) == set(CORE) and type(materials) is dict
             and type(origins) is dict and set(origins) == set(materials), 'input/origin sets differ')
+    require('acquisition/context.json' in materials, 'external acquisition missing')
     context, jobs, artifacts = _acquisition(materials['acquisition/context.json'], expected)
     files = dict(materials)
     for name, raw in core_zips.items():
@@ -871,6 +876,8 @@ def recover(store, expected, policy, authenticator, target, *, adoption=None):
             return CustodyRead(CustodyState.ADOPTION_UNKNOWN, 'release not classified by external adoption policy')
         require(result.object.content == object_content(result.object.content.data, 'hgc04-commit'), 'commit application metadata differs')
         return _verify_payload(store, result.object.content.data, expected, policy, authenticator, target)
+    except UnsafeDestination as error:  # Local execution failure: no conclusion about the record.
+        return CustodyRead(CustodyState.ERROR, str(error))
     except (InvalidEvidence, ValueError, KeyError, TypeError, AttributeError, OverflowError) as error:
         return CustodyRead(CustodyState.INVALID, str(error))
     except (OSError, subprocess.SubprocessError) as error:

@@ -10,7 +10,7 @@ import warnings
 import zipfile
 
 from scripts.pipeline.release.evidence_archive import (
-    LIMITS, ExpansionBudget, InvalidEvidence, check_inventory, document,
+    LIMITS, ExpansionBudget, InvalidEvidence, UnsafeDestination, check_inventory, document,
     extract_new, inventory, make_zip, read_zip, safe_path,
 )
 
@@ -163,14 +163,21 @@ class ArchiveTests(unittest.TestCase):
             target = root / 'new'
             extract_new({'a/b': b'original'}, target)
             self.assertEqual((target / 'a/b').read_bytes(), b'original')
-            with self.assertRaises(InvalidEvidence):
+            with self.assertRaises(UnsafeDestination):
                 extract_new({'a/b': b'replacement'}, target)
             self.assertEqual((target / 'a/b').read_bytes(), b'original')
             (root / 'link').symlink_to(target, target_is_directory=True)
-            with self.assertRaises(InvalidEvidence):
+            with self.assertRaises(UnsafeDestination):
                 extract_new({'x': b'x'}, root / 'link/child')
-            with self.assertRaises(InvalidEvidence):
+            with self.assertRaises(UnsafeDestination):
                 extract_new({}, Path('relative'))
+            with self.assertRaises(UnsafeDestination):
+                extract_new({}, root / 'absent/child')
+            # A hostile member name is an evidence defect, not a destination problem.
+            with self.assertRaises(InvalidEvidence) as caught:
+                extract_new({'../escape': b'x'}, root / 'member')
+            self.assertNotIsInstance(caught.exception, UnsafeDestination)
+            self.assertFalse((root / 'escape').exists())
 
 
 if __name__ == '__main__':

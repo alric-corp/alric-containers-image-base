@@ -6,6 +6,11 @@
 > default branch e IAM continuam pendentes de cutover externo. Consulte
 > [o contrato atual e o procedimento de migração](../docs/develop-as-dev.md).
 > Os runs, SHAs e digests históricos deste snapshot não foram reescritos.
+>
+> **Estado em 13/10/2026:** o cutover foi concluído (default `develop`; DEV usa a
+> role central desde 10/10/2026). As seções 19 e 21 descrevem o engine anterior de
+> promoção por unidade (`promotion_batch`) e o recovery por imagem; o fluxo vigente
+> promove e recupera por manifesto ([DEV → HOM](../docs/dev-hom-promotion.md)).
 
 ## 1. Visão executiva e referência desta documentação
 

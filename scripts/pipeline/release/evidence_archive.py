@@ -19,9 +19,18 @@ class InvalidEvidence(ValueError):
     pass
 
 
+class UnsafeDestination(InvalidEvidence):
+    """The caller's extraction destination is unusable; says nothing about the evidence."""
+
+
 def require(condition, reason):
     if not condition:
         raise InvalidEvidence(reason)
+
+
+def _usable(condition, reason):
+    if not condition:
+        raise UnsafeDestination(reason)
 
 
 def canonical(value):
@@ -244,14 +253,14 @@ def check_inventory(records, files):
 def extract_new(files, destination):
     """Reserve a previously absent leaf in a caller-owned private parent."""
     destination = Path(destination)
-    require(destination.is_absolute(), 'absolute extraction destination required')
+    _usable(destination.is_absolute(), 'absolute extraction destination required')
     for parent in (destination, *destination.parents):
-        require(not parent.is_symlink(), 'symlink destination/ancestor')
-    require(destination.parent.is_dir(), 'extraction parent missing')
+        _usable(not parent.is_symlink(), 'symlink destination/ancestor')
+    _usable(destination.parent.is_dir(), 'extraction parent missing')
     try:
         destination.mkdir(mode=0o700, exist_ok=False)
     except FileExistsError as error:
-        raise InvalidEvidence('extraction destination already exists') from error
+        raise UnsafeDestination('extraction destination already exists') from error
     for name, raw in sorted(files.items()):
         path = destination / safe_path(name)
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

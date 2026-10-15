@@ -8,6 +8,7 @@ import unittest
 import yaml
 
 from scripts.pipeline.catalog import default_batch
+from scripts.pipeline.governance.pr_execution_scope import NONE, profile_for_paths
 from scripts.pipeline.runtime import runtime_images
 
 
@@ -128,9 +129,10 @@ class ScheduleSeparationTests(unittest.TestCase):
         self.assertIn('scripts.pipeline.release.lifecycle promote-hom', execution['run'])
 
     def test_promotion_only_changes_do_not_trigger_a_full_build(self):
-        for event in ('push', 'pull_request'):
-            self.assertNotIn('.github/workflows/promote-stable.yml',
-                             self.workflow_triggers[event]['paths'])
+        self.assertNotIn('.github/workflows/promote-stable.yml',
+                         self.workflow_triggers['push']['paths'])
+        # PRs run unfiltered; the resolver must select no image validation.
+        self.assertEqual(profile_for_paths(['.github/workflows/promote-stable.yml']), NONE)
 
     def test_promotion_and_recovery_share_the_same_concurrency_namespace(self):
         recovery = yaml.safe_load(RECOVER_WORKFLOW.read_text())

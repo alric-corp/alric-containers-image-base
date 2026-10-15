@@ -14,21 +14,13 @@ RESOURCE_TYPES = (
 MODULE = 'sbom_analytics'
 ADDRESSES = {f'module.{MODULE}.{kind}.sbom': kind for kind in RESOURCE_TYPES}
 
-# Legacy bucket replaced by Distroless SBOM Analytics (2026-10-11). It keeps
-# its real historical state address and prefix only while transitional, then
-# may only be destroyed.
-LEGACY_MODULE = 'sbom'
-LEGACY_SOURCE = '../s3-legacy'
-LEGACY_ADDRESSES = {f'module.{LEGACY_MODULE}.{kind}.sbom': kind for kind in RESOURCE_TYPES}
-LEGACY_SNAPSHOTS_PREFIX = 'sbom-analytics/poc-v1/snapshots/'
-
-
 # The active bucket name is never derived: each deployment supplies it exactly
 # (policies/pipeline/config.json -> analytics.bucket -> var.sbom_bucket_name).
 BUCKET_NAME_PATTERN = r'[a-z0-9][a-z0-9-]{1,61}[a-z0-9]'
 
 
-def legacy_bucket_name(account, region):
+def retired_bucket_name(account, region):
+    """Bucket replaced by Distroless SBOM Analytics, destroyed on 2026-10-12; never reused."""
     return f'alric-distroless-sbom-{account}-{region}'
 
 
