@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Prepare DEV/HOM Environments for the reviewed Factory configuration.
 
-Does not merge code, change the default branch, or enable promotion. Existing
-review gates are preserved. GitHub Environment branch policies allow only the
-code branch; neither account is represented by a Git branch.
+Does not merge code, change the default branch, enable promotion or touch
+branch protection. Existing review gates are preserved. GitHub Environment
+branch policies allow only the code branch; neither account is represented by
+a Git branch.
 """
 import base64
 import json
@@ -48,18 +49,11 @@ def main():
             raise ValueError(f'{env} allows an unexpected ref; reconcile explicitly before activation')
         if not policies:
             api(f'{path}/deployment-branch-policies', 'POST', {'name':CONFIG['branch'], 'type':'branch'})
-    # CODEOWNERS and CONTRIBUTING require both repository checks and a code
-    # owner review on the code branch. Bootstrap can precede branch creation.
-    if api('branches/develop', missing=True):
-        api('branches/develop/protection', 'PUT', {
-            'required_status_checks': {'strict': True, 'contexts': [
-                'Unit & integration tests', 'Repository & workflow lint']},
-            'enforce_admins': True,
-            'required_pull_request_reviews': {'dismiss_stale_reviews': True,
-                'require_code_owner_reviews': True, 'required_approving_review_count': 1},
-            'restrictions': None, 'allow_force_pushes': False, 'allow_deletions': False,
-        })
+    # Branch protection is an owner decision recorded per profile in
+    # policies/governance/develop-protection.json. A fixed profile written
+    # here replaced the accepted LAB protection on 2026-09-30.
     print('DEV/HOM prepared; develop is the only allowed deployment branch. Settings come from policies/pipeline/config.json.')
+    print('Branch protection unchanged; compare it with: python3 -B -m scripts.pipeline.governance.repository_protection verify')
 
 
 def verify():

@@ -65,7 +65,7 @@ Root:
 - `aws/github-actions-image-base-trust.json` — mechanism and shape; the
   corporate trust policy will carry different account/repository IDs
 - `governance/reusable-workflows.json`
-- `operations/ecr-lifecycle.json`, `operations/health.json`
+- `operations/health.json`
 - `release/promotion-quarantine.json`, `release/signing-identities.json`
 
 `img/distroless-logo.svg` — referenced by `README.md`, not decorative-only.
@@ -173,6 +173,11 @@ repository:
 - `drift-remediation/` — the legacy mechanism does not migrate, including
   its README and temporary-permission policy.
 - `infra/iam/lab.tfvars` and any other LAB deployment inputs or credentials.
+- `policies/operations/ecr-lifecycle.json` — historical record of the
+  2026-09-10 lifecycle (untagged images only, 30 days), not applied by any
+  Terraform, script or workflow. The effective lifecycle travels with
+  `infra/ecr/policies/ecr-lifecycle-7-days.json`
+  ([ECR retention](ecr-retention.md)).
 - `troubleshooting/` — **moved to an independent operational troubleshooting
   image**, not part of this factory's product. It has been removed from
   `alric-containers-image-base` entirely (not relocated to another folder in

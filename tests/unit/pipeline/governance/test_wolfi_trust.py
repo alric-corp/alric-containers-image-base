@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+import zipfile
 
 import yaml
 
@@ -128,6 +129,78 @@ class WolfiTrustTests(unittest.TestCase):
                 path.write_text(yaml.safe_dump({'contents': {'keyring': keyring}}))
                 self.assertTrue(wolfi_trust.config_errors(self.root))
 
+    def test_added_or_replaced_repository_is_rejected_anywhere(self):
+        # Each http(s) repository is also a key-discovery origin for the pinned Apko.
+        framework = self.root / 'frameworks/example.yaml'
+        for text in ('include: distroless/image-base.yaml\ncontents: {repositories: [https://other.example/os]}\n',
+                     'contents: {repositories: [https://packages.wolfi.dev/os, file:///mirror/os]}\n',
+                     'test: {environment: {contents: {repositories: [https://other.example/os]}}}\n'):
+            with self.subTest(text=text):
+                framework.write_text(text)
+                self.assertTrue(any('repositories must be exactly' in e for e in wolfi_trust.config_errors(self.root)))
+        framework.write_text('include: distroless/image-base.yaml\ncontents: {repositories: [https://packages.wolfi.dev/os]}\n')
+        self.assertEqual(wolfi_trust.config_errors(self.root), [])
+        for relative in ('distroless/image-base.yaml', 'melange/image-base-ca-certificates.yaml'):
+            with self.subTest(config=relative):
+                path = self.root / relative
+                original = path.read_text()
+                path.write_text(original.replace('https://packages.wolfi.dev/os', 'https://mirror.example/os'))
+                self.assertTrue(wolfi_trust.config_errors(self.root))
+                path.write_text(original)
+
+    def test_unreviewed_origins_and_base_images_are_rejected(self):
+        framework = self.root / 'frameworks/example.yaml'
+        for field, value in (('build_repositories', ['https://other.example/os']),
+                             ('runtime_repositories', ['https://packages.wolfi.dev/os']),
+                             ('baseimage', {'image': 'registry.example/base@sha256:' + '0' * 64})):
+            with self.subTest(field=field):
+                framework.write_text(yaml.safe_dump({'include': 'distroless/image-base.yaml', 'contents': {field: value}}))
+                self.assertTrue(any(field in error for error in wolfi_trust.config_errors(self.root)))
+
+    def test_include_must_stay_inside_scanned_shared_configurations(self):
+        framework = self.root / 'frameworks/example.yaml'
+        (self.root / 'img').mkdir()
+        (self.root / 'img/unscanned.yaml').write_text('contents: {keyring: [https://other.example/key.pub]}\n')
+        for include in ('img/unscanned.yaml', '../outside.yaml', '/etc/passwd', 'frameworks/example.yaml',
+                        'distroless/absent.yaml', ['distroless/image-base.yaml']):
+            with self.subTest(include=include):
+                framework.write_text(yaml.safe_dump({'include': include}))
+                self.assertTrue(wolfi_trust.config_errors(self.root))
+        framework.write_text('include: distroless/image-base.yaml\n')
+        self.assertEqual(wolfi_trust.config_errors(self.root), [])
+
+    def test_signature_or_remote_trust_fallback_in_build_entrypoints_is_rejected(self):
+        cases = {
+            'scripts/pipeline/artifacts/build_image.py': "run(apko + ['lock', config, '--ignore-signatures'])\n",
+            '.github/workflows/build.yml': 'run: ./apko build --ignore-signatures frameworks/x.yaml\n',
+            'Makefile': 'build:\n\tapko lock x.yaml --ignore-signatures=true\n',
+            'scripts/install.sh': 'apk add --allow-untrusted package.apk\n',
+            'scripts/pipeline/artifacts/remote.py': "common = ['--keyring-append',\n          'https://other.example/key.rsa.pub']\n",
+            'scripts/pipeline/artifacts/defaults.py': "def build(repository='https://other.example/os'):\n    pass\n",
+            'scripts/pipeline/artifacts/cli.py': "parser.add_argument('--keyring', default='https://other.example/k.rsa.pub')\n",
+        }
+        for relative, text in cases.items():
+            with self.subTest(path=relative):
+                path = self.root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text)
+                errors = wolfi_trust.config_errors(self.root)
+                self.assertTrue(any(e.startswith(relative + ':') and 'fallback' in e for e in errors), errors)
+                path.unlink()
+        recipe = self.root / 'melange/image-base-ca-certificates.yaml'
+        original = recipe.read_text()
+        recipe.write_text(original.replace('set -eu', 'set -eu\n      apk add --allow-untrusted /tmp/x.apk', 1))
+        self.assertTrue(any('fallback' in e for e in wolfi_trust.config_errors(self.root)))
+        recipe.write_text(original)
+        # Local appends, as the locked build uses today, stay allowed.
+        local = self.root / 'scripts/pipeline/artifacts/build_image.py'
+        local.write_text("common = ['--repository-append', repository, '--keyring-append', keyring]\n")
+        self.assertEqual(wolfi_trust.config_errors(self.root), [])
+        local.write_text("run(apko + ['lock', config, '--ignore-signatures'])\n")
+        with patch.object(pin_inventory, 'ROOT', self.root), patch('sys.argv', ['pin_inventory', 'trust']), \
+                patch('builtins.print'):
+            self.assertEqual(pin_inventory.main(), 1)
+
     def test_monitor_reports_same_divergent_and_unavailable_without_writes(self):
         entry = wolfi_trust.require_key(self.root)
         initial = (self.key.read_bytes(), self.policy.read_bytes())
@@ -162,6 +235,60 @@ class WolfiTrustTests(unittest.TestCase):
             self.key.unlink()
             self.assertEqual(pin_inventory.main(), 1)
         remote.assert_not_called()
+
+
+class LockObservationTests(unittest.TestCase):
+    """Offline observation of resolved locks; nothing here gates or blocks a key."""
+
+    def hosted_lock(self, framework='go1-26'):
+        # Original lock bytes from public run 37806495087 (apko v1.4.6), kept as HGC-04 test input.
+        with zipfile.ZipFile(wolfi_trust.ROOT / 'tests/fixtures/hgc04/materials.zip') as materials:
+            return materials.read(f'candidates/{framework}/apko.lock.json')
+
+    def changed(self, mutate):
+        lock = json.loads(self.hosted_lock())
+        mutate(lock['contents'])
+        return json.dumps(lock).encode()
+
+    def test_hosted_locks_recorded_only_the_pinned_key_and_reviewed_origins(self):
+        for framework in ('go1-26', 'go1-26-dev'):
+            with self.subTest(framework=framework), patch.object(wolfi_trust, 'urlopen') as remote:
+                record = wolfi_trust.lock_observation(self.hosted_lock(framework))
+            remote.assert_not_called()
+            self.assertEqual((record['status'], record['keyring'], record['problems']),
+                             ('PINNED_ONLY', [str(wolfi_trust.KEY)], []))
+
+    def test_discovered_or_divergent_key_is_observed_as_unexpected(self):
+        other = '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAdivergent\n-----END PUBLIC KEY-----\n'
+        discovered = dict(name='packages.wolfi.dev/os/other.rsa.pub', url='https://packages.wolfi.dev/os/other.rsa.pub',
+                          content=other)
+        for mutate in (lambda c: c['keyring'].append(discovered),
+                       lambda c: c['keyring'][0].update(content=other),
+                       lambda c: c['keyring'].insert(0, discovered),
+                       lambda c: c.update(keyring=[])):
+            record = wolfi_trust.lock_observation(self.changed(mutate))
+            self.assertEqual(record['status'], 'UNEXPECTED')
+            self.assertIn('keyring is not exactly the pinned local key', record['problems'])
+
+    def test_unreviewed_repository_or_package_origin_is_observed(self):
+        for mutate in (lambda c: c['repositories'].append(dict(name='other', url='https://other.example/os/x86_64/APKINDEX.tar.gz',
+                                                                architecture='x86_64')),
+                       lambda c: c['build_repositories'].append(dict(name='b', url='https://other.example/os')),
+                       lambda c: c['packages'][0].update(url='https://other.example/os/x86_64/a.apk')):
+            self.assertEqual(wolfi_trust.lock_observation(self.changed(mutate))['status'], 'UNEXPECTED')
+
+    def test_missing_or_malformed_package_checksum_is_observed(self):
+        for checksum in ('', None, 'sha1-qyFV0NZAQAnaHoGFhRwUQlzoQC0=', 'Q1short'):
+            with self.subTest(checksum=checksum):
+                record = wolfi_trust.lock_observation(self.changed(lambda c: c['packages'][0].update(checksum=checksum)))
+                self.assertEqual(record['status'], 'UNEXPECTED')
+                self.assertIn('package without a pinned Q1 checksum', record['problems'])
+        self.assertEqual(wolfi_trust.lock_observation(self.changed(lambda c: c.update(packages=[])))['status'], 'UNEXPECTED')
+
+    def test_unreadable_lock_is_invalid_not_pinned(self):
+        for raw in (b'not json', b'{}', b'{"contents": {"keyring": 1}}', json.dumps({'contents': []}).encode()):
+            with self.subTest(raw=raw):
+                self.assertEqual(wolfi_trust.lock_observation(raw)['status'], 'INVALID')
 
 
 class RepositoryWiringTests(unittest.TestCase):

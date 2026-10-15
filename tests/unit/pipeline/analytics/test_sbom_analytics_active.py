@@ -292,7 +292,7 @@ class ActiveWorkflowTests(unittest.TestCase):
                     self.assertRegex(ref, r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}$')
 
     def test_no_active_input_names_the_historical_namespace(self):
-        # infra/s3-legacy and the LEGACY_* contract constants name the replaced bucket on purpose.
+        # Only infra/s3/contract.py names the retired bucket, and only to refuse it.
         paths = [*(ROOT / 'policies/analytics').glob('*.json'), *(ROOT / 'infra/s3').glob('*.tf'),
                  *(ROOT / 'docs/examples/sbom-analytics').glob('*.json'), ROOT / 'scripts/pipeline/analytics/catalog.py']
         for path in paths:
@@ -383,11 +383,22 @@ class ActiveNamingTests(unittest.TestCase):
         self.assertEqual(bucket['Resource'], ['arn:aws:s3:::' + BUCKET])
 
     def test_entry_documentation_and_module_names(self):
+        # The index is organized by domain: the active operation document is the
+        # canonical SBOM Analytics entry, and the closed LAB POC documents may
+        # appear only in the dated history section.
         index = (ROOT / 'docs/README.md').read_text()
-        rows = [l for l in index.splitlines() if 'sbom-analytics-' in l]
-        self.assertEqual(len(rows), 2)
-        self.assertIn('(sbom-analytics-operations.md)', rows[0]); self.assertIn('(sbom-analytics-migration.md)', rows[1])
+        sections = {block.split('\n', 1)[0]: block for block in index.split('\n## ')[1:]}
+        rows = [l for l in sections['SBOM Analytics'].splitlines() if l.startswith('| ') and '](' in l]
+        self.assertIn('(sbom-analytics-operations.md)', rows[0])
+        self.assertTrue(any('(sbom-analytics-migration.md)' in l for l in rows))
         self.assertEqual(self.marks('\n'.join(rows)), [])
+        current = [l for l in sections['Estado atual'].splitlines() if 'sbom-analytics-' in l]
+        self.assertTrue(current)
+        self.assertEqual(self.marks('\n'.join(current)), [])
+        for name, block in sections.items():
+            for document in ('sbom-analytics-lab-poc.md', 'sbom-analytics-athena-lab-poc.md'):
+                if name != 'Histórico':
+                    self.assertNotIn(document, block, name)
         operations = (ROOT / 'docs/sbom-analytics-operations.md').read_text()
         self.assertEqual(operations.splitlines()[0], '# Distroless SBOM Analytics — operação')
         # lab-image-base-infra is the existing deployment Environment (OIDC subject), not a product name.

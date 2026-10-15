@@ -38,6 +38,59 @@ O 404 observado no endpoint oficial é um fato operacional datado: nessa
 consulta discovery é no-op. Não há garantia de continuidade desse estado,
 nem gate ou requisito permanente de HTTP 404. A evidence registra a consulta.
 
+### Reconfirmação no Apko fixado atual (13/10/2026)
+
+A análise e o teste adversarial acima foram feitos no pin anterior (v1.2.43).
+O pin atual do reusable (`apko@sha256:7fcdcd1c…`) executou **v1.4.6, commit
+`51c298aa`**, conforme `./apko version` no job 115257202930 do run
+38385657268. O comportamento foi reconferido no código-fonte dessa versão,
+sem novo teste adversarial:
+
+- `InitDB` chama discovery (`/apk-configuration` → JWKS) para todo
+  repositório de build http(s), inclusive em `apko build --lockfile`; erros
+  de discovery são ignorados e não há opção para desabilitá-la. Repositórios
+  locais ou `file://` não fazem discovery.
+- A verificação do índice aceita qualquer assinatura validada por qualquer
+  arquivo de `/etc/apk/keys`: chaves explícitas e descobertas.
+- `apko lock` grava no lock as chaves configuradas mais as encontradas por
+  uma requisição de discovery **própria**; a resolução faz outra requisição.
+  Chaves de `--keyring-append` não são gravadas.
+- O build com lockfile instala pelos checksums do lock (Q1, SHA-1 do control,
+  e `datahash` SHA-256 do data): não troca bytes depois do lock, mas herda a
+  confiança usada na resolução.
+
+O log do lock registra `Discovered 0 auto-discovered keys` nesse run. É um
+fato datado daquela requisição, não garantia de exclusividade.
+
+## Superfície de confiança verificada localmente
+
+`wolfi_trust.config_errors`, executado por `pin_inventory trust` antes do
+reusable e por `lint`, trata como superfície revisada não só o keyring, mas
+também as origens: `repositories` deve ser exatamente
+`https://packages.wolfi.dev/os` onde aparecer; `build_repositories`,
+`runtime_repositories` e `baseimage` (índice instalado sem verificação de
+assinatura) são rejeitados; `include` só pode apontar para configurações
+escaneadas de `distroless/`. Assim, uma mudança de configuração não amplia
+origem de pacotes nem de discovery sem revisão explícita desta regra. Isso
+não bloqueia chaves que a origem venha a anunciar.
+
+O mesmo check varre os entrypoints de build deste repositório (`scripts/`,
+`Makefile`, workflows e receitas; não testes nem docs) e rejeita fallback
+inseguro: `--ignore-signatures`, `--allow-untrusted` e chave ou repositório
+remoto acrescentado por linha de comando ou default. Os appends locais usados
+hoje (`melange-repo/packages`, `melange-repo/melange.rsa.pub`) continuam
+permitidos. O executor compartilhado valida seus próprios comandos no
+repositório dele.
+
+`wolfi_trust.lock_observation` classifica offline um `apko.lock.json` como
+`PINNED_ONLY`, `UNEXPECTED` ou `INVALID`. Os locks originais do run público
+37806495087 (fixture HGC-04) registram somente a chave fixada e as origens
+revisadas. Por causa da requisição separada descrita acima, `PINNED_ONLY`
+detecta uma ativação não adaptativa de discovery (por exemplo, uma mudança
+legítima do upstream); não prova que todo índice resolvido só verificaria
+com a chave local. Nenhum gate consome essa observação: usá-la como relatório
+ou bloqueio exige decisão do owner.
+
 ## Monitoramento operacional
 
 O `pin_inventory check` existente no health diário compara a fonte oficial
@@ -96,6 +149,13 @@ Verificação com a chave Wolfi local revisada; egress somente à origem aprovad
 
 Requisito posterior para Cloud/Network/Security, sem tecnologia de mirror
 definida nesta spec. Mirror e egress não foram implementados aqui.
+Um mirror só remove a discovery se não expuser `apk-configuration`; a
+confiança passa então a depender da configuração revisada desse mirror.
+Outra opção suportada pelo Apko fixado é resolver contra uma cópia local
+(`file://`) do índice, verificada antes somente com a chave fixada, pois
+repositórios locais não fazem discovery. Qualquer opção exige desenho
+próprio e um ensaio autorizado de chave negativa em repositório isolado;
+nenhuma foi implementada.
 
 ## Upstream follow-up
 

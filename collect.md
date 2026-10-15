@@ -1,3 +1,6 @@
+> **Roteiro de coleta corporativa (09/10/2026).** Instruções de uma sessão de
+> levantamento; não é runbook do LAB nem estado atual ([índice da documentação](docs/README.md)).
+
 Factory Distroless — coleta corporativa para preparar o porte
 Objetivo e limites
 Coletar, no ambiente corporativo já autorizado, os contratos de execução que faltam para preparar e testar o porte no laboratório. Não implementar o porte nesta sessão.

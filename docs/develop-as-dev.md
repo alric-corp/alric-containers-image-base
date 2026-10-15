@@ -77,7 +77,7 @@ App Certification precisa de uma nova certificação FULL autorizada em `develop
    Até isso estar concluído, mantenha os workflows mutáveis afetados suspensos
    operacionalmente; nenhuma suspensão é feita por esta entrega.
    **Corrigir os YAMLs não basta:** reexecuções de runs históricos reutilizam
-   SHA e ref originais. Siga [Retirada da autorização histórica](#retirada-da-autorizacao-historica).
+   SHA e ref originais. Siga [Retirada da autorização histórica](#retirada-da-autorização-histórica).
 5. Confirme branch protection, checks, trust e environment, além da evidência F
    da retirada histórica. Só então altere a default branch:
 

@@ -1,5 +1,9 @@
 # Progresso — ativação DEV
 
+> **Registro histórico (24/09/2026).** Checkpoint de outra baseline; não reflete o
+> estado atual ([índice da documentação](../docs/README.md)).
+
+
 > Consolidação das evidências mostradas no `PROGRESSO.md`.
 >
 > Este documento funciona como checkpoint para troca de sessão. A baseline de origem relata implementação, mas os marcos abaixo só devem ser marcados como concluídos quando houver evidência da revisão/execução no ambiente correto.

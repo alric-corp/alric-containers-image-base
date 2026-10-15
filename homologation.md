@@ -1,3 +1,7 @@
+> **Proposta de 29/09/2026.** Desenho DEV → HOM que orientou o lifecycle por
+> manifesto. Contrato vigente: [DEV → HOM](docs/dev-hom-promotion.md); estado atual:
+> [índice da documentação](docs/README.md).
+
 Factory Distroless — Fluxo de DEV → HOM com promoção automática
 Objetivo
 Definir um fluxo de entrega das imagens base corporativas com baixo toil, sem utilizar branches Git para representar ambientes.

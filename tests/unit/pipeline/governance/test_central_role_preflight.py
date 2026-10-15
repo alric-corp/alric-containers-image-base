@@ -11,6 +11,8 @@ import unittest
 import yaml
 
 from scripts.pipeline.governance import configuration, lint_workflow_hardening
+from tests.helpers.subprocess_env import python3_test_environment
+from scripts.pipeline.governance.pr_execution_scope import NONE, profile_for_paths
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -106,12 +108,14 @@ class CentralRolePreflightTests(unittest.TestCase):
     def test_preflight_changes_do_not_match_publication_paths_but_cutover_will(self):
         publisher = yaml.safe_load((ROOT / '.github/workflows/workflow.yml').read_text())
         events = publisher.get('on', publisher.get(True))
-        for event in ('push', 'pull_request'):
-            patterns = events[event]['paths']
-            for name in CHANGED_PATHS:
-                self.assertFalse(any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns), (event, name))
-            for name in ('scripts/pipeline/governance/configuration.py', 'policies/pipeline/config.json'):
-                self.assertTrue(any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns), name)
+        patterns = events['push']['paths']
+        # PRs run unfiltered; the resolver decides whether images are validated.
+        for name in CHANGED_PATHS:
+            self.assertFalse(any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns), ('push', name))
+            self.assertEqual(profile_for_paths([name]), NONE, ('pull_request', name))
+        for name in ('scripts/pipeline/governance/configuration.py', 'policies/pipeline/config.json'):
+            self.assertTrue(any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns), name)
+            self.assertNotEqual(profile_for_paths([name]), NONE, ('pull_request', name))
 
     def test_preflight_identity_matches_operational_reference_after_stage_b(self):
         cfg = configuration.configuration()
@@ -146,7 +150,10 @@ class CentralRolePreflightTests(unittest.TestCase):
                        GITHUB_REF='refs/heads/develop', GITHUB_EVENT_NAME='workflow_dispatch',
                        GITHUB_RUN_ID='123', GITHUB_RUN_ATTEMPT='1',
                        FAKE_STS_RESPONSE=json.dumps(identity), FAKE_AWS_EXIT=str(aws_exit))
-            result = subprocess.run(['bash', '-c', job['steps'][1]['run']], env=env, capture_output=True, text=True)
+            # The step runs `python3` as on the runner; bind it to this interpreter, not the developer's PATH.
+            with python3_test_environment(env) as shimmed:
+                result = subprocess.run(['bash', '-c', job['steps'][1]['run']], env=shimmed,
+                                        capture_output=True, text=True)
             report = json.loads(result.stdout) if result.stdout.strip() else None
             return result.returncode, report
 
