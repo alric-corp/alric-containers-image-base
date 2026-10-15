@@ -49,6 +49,11 @@ No overwrite or delete operation is exposed.
 | `CONFLICT` | Same logical key contains different bytes or application metadata. Semantically equal JSON or a new valid signature still conflicts. |
 | `ERROR` | Denied access, timeout, unavailable transport, failed/inconclusive reconciliation or failed read-back. |
 
+Any transport exception outside this protocol (an unmapped SDK error, an
+adapter bug, an explicit "missing" answer to an inventory or a create) is an
+operational `ERROR` at the store boundary: never `MISSING`, `CONFLICT` or
+invalid evidence. A missing bucket or prefix is never an empty inventory.
+
 The conditional PUT is the atomic primitive: an existence check is never its
 replacement. A future S3 adapter must use simple `PutObject` with
 `If-None-Match: *`, without automatic multipart, and map errors explicitly.
@@ -61,6 +66,36 @@ denied is never absence. A requested version must be fetched explicitly and
 never fall back to latest. AWS distinguishes these permissions and errors in
 [GetObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html).
 This PR does not implement or call an S3 adapter.
+
+### Transport conformance (future adapter, TEST_ONLY model)
+
+`tests/unit/pipeline/release/s3_reference_model.py` is a test-only model of
+the documented S3 outcomes plus the mapping a future, separately approved
+adapter must implement; `test_evidence_transport_conformance` runs the store
+and the full custody sequence against it. It is a specification, not an
+adapter: no SDK, endpoint or credential exists, and passing it says nothing
+about applied bucket policy, IAM, retention or hosted behaviour.
+
+| S3 outcome | Transport result |
+| --- | --- |
+| `PutObject` + `If-None-Match: *` succeeds with a version ID | version, then exact-version read-back |
+| `412 PreconditionFailed` | `PreconditionFailed` → byte/metadata reconciliation |
+| `409` (a concurrent delete won), `403`, `5xx` | `TransportError` → `ERROR`; retry the same frozen bytes |
+| Reset/timeout after sending | `WriteResponseLost` → reconciliation, never assumed created |
+| `404 NoSuchKey` / `NoSuchVersion` | `MissingObject` |
+| `403` for a missing key without `s3:ListBucket`, `NoSuchBucket`, `405` (delete-marker version) | `TransportError` → `ERROR` |
+| Version ID absent or `"null"` (versioning not Enabled) | `TransportError`: the null slot can be replaced, so it pins nothing |
+| `ListObjectsV2` pages (`IsTruncated`) | all pages up to the bound, else `ERROR`; never partial |
+| Metadata S3 would rewrite (case, non-ASCII, unprintable, > 2 KB) | refused before any write |
+
+A delete marker lets a later conditional write succeed: create-once is not
+delete protection. The pinned payload version keeps its bytes, but the
+latest `commit.json` read follows any recreation, so delete/overwrite denial
+belongs to the storage policy that a production profile must prove.
+[GetObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)
+also requires `s3:GetObjectVersion` for exact-version reads, and
+[suspended versioning](https://docs.aws.amazon.com/AmazonS3/latest/userguide/AddingObjectstoVersionSuspendedBuckets.html)
+replaces the content of the `null` version on a later PUT.
 
 ## Two objects, no hash cycle
 
@@ -185,12 +220,18 @@ parent path. There is no overwrite/reuse of an extraction directory. This
 assumes the caller controls that private parent; it is not a sandbox against
 another process that can replace its ancestors concurrently. Reports and the
 authorized script are outside the three exact-set verifier directories.
+An unusable destination (existing, relative, without parent or below a
+symlink) is a local execution failure: the reader reports `ERROR`, never an
+`INVALID` verdict about the record, and the verifier does not run.
 
 ## Identity reconciliation and authentication
 
 `ExpectedIdentity` and `TrustPolicy` must come from the caller's external
 configuration. A receipt, manifest, bundled key or `release_id` is not the
-authority for expected identity. The acquisition snapshot is preserved input
+authority for expected identity. The identity must be canonical JSON when it
+is configured: the affirmation binds the SHA-256 of its exact bytes, so
+another spelling of the same identity is rejected at construction instead of
+failing every later verification. The acquisition snapshot is preserved input
 with a strict schema; this PR has **no GitHub acquisition client** and does
 not claim that a fixture is an authenticated API response.
 
@@ -335,7 +376,8 @@ authorization. Never mutate valid release records to test these protections.
 ```sh
 python3 -B -m unittest tests.unit.pipeline.release.test_evidence_store \
   tests.unit.pipeline.release.test_evidence_archive \
-  tests.unit.pipeline.release.test_evidence_custody
+  tests.unit.pipeline.release.test_evidence_custody \
+  tests.unit.pipeline.release.test_evidence_transport_conformance
 make check
 ```
 
@@ -358,6 +400,17 @@ application-metadata comparison, requested-version selection, external
 authentication, inventory-hash verification and verifier-exit enforcement:
 6 detected, 0 survivors, 0 equivalent mutations. The complete positive control
 passed afterward. These are local results, separate from the PR's normal CI.
+
+Increment of 13/10/2026 (audit G06; isolated local clone, no hosted run):
+three classification defects fixed (transport faults outside the protocol,
+unusable extraction destinations, non-canonical external identity), each
+reproduced by tests that fail before the fix; contract tests added for
+idempotent payload creation, ambiguous commit writes, failed final read-back
+and recovery by a fresh isolated reader from stored objects only; transport
+conformance model added. Local results, Python 3.9.6: 1,031 unit and 39
+integration cases passed with the same single Windows-only skip, 101 of them
+HGC-04; `lint-local` passed; actionlint not run (no workflow changed). Status
+is unchanged: IN_PROGRESS / NOT_ENABLED / hosted proof NOT_PROVEN.
 
 `READBACK_VERIFIED` covers CA outputs, indices, public keys, signatures, original
 control/data streams and recovered bindings. Historical cache and

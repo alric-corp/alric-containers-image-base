@@ -3,9 +3,13 @@ import base64
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
+import sys
 import tempfile
+import textwrap
 from threading import Barrier
 import unittest
 from unittest.mock import patch
@@ -15,7 +19,8 @@ from scripts.pipeline.release.evidence_archive import (
     InvalidEvidence, canonical, document, inventory, make_zip, read_zip, sha256,
 )
 from scripts.pipeline.release.evidence_store import (
-    EvidenceStore, MemoryTransport, ReadStatus, StoredObject, TransportError, WriteStatus,
+    EvidenceStore, MemoryTransport, MissingObject, ReadStatus, StoredObject, TransportError, WriteResponseLost,
+    WriteStatus,
 )
 from tests.unit.pipeline.release.custody_support import (
     POLICY_ID, ORIGINAL_SHA256, TestAuthenticator, TestSigner, fixture_inputs,
@@ -264,6 +269,165 @@ class CustodyTests(unittest.TestCase):
         self.assertEqual(self.read(adoption=custody.AdoptionPolicy(frozenset({key}), frozenset())).state, custody.CustodyState.REQUIRED_MISSING)
         self.assertEqual(self.read(adoption=custody.AdoptionPolicy(frozenset(), frozenset())).state, custody.CustodyState.ADOPTION_UNKNOWN)
 
+    def test_concurrent_payload_creation_is_idempotent_and_freezes_one_manifest(self):
+        barrier = Barrier(6)
+
+        def store(_):
+            barrier.wait(timeout=10)
+            return custody.store_payload(self.store, self.prepared, self.expected)
+
+        with ThreadPoolExecutor(max_workers=6) as workers:
+            results = list(workers.map(store, range(6)))
+        self.assertCountEqual([r.status for r in results],
+                              [WriteStatus.CREATED] + [WriteStatus.ALREADY_PRESENT_IDENTICAL] * 5)
+        self.assertEqual(len({r.object.version_id for r in results}), 1)
+        manifests = {custody.manifest_bytes(self.prepared, r.object, self.expected) for r in results}
+        self.assertEqual(len(manifests), 1)  # Retries reuse the frozen request, never a new manifest.
+
+    def test_ambiguous_commit_write_is_never_reported_as_created(self):
+        for persisted in (False, True):
+            with self.subTest(persisted=persisted):
+                self.store = EvidenceStore(MemoryTransport())
+                frozen = frozen_fixture(self.store, self.prepared, self.expected, self.signer)
+                put = self.store.transport.put_if_absent
+
+                def lost(key, content):
+                    if not key.endswith('commit.json'):
+                        return put(key, content)
+                    if persisted:
+                        put(key, content)
+                    raise WriteResponseLost('connection reset after sending the request')
+
+                with patch.object(self.store.transport, 'put_if_absent', side_effect=lost):
+                    first = custody.commit_record(self.store, frozen, self.expected, self.signer.policy(),
+                                                  TestAuthenticator(), self.root / f'ambiguous-{persisted}')
+                commit = self.store.get(self.expected.prefix + 'commit.json')
+                if persisted:
+                    self.assertEqual(first.status, WriteStatus.ALREADY_PRESENT_IDENTICAL)
+                    self.assertEqual(self.read().state, custody.CustodyState.COMPLETE_VERIFIED)
+                else:
+                    self.assertEqual((first.status, commit.status), (WriteStatus.ERROR, ReadStatus.MISSING))
+                    retry = custody.commit_record(self.store, frozen, self.expected, self.signer.policy(),
+                                                  TestAuthenticator(), self.root / 'ambiguous-retry')
+                    self.assertEqual(retry.status, WriteStatus.CREATED)
+
+    def test_failed_final_readback_is_error_and_retry_recovers_without_writing(self):
+        frozen = frozen_fixture(self.store, self.prepared, self.expected, self.signer)
+        get = self.store.transport.get
+
+        def unavailable_after_commit(key, version_id=None):
+            if '/payload/' in key and self.store.transport._objects.get(self.expected.prefix + 'commit.json'):
+                raise TransportError('503 SlowDown during the final read-back')
+            return get(key, version_id)
+
+        with patch.object(self.store.transport, 'get', side_effect=unavailable_after_commit):
+            first = custody.commit_record(self.store, frozen, self.expected, self.signer.policy(),
+                                          TestAuthenticator(), self.root / 'final-readback')
+        self.assertEqual(first.status, WriteStatus.ERROR)
+        self.assertIn('final record read-back failed', first.reason)
+        with patch.object(self.store.transport, 'put_if_absent', side_effect=AssertionError('retry must not write')):
+            retry = custody.commit_record(self.store, frozen, self.expected, self.signer.policy(),
+                                          TestAuthenticator(), self.root / 'final-readback-retry')
+        self.assertEqual(retry.status, WriteStatus.ALREADY_PRESENT_IDENTICAL)
+
+    def test_fresh_reader_recovers_only_from_a_durable_export(self):
+        """Another process and a code tree without fixtures or original artifacts."""
+        self.ready()
+        export = self.root / 'durable-export'
+        export.mkdir()
+        index = []
+        for number, (key, stored) in enumerate(sorted(self.store.transport._objects.items())):
+            (export / f'object-{number}').write_bytes(stored.content.data)
+            index.append(dict(key=key, version_id=stored.version_id, metadata=dict(stored.content.metadata),
+                              file=f'object-{number}'))
+        (export / 'index.json').write_text(json.dumps(index))
+        (export / 'expected-identity.json').write_bytes(self.expected.raw)
+        (export / 'trusted.pub').write_bytes(self.signer.public)
+        code = self.root / 'reader-code'
+        repository = Path(custody.__file__).resolve().parents[3]
+        for directory in ('scripts', 'policies', 'frameworks'):
+            shutil.copytree(repository / directory, code / directory, ignore=shutil.ignore_patterns('__pycache__'))
+        package = 'tests/unit/pipeline/release'
+        (code / package).mkdir(parents=True)
+        for relative in ('tests', 'tests/unit', 'tests/unit/pipeline', package):
+            shutil.copy(repository / relative / '__init__.py', code / relative)
+        shutil.copy(repository / package / 'custody_support.py', code / package)
+        self.assertFalse((code / 'tests/fixtures').exists() or any(code.rglob('*.zip')))
+        reader = textwrap.dedent("""
+            import json, socket, sys
+            from pathlib import Path
+
+            sys.path.insert(0, sys.argv[1])
+            from scripts.pipeline.release import evidence_custody as custody
+            from scripts.pipeline.release.evidence_store import EvidenceStore, FrozenObject, MemoryTransport, StoredObject
+            from tests.unit.pipeline.release.custody_support import POLICY_ID, TestAuthenticator
+
+            def offline(*args, **kwargs):
+                raise RuntimeError('network is forbidden in the independent reader')
+
+            socket.socket.connect = socket.socket.connect_ex = offline
+            socket.create_connection = socket.getaddrinfo = offline
+            export = Path(sys.argv[2])
+            transport = MemoryTransport()
+            for item in json.loads((export / 'index.json').read_text()):
+                content = FrozenObject.freeze((export / item['file']).read_bytes(), item['metadata'])
+                transport._objects[item['key']] = StoredObject(content, item['version_id'])
+            authorization = custody.VerifierAuthorization(custody.VERIFIER_REPOSITORY, custody.VERIFIER_COMMIT,
+                                                          custody.VERIFIER_PATH, custody.VERIFIER_SHA256)
+            policy = custody.TrustPolicy(POLICY_ID, 'TEST_ONLY', (export / 'trusted.pub').read_bytes(), authorization)
+            read = custody.recover(EvidenceStore(transport), custody.ExpectedIdentity((export / 'expected-identity.json').read_bytes()),
+                                   policy, TestAuthenticator(), Path(sys.argv[3]))
+            print(json.dumps(dict(state=read.state.value, profile=read.profile, production_authority=read.production_authority,
+                                  result=(read.report or {}).get('result'), reason=read.reason)))
+        """)
+        completed = subprocess.run([sys.executable, '-I', '-B', '-c', reader, str(code), str(export), str(self.root / 'fresh')],
+                                   capture_output=True, timeout=120, cwd=str(export),
+                                   env={'PATH': os.environ.get('PATH', os.defpath), 'LANG': 'C'})
+        self.assertEqual(completed.returncode, 0, completed.stderr.decode(errors='replace')[-2000:])
+        self.assertEqual(json.loads(completed.stdout), dict(state='COMPLETE_VERIFIED', profile='TEST_ONLY',
+                         production_authority=False, result='READBACK_VERIFIED', reason=''))
+
+    def test_missing_preparation_inputs_are_typed_evidence_errors(self):
+        for drop in ('acquisition/context.json', 'candidates/go1-26/sbom-publication.json', 'melange-repo'):
+            with self.subTest(drop=drop):
+                zips, materials, origins, expected = fixture_inputs()
+                if drop in zips:
+                    zips.pop(drop)
+                else:
+                    materials.pop(drop)
+                    origins.pop(drop)
+                with self.assertRaises(InvalidEvidence):
+                    custody.prepare_payload(zips, materials, origins, expected, POLICY_ID)
+
+    def test_lock_diverging_from_build_inputs_is_rejected_even_when_repacked(self):
+        def mutate(files):
+            path = 'candidates/go1-26/apko.lock.json'
+            lock = document(files[path])
+            lock['contents']['packages'].pop()
+            files[path] = canonical(lock)
+        self.forge(mutate_files=mutate)
+        result = self.read()
+        self.assertEqual(result.state, custody.CustodyState.INVALID)
+        self.assertIn('build input binding', result.reason)
+
+    def test_valid_commit_cannot_be_replayed_as_another_release(self):
+        self.ready()
+        identity = self.expected.value
+        other = custody.ExpectedIdentity.freeze(dict(identity, run_attempt=2, release_id=f'r{identity["run_id"]}-a2',
+                                                     publisher=dict(identity['publisher'], run_attempt=2)))
+        self.store.transport._objects[other.prefix + 'commit.json'] = \
+            self.store.transport._objects[self.expected.prefix + 'commit.json']
+        result = self.read(expected=other)
+        self.assertEqual(result.state, custody.CustodyState.INVALID)
+        self.assertIn('payload location differs', result.reason)
+        self.assertEqual(self.read().state, custody.CustodyState.COMPLETE_VERIFIED)
+
+    def test_legacy_classification_never_hides_a_partial_custody(self):
+        custody.store_payload(self.store, self.prepared, self.expected)
+        key = f'{self.expected.value["repository_id"]}/{self.expected.value["release_id"]}'
+        legacy = custody.AdoptionPolicy(frozenset(), frozenset({key}))
+        self.assertEqual(self.read(adoption=legacy).state, custody.CustodyState.PARTIAL)
+
     def test_orphan_payload_is_partial_and_is_never_deleted(self):
         custody.store_payload(self.store, self.prepared, self.expected)
         before = self.store.keys(self.expected.prefix).keys
@@ -321,6 +485,37 @@ class CustodyTests(unittest.TestCase):
         self.assertEqual(len([key for key, version in calls if '/payload/' in key]), 1)
         self.assertTrue(all(version is not None for key, version in calls if '/payload/' in key))
 
+    def test_transport_faults_on_a_valid_record_are_errors_not_invalid_evidence(self):
+        self.ready()
+        get = self.store.transport.get
+        for error in (KeyError('x-amz-version-id'), RuntimeError('adapter bug'), ValueError('bad header')):
+            def faulty(key, version_id=None, error=error):
+                if '/payload/' in key:
+                    raise error
+                return get(key, version_id)
+            with self.subTest(error=error), patch.object(self.store.transport, 'get', side_effect=faulty):
+                self.assertEqual(self.read().state, custody.CustodyState.ERROR)
+        self.assertEqual(self.read().state, custody.CustodyState.COMPLETE_VERIFIED)
+        empty = EvidenceStore(MemoryTransport())
+        with patch.object(empty.transport, 'keys', side_effect=MissingObject('NoSuchBucket')):
+            # An absent commit with an unusable inventory never becomes an adoption state.
+            self.assertEqual(self.read(store=empty).state, custody.CustodyState.ERROR)
+
+    def test_commit_write_failure_outside_protocol_is_a_write_error(self):
+        frozen = frozen_fixture(self.store, self.prepared, self.expected, self.signer)
+        put = self.store.transport.put_if_absent
+
+        def missing_bucket(key, content):
+            if key.endswith('commit.json'):
+                raise MissingObject('NoSuchBucket')
+            return put(key, content)
+
+        with patch.object(self.store.transport, 'put_if_absent', side_effect=missing_bucket):
+            result = custody.commit_record(self.store, frozen, self.expected, self.signer.policy(),
+                                           TestAuthenticator(), self.root / 'missing-bucket')
+        self.assertEqual(result.status, WriteStatus.ERROR)
+        self.assertEqual(self.store.get(self.expected.prefix + 'commit.json').status, ReadStatus.MISSING)
+
     def test_payload_altered_after_preparation_cannot_commit(self):
         frozen = frozen_fixture(self.store, self.prepared, self.expected, self.signer)
         key = custody.payload_key(self.expected, self.prepared.data)
@@ -341,6 +536,15 @@ class CustodyTests(unittest.TestCase):
                     files['acquisition/context.json'] = canonical(context)
                 self.forge(mutate_files=mutate)
                 self.assertEqual(self.read().state, custody.CustodyState.INVALID)
+
+    def test_external_identity_must_be_canonical_at_configuration_time(self):
+        value = self.expected.value
+        self.assertEqual(custody.ExpectedIdentity.freeze(value), self.expected)
+        # Same identity, another spelling: rejected when configured, instead of
+        # later reporting every valid record as INVALID ("identity differs").
+        for raw in (json.dumps(value, indent=2).encode(), json.dumps(value).encode(), self.expected.raw + b'\n'):
+            with self.subTest(raw=raw[:20]), self.assertRaisesRegex(InvalidEvidence, 'canonical'):
+                custody.ExpectedIdentity(raw)
 
     def test_pr_receipt_release_id_does_not_authorize_release(self):
         zips, materials, origins, expected = fixture_inputs()
@@ -620,5 +824,24 @@ class CustodyTests(unittest.TestCase):
         occupied.mkdir()
         (occupied / 'sentinel').write_bytes(b'keep')
         result = self.read(target=occupied)
-        self.assertEqual(result.state, custody.CustodyState.INVALID)
+        # A caller-owned destination problem is a local execution failure (ERROR),
+        # never an integrity verdict (INVALID) about a valid record.
+        self.assertEqual(result.state, custody.CustodyState.ERROR)
         self.assertEqual((occupied / 'sentinel').read_bytes(), b'keep')
+
+    def test_unusable_extraction_destinations_are_errors_not_invalid_evidence(self):
+        self.ready()
+        (self.root / 'link').symlink_to(self.root, target_is_directory=True)
+        real_run = subprocess.run
+
+        def no_verifier(args, **kwargs):
+            self.assertNotEqual(args[0], sys.executable, 'verifier must not run without a new destination')
+            return real_run(args, **kwargs)
+
+        for target in (Path('relative-destination'), self.root / 'absent' / 'child', self.root / 'link' / 'child'):
+            with self.subTest(target=target):
+                with patch('subprocess.run', side_effect=no_verifier):
+                    result = self.read(target=target)
+                self.assertEqual(result.state, custody.CustodyState.ERROR)
+                self.assertFalse(target.is_absolute() and target.exists())
+        self.assertEqual(self.read().state, custody.CustodyState.COMPLETE_VERIFIED)

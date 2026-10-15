@@ -133,6 +133,8 @@ class VerifyImageStubbedRunTests(unittest.TestCase):
     def _run(self, *args, env_overrides=None):
         env = dict(os.environ)
         env['PATH'] = str(self.stub_bin) + os.pathsep + env['PATH']
+        # Default private report directories are created under this class's storage.
+        env['TMPDIR'] = self.storage.name
         env.update(env_overrides or {})
         return subprocess.run(bash_command(str(SCRIPT), *args),
                                capture_output=True, text=True, encoding='utf-8', env=env)
@@ -188,6 +190,88 @@ class VerifyImageStubbedRunTests(unittest.TestCase):
         self.assertIn('PASS: assinatura', result.stdout)
         self.assertIn('PASS: attestation SBOM', result.stdout)
         self.assertIn('FAIL: provenance', result.stdout)
+
+
+class VerifyImageReportDirectoryTests(unittest.TestCase):
+    """Verifier outputs go to a private directory, never to fixed names in a shared /tmp."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.storage = tempfile.TemporaryDirectory(prefix='verify-image-reports-')
+        cls.addClassCleanup(cls.storage.cleanup)
+        stub_bin = Path(cls.storage.name) / 'bin'
+        stub_bin.mkdir()
+        for name, content in (('aws', STUB_AWS), ('docker', STUB_DOCKER), ('cosign', STUB_COSIGN), ('gh', STUB_GH)):
+            # Every stub records its invocation before running, so a guard-rail
+            # failure can prove that no external command was reached.
+            _write_stub(stub_bin, name, content.replace(
+                'set -euo pipefail\n', 'set -euo pipefail\necho "$(basename "$0") $*" >> "$VERIFY_STUB_LOG"\n', 1))
+        cls.stub_bin = stub_bin
+
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp(dir=self.storage.name))
+        self.log = self.work / 'calls.log'
+
+    def _run(self, *args):
+        env = dict(os.environ, PATH=str(self.stub_bin) + os.pathsep + os.environ['PATH'],
+                   VERIFY_STUB_LOG=str(self.log), TMPDIR=str(self.work))
+        return subprocess.run(bash_command(str(SCRIPT), 'go1-26', GOOD_DIGEST, '--account', GOOD_ACCOUNT, *args),
+                              capture_output=True, text=True, encoding='utf-8', env=env)
+
+    def test_explicit_report_directory_receives_every_verifier_output(self):
+        reports = self.work / 'reports'
+        result = self._run('--report-dir', str(reports))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f'relatórios: {reports}', result.stdout)
+        self.assertEqual(sorted(p.name for p in reports.iterdir()),
+                         ['provenance.err', 'provenance.json', 'sbom.json', 'signature.json'])
+        if os.name != 'nt':
+            self.assertEqual(stat.S_IMODE(reports.stat().st_mode), 0o700)
+        self.assertNotIn('/tmp/verify-image-', SCRIPT.read_text(encoding='utf-8'))
+
+    def test_default_report_directory_is_new_and_private_per_run(self):
+        first, second = self._run(), self._run()
+        directories = []
+        for result in (first, second):
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            line = next(l for l in result.stdout.splitlines() if l.startswith('relatórios: '))
+            directories.append(Path(line.split(': ', 1)[1]))
+        self.assertNotEqual(directories[0], directories[1])
+        for directory in directories:
+            self.assertEqual(directory.parent.resolve(), self.work.resolve())
+            self.assertTrue((directory / 'signature.json').is_file())
+
+    def test_unsafe_report_directory_is_refused_before_any_external_command(self):
+        # Unified G21 contract: --report-dir must be a brand-new path. Any
+        # pre-existing path -- occupied dir, empty dir, regular file, or symlink
+        # (even broken) -- is refused before any external command, and a missing
+        # parent fails closed. This removes the check-then-use race where another
+        # process could populate an "empty" directory between the test and writes.
+        occupied = self.work / 'occupied'
+        occupied.mkdir()
+        (occupied / 'stale.json').write_text('{}')
+        empty = self.work / 'empty'
+        empty.mkdir()
+        regular = self.work / 'file'
+        regular.write_text('x')
+        missing_parent = self.work / 'absent' / 'reports'
+        cases = [occupied, empty, regular, missing_parent]
+        if os.name != 'nt':
+            link = self.work / 'link'
+            link.symlink_to(self.work / 'elsewhere', target_is_directory=True)
+            cases.append(link)
+            broken = self.work / 'broken-link'
+            broken.symlink_to(self.work / 'does-not-exist')
+            cases.append(broken)
+        for path in cases:
+            with self.subTest(path=path.name):
+                result = self._run('--report-dir', str(path))
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn('--report-dir', result.stderr)
+                self.assertFalse(self.log.exists(), self.log.read_text() if self.log.exists() else '')
+        self.assertEqual((occupied / 'stale.json').read_text(), '{}')
+        self.assertEqual(sorted(p.name for p in empty.iterdir()), [])
+        self.assertFalse((self.work / 'absent').exists())
 
 
 if __name__ == '__main__':

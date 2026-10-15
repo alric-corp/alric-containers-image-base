@@ -138,10 +138,13 @@ def python3_test_environment(env):
     """Context manager yielding a copy of `env` with a working 'python3'
     on PATH, for exactly the duration of the `with` block.
 
-    No-op on Linux/macOS -- yields `env` unchanged and touches nothing --
-    where 'python3' already resolves normally; the workflow scripts under
-    test keep calling 'python3' exactly as they do on the GitHub Actions
-    runner, only its resolution changes, and only on Windows.
+    The workflow scripts under test keep calling 'python3' exactly as they
+    do on the GitHub Actions runner; only its resolution changes, to the
+    interpreter running the tests. On the runner that is the same
+    interpreter. Locally it keeps the suite independent of whichever
+    'python3' comes first on the developer's PATH (e.g. `make test-unit
+    PYTHON=.venv/bin/python` without an activated venv). On Linux/macOS
+    only the returned copy's PATH changes; os.environ is never touched.
 
     On Windows, the shim lives in a fresh TemporaryDirectory scoped to
     this context -- never a cached, reused directory -- so there is no
@@ -161,16 +164,14 @@ def python3_test_environment(env):
     PATH entry; only the outermost exit restores PATH and removes the
     directory.
     """
-    if os.name != 'nt':
-        yield env
-        return
     is_outermost = _shim_state['depth'] == 0
     if is_outermost:
         tmpdir = tempfile.TemporaryDirectory(prefix='alric-python3-shim-')
         _write_python3_shim(tmpdir.name)
         _shim_state['tmpdir'] = tmpdir
         _shim_state['saved_path'] = os.environ.get('PATH', '')
-        os.environ['PATH'] = tmpdir.name + os.pathsep + _shim_state['saved_path']
+        if os.name == 'nt':  # CreateProcess resolves bare names via the caller's PATH.
+            os.environ['PATH'] = tmpdir.name + os.pathsep + _shim_state['saved_path']
     _shim_state['depth'] += 1
     try:
         shim_dir = _shim_state['tmpdir'].name
@@ -180,7 +181,8 @@ def python3_test_environment(env):
     finally:
         _shim_state['depth'] -= 1
         if _shim_state['depth'] == 0:
-            os.environ['PATH'] = _shim_state['saved_path']
+            if os.name == 'nt':
+                os.environ['PATH'] = _shim_state['saved_path']
             _shim_state['tmpdir'].cleanup()
             _shim_state['tmpdir'] = None
             _shim_state['saved_path'] = None

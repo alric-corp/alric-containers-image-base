@@ -6,12 +6,9 @@ addresses correspond to the pinned terraform-aws-modules/ecr/aws 3.2.0 source:
 private repository + attached repository policy + enabled lifecycle policy.
 Their count is derived from the checked-out catalog, not an expected total.
 
-The legacy bucket replaced by Distroless SBOM Analytics (2026-10-11) has two allowed
-phases, both derived from the reviewed configuration, never from a flag:
-TRANSITION while ``module.sbom`` points at ../s3-legacy (only its
-force_destroy may become true; nothing else changes), then REMOVAL once the
-block is gone (exactly its six addresses are deleted; the analytics bucket
-must already be managed and stays no-op). ECR stays no-op.
+The bucket replaced by Distroless SBOM Analytics was destroyed on 2026-10-12
+(Infra - Apply run 38319342150). Its module, addresses and name are rejected
+like any other resource outside this graph; ECR stays no-op.
 """
 
 import argparse
@@ -24,9 +21,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parent))
-from s3.contract import (ADDRESSES as S3_ADDRESSES, BUCKET_NAME_PATTERN, LEGACY_ADDRESSES, LEGACY_MODULE,
-                         LEGACY_SNAPSHOTS_PREFIX, LEGACY_SOURCE, MODULE as S3_MODULE, SNAPSHOTS_PREFIX,
-                         bucket_policy, legacy_bucket_name, unique_json)
+from s3.contract import (ADDRESSES as S3_ADDRESSES, BUCKET_NAME_PATTERN, MODULE as S3_MODULE,
+                         bucket_policy, retired_bucket_name, unique_json)
 RESOURCE_TYPES = (
     "aws_ecr_repository",
     "aws_ecr_repository_policy",
@@ -114,8 +110,7 @@ def validate_values(address, framework, kind, values, policies):
             raise PlanError(f"{address}: policy differs from the versioned contract")
 
 
-def validate_s3(address, kind, values, change, configuration, bucket, account, region, *,
-                snapshots_prefix=SNAPSHOTS_PREFIX, force_destroy=False):
+def validate_s3(address, kind, values, change, configuration, bucket, account, region):
     if not isinstance(values, dict):
         raise PlanError(f"{address}: absent S3 values")
     if values.get('region') != region:
@@ -137,7 +132,7 @@ def validate_s3(address, kind, values, change, configuration, bucket, account, r
     if any(unknown(change.get('after_unknown', {}).get(key)) for key in required_known):
         raise PlanError(f"{address}: security or identity value is unknown")
     if kind == 'aws_s3_bucket':
-        if values.get('bucket') != bucket or values.get('force_destroy') is not force_destroy:
+        if values.get('bucket') != bucket or values.get('force_destroy') is not False:
             raise PlanError(f"{address}: incorrect bucket identity or force_destroy")
         tags = values.get('tags')
         if not isinstance(tags, dict) or any(tags.get(k) != v for k, v in PROVENANCE.items()):
@@ -209,42 +204,11 @@ def validate_s3(address, kind, values, change, configuration, bucket, account, r
             actual = json.loads(values.get('policy', ''), object_pairs_hook=unique_json)
         except (TypeError, ValueError) as exc:
             raise PlanError(f"{address}: policy is unknown or invalid") from exc
-        if actual != bucket_policy(bucket, snapshots_prefix):
+        if actual != bucket_policy(bucket):
             raise PlanError(f"{address}: S3 policy differs from the exact contract")
         required = {f'{kind}.sbom' for kind in S3_ADDRESSES.values() if kind not in ('aws_s3_bucket', 'aws_s3_bucket_policy')}
         if set(configuration.get('depends_on', [])) != required:
             raise PlanError(f"{address}: policy must depend on all four security controls")
-
-
-def validate_legacy(address, kind, item, planned, configuration, bucket, account, region, action):
-    """The replaced bucket: unchanged except force_destroy, or deleted as a whole."""
-    change = item.get('change', {})
-    before, after = change.get('before'), change.get('after')
-    if not isinstance(before, dict) or before.get('bucket') != bucket or before.get('region') != region:
-        raise PlanError(f"{address}: the replaced bucket must already exist with its exact identity")
-    if action == ('delete',):
-        if after is not None or planned is not None:
-            raise PlanError(f"{address}: a removed address cannot keep planned values")
-        if kind == 'aws_s3_bucket' and before.get('force_destroy') is not True:
-            raise PlanError(f"{address}: removal requires the applied transitional force_destroy")
-        if kind == 'aws_s3_bucket_policy':
-            try:
-                actual = json.loads(before.get('policy', ''), object_pairs_hook=unique_json)
-            except (TypeError, ValueError) as exc:
-                raise PlanError(f"{address}: replaced bucket policy is unknown or invalid") from exc
-            if actual != bucket_policy(bucket, LEGACY_SNAPSHOTS_PREFIX):
-                raise PlanError(f"{address}: replaced bucket policy differs from its contract")
-        return
-    if planned is None or planned.get('type') != kind or planned.get('provider_name') != PROVIDER:
-        raise PlanError(f"{address}: unexpected resource type or provider")
-    for values in (after, planned.get('values')):
-        validate_s3(address, kind, values, change, configuration, bucket, account, region,
-                    snapshots_prefix=LEGACY_SNAPSHOTS_PREFIX, force_destroy=True)
-    if action == ('update',):
-        if before.get('force_destroy') is not False or {**before, 'force_destroy': True} != after:
-            raise PlanError(f"{address}: only force_destroy may change on the replaced bucket")
-    elif before != after:
-        raise PlanError(f"{address}: no-op before and after must be identical")
 
 
 def verify(plan, frameworks_dir=ROOT.parent.parent / "frameworks", mode="sbom-adoption", *,
@@ -259,9 +223,8 @@ def verify(plan, frameworks_dir=ROOT.parent.parent / "frameworks", mode="sbom-ad
     if not re.fullmatch(r'[0-9]{12}', account_id) or not re.fullmatch(r'[a-z]{2}(?:-[a-z]+)+-[0-9]+', region):
         raise PlanError('external account and region are required')
     bucket = bucket_name
-    legacy_bucket = legacy_bucket_name(account_id, region)
     if (not isinstance(bucket, str) or not re.fullmatch(BUCKET_NAME_PATTERN, bucket) or '--' in bucket
-            or bucket == legacy_bucket):
+            or bucket == retired_bucket_name(account_id, region)):
         raise PlanError('the exact analytics bucket name is required')
     variables = plan.get('variables', {})
     if (variables.get('aws_region', {}).get('value') != region
@@ -269,39 +232,21 @@ def verify(plan, frameworks_dir=ROOT.parent.parent / "frameworks", mode="sbom-ad
             or variables.get('sbom_bucket_name', {}).get('value') != bucket):
         raise PlanError('plan variables differ from external identity')
     calls = plan.get('configuration', {}).get('root_module', {}).get('module_calls', {})
-    if (set(calls) - {LEGACY_MODULE} != {'ecr', S3_MODULE} or calls[S3_MODULE].get('source') != '../s3'
-            or LEGACY_MODULE in calls and calls[LEGACY_MODULE].get('source') != LEGACY_SOURCE):
+    if set(calls) != {'ecr', S3_MODULE} or calls[S3_MODULE].get('source') != '../s3':
         raise PlanError('execution root/module source differs from infra/ecr -> ../s3')
     if (calls['ecr'].get('source') != 'terraform-aws-modules/ecr/aws'
             or calls['ecr'].get('version_constraint') != '3.2.0'):
         raise PlanError('existing ECR module source/version must remain pinned')
 
-    def module_configuration(name, addresses):
-        return resource_map(
-            ({**item, 'address': f'module.{name}.' + item['address']} for item in
-             calls[name].get('module', {}).get('resources', []) if item.get('mode') == 'managed'),
-            addresses, 'S3 configuration')
-
-    configuration = module_configuration(S3_MODULE, S3_ADDRESSES)
+    configuration = resource_map(
+        ({**item, 'address': f'module.{S3_MODULE}.' + item['address']} for item in
+         calls[S3_MODULE].get('module', {}).get('resources', []) if item.get('mode') == 'managed'),
+        S3_ADDRESSES, 'S3 configuration')
     prior = list(managed_resources(plan.get('prior_state', {}).get('values', {}).get('root_module', {})))
     prior_addresses = [resource.get('address') for resource in prior]
-    legacy_prior = set(prior_addresses) & set(LEGACY_ADDRESSES)
-    if LEGACY_MODULE in calls:
-        phase = 'transition'
-        configuration.update(module_configuration(LEGACY_MODULE, LEGACY_ADDRESSES))
-    else:
-        phase = 'removal' if legacy_prior else 'steady'
-    if phase != 'steady' and legacy_prior != set(LEGACY_ADDRESSES):
-        raise PlanError('the replaced bucket must exist with all six addresses; it is never created or adopted')
-    if phase == 'removal' and mode == 'noop':
-        raise PlanError('prior state still holds the replaced bucket; a no-op plan cannot remove it')
-    if phase == 'removal' and set(S3_ADDRESSES) - set(prior_addresses):
-        raise PlanError('removal requires the analytics bucket already managed in prior state')
     ecr = expected_resources(frameworks)
     expected = dict(ecr)
     expected.update({address: (None, kind) for address, kind in S3_ADDRESSES.items()})
-    if phase != 'steady':
-        expected.update({address: ('legacy', kind) for address, kind in LEGACY_ADDRESSES.items()})
     policies = {
         "aws_ecr_repository_policy": json.loads(
             (ROOT / "policies/ecr-repository-org-pull.json").read_text()
@@ -315,10 +260,9 @@ def verify(plan, frameworks_dir=ROOT.parent.parent / "frameworks", mode="sbom-ad
         expected,
         "changes",
     )
-    # Destroyed addresses have no planned values.
     planned = resource_map(
         managed_resources(plan.get("planned_values", {}).get("root_module", {})),
-        {a: v for a, v in expected.items() if not (phase == 'removal' and v[0] == 'legacy')},
+        expected,
         "planned values",
     )
     if (len(set(prior_addresses)) != len(prior_addresses)
@@ -331,26 +275,16 @@ def verify(plan, frameworks_dir=ROOT.parent.parent / "frameworks", mode="sbom-ad
         item = changes[address]
         change = item.get("change", {})
         action = tuple(change.get("actions", []))
-        if framework == 'legacy':
-            allowed = ({('delete',)} if phase == 'removal' else
-                       {('no-op',), ('update',)} if kind == 'aws_s3_bucket' and mode != 'noop' else {('no-op',)})
-        else:
-            # Removal only deletes the replaced bucket; nothing else is created.
-            allowed = ({('no-op',)} if framework is not None or mode == 'noop' or phase == 'removal'
-                       else {('create',), ('no-op',)})
+        allowed = ({('no-op',)} if framework is not None or mode == 'noop'
+                   else {('create',), ('no-op',)})
         if action not in allowed:
-            raise PlanError(f"{address}: disallowed actions {action} in {mode} mode ({phase})")
+            raise PlanError(f"{address}: disallowed actions {action} in {mode} mode")
         if item.get("previous_address") or change.get("importing"):
             raise PlanError(f"{address}: state migration or import is not greenfield")
         if action == ("create",) and change.get("before") is not None:
             raise PlanError(f"{address}: create action has pre-existing resource values")
         if item.get("type") != kind or item.get("provider_name") != PROVIDER:
             raise PlanError(f"{address}: unexpected resource type or provider")
-        if framework == 'legacy':
-            validate_legacy(address, kind, item, planned.get(address), configuration.get(address),
-                            legacy_bucket, account_id, region, action)
-            actions[action[0]] += 1
-            continue
         for resource, values in ((item, change.get("after")),
                                  (planned[address], planned[address].get("values"))):
             if resource.get("type") != kind or resource.get("provider_name") != PROVIDER:
@@ -364,13 +298,12 @@ def verify(plan, frameworks_dir=ROOT.parent.parent / "frameworks", mode="sbom-ad
         actions[action[0]] += 1
     return {
         "mode": mode,
-        "phase": phase,
+        "phase": "steady",
         "frameworks": frameworks,
         "repository_count": len(frameworks),
         "managed_resource_count": len(expected),
         "resource_types": dict(Counter(kind for _, kind in expected.values())),
         "actions": dict(actions),
-        "legacy_bucket_name": legacy_bucket if phase != 'steady' else None,
         "bucket_name": bucket,
         "account_id": account_id,
         "region": region,

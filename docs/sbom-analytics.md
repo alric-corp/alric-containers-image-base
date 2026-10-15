@@ -289,7 +289,9 @@ O demo lê lotes completos e o Parquet conferido, sem usar os caminhos de
 preparação. Executa SQLite local em memória; arrays/structs são representados
 como texto JSON apenas nessa demonstração. Isso verifica lógica relacional,
 joins e contagens, **não** o leitor Parquet, tipos aninhados ou execução de
-DDL do Athena. `ATHENA_EXECUTED = NO`.
+DDL do Athena. Esses pontos foram comprovados depois, na execução hospedada da
+rodada `sbom-analytics-v1-r1` (run `38283191994`, 12/10/2026); ver
+[operação](sbom-analytics-operations.md).
 
 ## Integrações restantes
 

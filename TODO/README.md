@@ -1,5 +1,10 @@
 # Marcos pequenos — Factory Distroless no DEV corporativo
 
+> **Planejamento histórico (22/09/2026, baseline `develop@2801363`).** Este pacote não
+> descreve a operação atual nem é runbook do fluxo vigente. O estado atual e os
+> documentos canônicos estão no [índice da documentação](../docs/README.md).
+
+
 **Uso:** um marco por sessão do Claude Code.  
 **Escopo:** conectar e comprovar a implementação existente no DEV, sem refazer a Factory nem antecipar HOM/PROD.  
 **Base:** análise compartilhada sobre `develop@2801363` e os ajustes discutidos em seguida. Este pacote não representa revalidação do repositório.

@@ -2,7 +2,7 @@
 
 O Distroless SBOM Analytics guarda os SBOMs SPDX dos builds da Factory em snapshots fechados no S3 e os consulta no Athena. Toda execução é manual (`workflow_dispatch` em `develop`). Não existe ingestão automática a partir do build, e nenhum resultado concede autoridade de publicação ou promoção.
 
-A substituição da estrutura histórica está em [migração](sbom-analytics-migration.md). Os recursos da coluna "Ativo" abaixo existem na AWS desde 2026-10-12. As provas hospedadas S3 e Athena passaram em 2026-10-12. No mesmo dia, o bucket histórico foi excluído pelo `Infra - Apply` aprovado da revisão de remoção.
+A substituição da estrutura histórica está em [migração](sbom-analytics-migration.md). Os recursos da coluna "Ativo" abaixo existem na AWS desde 2026-10-12. As provas hospedadas S3 e Athena passaram em 2026-10-12. No mesmo dia, o bucket histórico foi excluído pelo `Infra - Apply` aprovado da revisão de remoção. O workgroup e o database históricos, substituídos por `sbom_analytics`, ainda existem sem uso operacional; não os use. A remoção depende de autorização ([migração](sbom-analytics-migration.md)).
 
 ## Implantação atual (AWS pessoal)
 

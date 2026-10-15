@@ -8,13 +8,17 @@ em `scripts/pipeline/` aplicam as regras; os workflows controlam a execução.
 | `pipeline/config.json` | Workflows, `governance/configuration.py` e bootstrap DEV/HOM | Fonte única de contas, regiões, roles, buckets e backend; [contrato](pipeline/README.md) |
 | `pipeline/promote-dev.json`, `pipeline/promote-hom.json` | `governance/configuration.py`, `release/lifecycle.py` | Frameworks, habilitação e soak independentes para cada promoção; [contrato](pipeline/README.md) |
 | `governance/reusable-workflows.json` | `governance/workflow_dependencies.py` | Origem GitHub.com aprovada da biblioteca; callers/actions literais por SHA, checkout e grupo Dependabot devem permanecer coerentes |
+| `governance/catalog-support.json` | Teste de consistência do catálogo; [suporte do catálogo](../docs/catalog-support.md) | Status de suporte de cada variante (upstream e distribuidor), evidência datada, owner, revisão, decisão pendente e alvo de migração. Não habilita nem bloqueia build ou promoção |
 | `operations/health.json` | `operations/operational_health.py`, `catalog/default_batch.py` | Donos, alertas, cron e retenção das evidências; `exceptions` é a lista de frameworks fora do lote padrão (motivo, dono, `review_by`, ADR) |
-| `operations/ecr-lifecycle.json` | ECR, após preview revisado | Expira somente imagens sem tag após 30 dias; preserva releases com tag |
+| `operations/ecr-lifecycle.json` | Nenhum (histórico, não aplicado) | Modelo de 10/09/2026 (só imagens sem tag após 30 dias). A lifecycle efetiva é `infra/ecr/policies/ecr-lifecycle-7-days.json`; contrato em [Retenção no ECR](../docs/ecr-retention.md) |
 | `release/promotion-quarantine.json` | `release/find_promotion_candidate.py` | Digests retirados de stable que não podem ser promovidos novamente |
 | `release/signing-identities.json` | `release/verify_promotion.py` | Nome atual, nomes históricos e IDs imutáveis assinados do repositório e da organização |
 | `aws/github-actions-image-base-trust.json` | IAM, role `github-actions-image-base` | Trust policy OIDC desejada, restrita ao subject exato de develop; aplicação externa pendente |
+| `governance/develop-protection.json`, `governance/CODEOWNERS.template` | `governance/repository_protection.py` | Perfis LAB (aceito) e corporativo (proposto) da proteção de `develop`; template de ownership só com placeholders; [contrato](../docs/repository-governance.md) |
+| `operations/alerting.json` | `operations/alert_events.py` | Severidade, dados mínimos e limites de entrega dos eventos de alerta; destino externo continua null em `health.json`; [contrato](../docs/operational-alerting-contract.md) |
 
-Alterações passam por PR e revisão dos donos em `.github/CODEOWNERS`. O lint
+Alterações passam por PR; a revisão exigida segue o perfil vigente em
+[Governança do repositório](../docs/repository-governance.md). O lint
 compara a política de retenção com os workflows locais e reutilizáveis reais.
 Quarentena é por digest e repositório, com motivo, autor e data; consulte o
 [runbook de recuperação](../README.md#recuperação-de-stable-runbook-m15).

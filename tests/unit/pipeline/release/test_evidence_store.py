@@ -149,3 +149,23 @@ class EvidenceStoreTests(unittest.TestCase):
         for data, metadata in ((bytearray(b'a'), ()), (b'a', (('a', '1'), ('a', '1'))), (b'a', (('a', 1),))):
             with self.subTest(data=data, metadata=metadata), self.assertRaises(ValueError):
                 FrozenObject(data, metadata)
+
+    def test_exceptions_outside_the_transport_protocol_are_operational_errors(self):
+        # An adapter bug or unmapped SDK error must not escape, look absent or look like content.
+        for error in (KeyError('x-amz-version-id'), RuntimeError('adapter bug'), ValueError('bad header')):
+            with self.subTest(error=error), patch.object(self.transport, 'get', side_effect=error):
+                result = self.store.get('key', 'version')
+                self.assertEqual(result.status, ReadStatus.ERROR)
+                self.assertIn(type(error).__name__, result.reason)
+        for error in (MissingObject('NoSuchBucket'), RuntimeError('adapter bug')):
+            with self.subTest(error=error), patch.object(self.transport, 'keys', side_effect=error):
+                self.assertEqual(self.store.keys('prefix/').status, ReadStatus.ERROR)
+            with self.subTest(error=error), patch.object(self.transport, 'put_if_absent', side_effect=error):
+                self.assertEqual(self.store.create_once('key', self.request).status, WriteStatus.ERROR)
+        self.assertEqual(self.store.get('key').status, ReadStatus.MISSING)
+
+    def test_create_without_a_usable_version_is_never_created(self):
+        for version in (None, '', 42, b'v1'):
+            with self.subTest(version=version), patch.object(self.transport, 'put_if_absent', return_value=version):
+                result = self.store.create_once('key', self.request)
+                self.assertEqual((result.status, result.object), (WriteStatus.ERROR, None))

@@ -1,6 +1,6 @@
 # image-base
 
-Imagens base **distroless multi-arquitetura** (`amd64`/`arm64`) para **Java, Python, Go, Node.js e .NET** — **17 definições** de runtime/build no catálogo, **16 no lote automático**; a disponibilidade depende dos gates de cada release. Construídas com [apko](https://github.com/chainguard-dev/apko) + [melange](https://github.com/chainguard-dev/melange) (pacotes [Wolfi](https://github.com/wolfi-dev), sem Dockerfile), escaneadas com [Trivy](https://github.com/aquasecurity/trivy) e publicadas no **Amazon ECR** via workflows reusáveis do GitHub Actions, com autenticação por OIDC (sem chave de acesso estática).
+Imagens base **distroless multi-arquitetura** (`amd64`/`arm64`) para **Java, Python, Go, Node.js e .NET** — **16 definições** de runtime/build no catálogo. O build automático (push, cron e dispatch em `develop`) constrói e publica somente o golden path `go1-26`/`go1-26-dev`; o catálogo completo é validado em PRs de impacto compartilhado e certificado por dispatch. A disponibilidade depende dos gates de cada release. Construídas com [apko](https://github.com/chainguard-dev/apko) + [melange](https://github.com/chainguard-dev/melange) (pacotes [Wolfi](https://github.com/wolfi-dev), sem Dockerfile), escaneadas com [Trivy](https://github.com/aquasecurity/trivy) e publicadas no **Amazon ECR** via workflows reusáveis do GitHub Actions, com autenticação por OIDC (sem chave de acesso estática).
 
 ## Índice
 
@@ -31,8 +31,13 @@ veja [`CONTRIBUTING.md`](CONTRIBUTING.md); o índice de documentação está em
 A identidade operacional central `itau-github-repo-factory-distroless-v1` e sua
 única inline policy `factory-distroless-v1` têm [contrato IAM externo e runbook LAB](docs/factory-distroless-v1-iam-runbook.md).
 Sua criação pertence ao operador no LAB e à equipe IAM no corporativo.
-Terraform mantém os recursos e as identidades legadas; a referência operacional
-nos workflows será adotada em um PR separado após read-back IAM aprovado.
+Desde o PR #121 (10/10/2026), os escopos DEV e `Infra - Apply` resolvem para
+essa role; HOM continua com a role própria da conta HOM. Terraform mantém os
+recursos e as identidades legadas.
+
+**Estado atual (13/10/2026):** a publicação DEV de `stable` está pausada por
+uma escrita incompleta de 01/10/2026 (incidente aberto); a promoção HOM está
+desabilitada. Resumo por domínio e documentos canônicos: [índice da documentação](docs/README.md).
 
 ## O que é uma imagem Distroless?
 
@@ -62,8 +67,8 @@ A composição e os controles atuais são:
 | Java | 25 (LTS) | `openjdk-25`, `busybox` | `image-base-java25-dev` | `spring` | build stage (JDK completo + shell p/ mvnw/gradlew) |
 | Python | 3.13 | `python-3.13` | `image-base-python3-13` | `appuser` | runtime final |
 | Python | 3.14 | `python-3.14` | `image-base-python3-14` | `appuser` | runtime final |
-| Go | 1.25 | *(nenhum — só a base distroless)* | `image-base-go1-25` | `appuser` | runtime final (binário estático, sem toolchain/shell) |
-| Go | 1.25 | `go-1.25`, `busybox` | `image-base-go1-25-dev` | `appuser` | build stage (toolchain completo + shell) |
+| Go | 1.25 | *(nenhum — só a base distroless)* | `image-base-go1-25` | `appuser` | runtime final (binário estático, sem toolchain/shell); **série sem suporte upstream**, ver [suporte](docs/catalog-support.md) |
+| Go | 1.25 | `go-1.25`, `busybox` | `image-base-go1-25-dev` | `appuser` | build stage (toolchain completo + shell); **sem suporte upstream desde 19/08/2026**, decisão pendente ([suporte](docs/catalog-support.md)) |
 | Go | 1.26 | *(nenhum — só a base distroless)* | `image-base-go1-26` | `appuser` | runtime final (binário estático, sem toolchain/shell) |
 | Go | 1.26 | `go-1.26`, `busybox` | `image-base-go1-26-dev` | `appuser` | build stage (toolchain completo + shell) |
 | Node.js | 22 (LTS) | `nodejs-22` | `image-base-nodejs22` | `appuser` | runtime final (sem npm/shell) |
@@ -239,7 +244,7 @@ flowchart TD
     Base -- "include:" --> OUT["... Python (runtime) e demais frameworks"]
 ```
 
-(a tabela [Imagens disponíveis](#imagens-disponíveis) acima tem a lista completa e exata dos 12 arquivos)
+(a tabela [Imagens disponíveis](#imagens-disponíveis) acima tem a lista completa e exata dos 16 arquivos)
 
 Critério de escolha das versões (no momento em que este README foi escrito):
 
@@ -249,9 +254,11 @@ Critério de escolha das versões (no momento em que este README foi escrito):
 | Node.js | `nodejs-22` | `nodejs-24` | as duas últimas LTS (22 em Maintenance, 24 em Active LTS; 26 ainda é "Current", não é LTS) |
 | .NET | ~~`dotnet-8-sdk`~~ (removido em 17/09/2026, EOL 11/2026) | `dotnet-10-sdk` | eram as duas últimas LTS (.NET tem LTS a cada 2 anos: 6, 8, 10; a 9 é STS, não LTS); hoje só `dotnet10` está no catálogo |
 | Python | `python-3.13` | `python-3.14` | as duas últimas minors estáveis (Python não tem trilha LTS separada) |
-| Go | `go-1.25` | `go-1.26` | as duas últimas minors estáveis (Go também não tem trilha LTS separada) |
+| Go | `go-1.25` | `go-1.26` | eram as duas últimas minors estáveis (Go não tem trilha LTS). Desde 19/08/2026 (Go 1.27) a 1.25 está fora do suporte upstream; decisão pendente em [suporte do catálogo](docs/catalog-support.md) |
 
 O Wolfi é um repositório rolling-release. Cada build novo resolve um lock com os patches disponíveis; o build e seus replays usam as versões e checksums registrados nesse lock.
+
+Esta tabela registra o critério de escolha, não o suporte vigente. O status de suporte de cada variante, com evidência datada, owner e alvo de migração, fica em [`policies/governance/catalog-support.json`](policies/governance/catalog-support.json) e é explicado em [suporte do catálogo](docs/catalog-support.md).
 
 > **Nota:** o pacote `nodejs-*` do Wolfi não traz `npm` funcional sozinho — o `npm` usa `#!/usr/bin/env node` no shebang e o `/usr/bin/env` só existe se o pacote `busybox` também for instalado. Por isso as variantes `-dev` incluem `busybox` explicitamente — e por isso o `npm`/`busybox` ficam isolados nessa variante em vez de irem para a imagem de runtime final.
 
@@ -367,10 +374,11 @@ este PR não altera branch protection.
   padrão dos três chamadores diferente de `catálogo − exclusões` ou escrito
   como expressão dinâmica em vez do literal canônico, ou exclusão sem motivo,
   dono, `review_by` e ADR válido em `docs/adr/`).
-- **Uma aprovação**, com revisão de code owner nos caminhos do
-  [CODEOWNERS](.github/CODEOWNERS) (manifests, workflows, actions,
-  automação, testes, políticas de dependência, `melange` e `Makefile`).
-  Aprovações são descartadas a cada novo push.
+- **Revisão:** no LAB, `develop` exige PR com **zero** aprovações e sem
+  revisão de code owner; o owner removeu o `CODEOWNERS` em `03165e6`
+  (09/10/2026). Aprovações são descartadas a cada novo push. O perfil LAB
+  aceito, o perfil corporativo proposto e o template de ownership estão em
+  [Governança do repositório](docs/repository-governance.md).
 
 **CI - Repository checks** é um gate rápido em Linux: testes unitários e
 integração offline, sintaxe/hardening de workflows, pins imutáveis e contratos
@@ -421,13 +429,21 @@ habilitação `enabled`, frameworks e soak de `policies/pipeline/promote-hom.jso
 A promoção DEV usa `policies/pipeline/promote-dev.json`, com soak inicial zero
 e retomada horária pelo mesmo digest quando houver espera configurada.
 
+Estado em 13/10/2026: `promote-hom.json` tem `"enabled": false`, então nenhuma
+promoção HOM ocorre. Em DEV, os dois membros do par estão pausados desde a
+tentativa `r36848114957-a1` (01/10/2026): builds novos publicam candidates e
+terminam em `WAITING`, e o cron horário termina em `SKIPPED`, sem mover
+`stable`. Veja o [incidente aberto](docs/dev-hom-promotion.md#estado-atual-de-dev-stable-incidente-aberto).
+
 Veja [DEV → HOM: operação, infraestrutura e ativação](docs/dev-hom-promotion.md)
 para os contratos, limites da atomicidade ECR e critérios de aceite hospedado.
 
 ## Recuperação de `stable` (runbook, M15)
 
-Dispare `recover-stable.yml` em `develop` com `release=r<RUN_ID>-a<ATTEMPT>` e
-`reason`. O destino precisa ter sido promovido com sucesso em HOM. O workflow
+O recovery existe somente em HOM. Dispare `recover-stable.yml` em `develop` com
+`release=r<RUN_ID>-a<ATTEMPT>` e `reason`. O destino precisa ter sido promovido
+com sucesso em HOM pelo lifecycle atual; com a promoção HOM desabilitada, esse
+caminho não tem prova hospedada nesta revisão. O workflow
 revalida trust, SBOM, provenance e Trivy, restaura a release completa por digest
 e confirma as tags. Não exige PR nem rebuild.
 
@@ -435,6 +451,12 @@ Recovery pausa automaticamente novas promoções dos membros afetados. Para
 retomar, dispare a promoção com release explícita e `resume-automation=true`;
 todos os gates continuam obrigatórios. Promoção e recovery compartilham o lock
 HOM. Consulte o [runbook completo](docs/dev-hom-promotion.md#recovery-sem-pr-e-sem-rebuild).
+
+Em DEV não há recovery para release anterior: os bytes de uma release não
+promovida expiram em 7 dias ([retenção no ECR](docs/ecr-retention.md)). Uma
+escrita DEV interrompida é reconciliada por dispatch de `dev-stable.yml` com
+release explícita e `resume-automation=true`, sob todos os gates e com
+autorização do owner.
 
 ## Verificação: assinatura e build provenance
 

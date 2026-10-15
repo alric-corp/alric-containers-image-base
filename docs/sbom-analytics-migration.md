@@ -2,7 +2,7 @@
 
 Este procedimento substitui a estrutura histórica, criada durante a prova de conceito, pela implantação ativa descrita em [operação](sbom-analytics-operations.md). O owner autorizou a substituição em 2026-10-11 e a remoção integral da estrutura histórica em 2026-10-12, no deployment AWS pessoal (conta `712107929769`, região `us-east-1`).
 
-> **Estado em 2026-10-12:** os passos 1 a 8 foram executados. O passo 9 está em revisão.
+> **Estado em 2026-10-13:** os passos 1 a 9 foram executados. O passo 10 aguarda autorização do owner.
 >
 > - Policy transitória aplicada, com read-back.
 > - `Infra - Apply`, run `38207106116`: 6 criados, 1 alterado (`force_destroy`), plano pós-apply sem mudanças.
@@ -16,9 +16,13 @@ Este procedimento substitui a estrutura histórica, criada durante a prova de co
 >   - O owner revisou o `plan.json` e aprovou o apply: 6 recursos `module.sbom.*` excluídos.
 >   - O plano pós-apply veio sem mudanças (fase `steady`, 54 `no-op`).
 >   - A ausência foi confirmada pela AWS: `HeadBucket` 404 e `NoSuchBucket` nas leituras de versões.
-> - **Reconciliação IAM** (passo 9): documentos finais em revisão. Nenhuma policy foi alterada.
->
-> Os passos 10 em diante são **futuros**. Os objetos Glue e o workgroup históricos continuam existindo.
+> - **Reconciliação IAM** (passo 9), aplicada em 2026-10-13 com autorização do owner:
+>   - role central: um único `PutRolePolicy` do documento versionado; o read-back tem 14 statements e 6193 caracteres;
+>   - root `infra/iam`: apply do plano salvo, com uma única alteração em `aws_iam_role_policy.infra["apply"]`, seguido de um apply `-refresh-only`. O state local reconciliado é o serial 8; o serial 5 ficou como backup, fora do Git;
+>   - `plan -detailed-exitcode` retornou 0, o Access Analyzer deu `PASS` nos três documentos e nenhuma policy da conta cita o ARN do bucket excluído.
+> - **Passo 10:** o workgroup e o database `poc_distroless_sbom` (duas tabelas e três views no Glue) continuam existindo e aguardam autorização de remoção. Não têm uso operacional: nenhuma role tem grant sobre eles, e o CloudTrail registra somente leituras administrativas desde 2026-10-11.
+> - **Passo 11:** esta revisão retira o código de transição, independente do passo 10: os recursos Glue e Athena não são gerenciados por Terraform.
+> - O passo 12 vem depois dos passos 10 e 11.
 
 ## Nomes: antigo → novo
 
@@ -46,7 +50,7 @@ O nome do bucket vem de `policies/pipeline/config.json` (`analytics.bucket`) e e
 | Rodada `lab-sbom-athena-v1`, runs `38031426478` e `38117928589`, 18/18 instruções, saldo zero | Prova histórica real. É recusada como rodada nova. |
 | Rodada `sbom-analytics-v1-r1`, runs `38280876391` (plano) e `38283191994` (execução), 18/18 instruções, saldo zero | Prova hospedada do bucket definitivo. Encerrada: um novo `fresh_round` com ela é recusado porque os cinco nomes já existem no catálogo. |
 | `tests/fixtures/sbom-analytics/historical-poc-round/`, `lab-frozen-plan.*` e os journals e fixtures Athena | Replays byte a byte do histórico |
-| `infra/s3-legacy` e as constantes `LEGACY_*` | Os seis endereços `module.sbom.*` saíram do state no apply de remoção (run `38319342150`, serial 6). `infra/s3-legacy`, as constantes `LEGACY_*` e a fase `removal` do verificador saem só na revisão final. |
+| Endereços `module.sbom.*` | Saíram do state no apply de remoção (run `38319342150`, serial 6). A revisão final retirou `infra/s3-legacy`, as constantes `LEGACY_*` e as fases `transition` e `removal` do verificador; o módulo, os endereços e o nome do bucket substituído continuam recusados. |
 | Repositório `alric-corp/alric-containers-image-base`, tag `Source` e guards dos workflows | Identidade real do deployment e da proveniência. O núcleo recebe o repositório como entrada. |
 | Environment `lab-image-base-infra` | Identidade OIDC de implantação já existente (subject da trust) |
 | Role `itau-github-repo-factory-distroless-v1` e policy `factory-distroless-v1` | As mesmas entidades. Só os statements de analytics mudam. |
@@ -97,6 +101,9 @@ Depois da exclusão do bucket, a leitura de 2026-10-12 de todas as roles, usuár
 | Role `itau-github-repo-factory-distroless-v1`, inline `factory-distroless-v1` | Operador, fora do Terraform | 16 statements: o ARN antigo em `ExactSbomAnalyticsBucket` e os dois `TransitionalLegacy*` | [`factory-distroless-v1.inline-policy.json`](../policies/aws/factory-distroless-v1.inline-policy.json): 14 statements, só o bucket definitivo | `PutRolePolicy` do documento versionado |
 | Role `alric-github-repo-1360616627-infra-apply`, inline `image-base-infra-apply` | Root `infra/iam`, state local | 6 statements. O sexto, `ExactSbomAnalyticsBucket` sobre o ARN antigo, foi posto fora do state em 2026-10-09 | 5 statements, iguais ao state original | `terraform apply` de um plano salvo |
 | Role `alric-github-repo-1360616627-infra-plan`, inline `image-base-infra-plan` | Root `infra/iam`, state local | 5 statements, sem grant SBOM | Inalterado | Nenhuma (`no-op`) |
+
+**Resultado em 2026-10-13:** a central voltou com 14 statements e a `infra-apply` com 5, iguais aos
+documentos finais; RoleIds, trusts, durações e a ausência de attachments não mudaram.
 
 Nenhum workflow assume a role `infra-apply` desde a troca para a role central (o escopo `INFRA_APPLY` resolve para a central). O CloudTrail registra a última assunção em 2026-10-09T13:46Z. Os privilégios removidos **não** são transferidos ao bucket definitivo.
 
@@ -150,7 +157,11 @@ aws iam put-role-policy --role-name itau-github-repo-factory-distroless-v1 \
    - `no-op` nas duas `aws_iam_role.infra` e em `aws_iam_role_policy.infra["plan"]`;
    - nenhuma criação, exclusão, substituição, import ou `moved`.
    O refresh registra drift no atributo computado `inline_policy` das roles. Ele não está configurado e não gera ação. Qualquer outra forma, em especial recriação de role, interrompe a operação.
-4. `terraform -chdir=infra/iam apply reconcile.tfplan`. O apply grava o serial 6 e o backup local.
+4. `terraform -chdir=infra/iam apply reconcile.tfplan`. Com Terraform 1.15.8 e backend local, o apply
+   desse plano salvo, com uma alteração, gravou dois snapshots: o serial passou de 5 para 7, com o backup
+   local. O plano seguinte mostrou drift só no atributo computado `inline_policy`; um apply de plano
+   `-refresh-only` o absorveu e levou o state ao serial 8, promovido a canônico. Valide o resultado pelo
+   conteúdo do state, não por um serial fixo.
 
 ### Read-back e drift
 

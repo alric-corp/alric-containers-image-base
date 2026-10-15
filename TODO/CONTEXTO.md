@@ -1,5 +1,11 @@
 # Contexto mínimo — ativação corporativa DEV
 
+> **Planejamento histórico (22/09/2026).** O mapa de branches de ambiente abaixo
+> (`staging`, `main`) era o plano corporativo dessa data. No LAB, ambientes são
+> GitHub Environments e contas AWS ([DEV → HOM](../docs/dev-hom-promotion.md)).
+> Não usar como runbook.
+
+
 ## De onde este pacote parte
 
 Base: análise fornecida pelo usuário sobre `develop` no commit abreviado `2801363`, mais os ajustes da revisão feitos na conversa. Não houve consulta ao repositório nem validação de execução durante a criação deste pacote. Confira a revisão real em M00.

@@ -5,6 +5,8 @@ import unittest
 
 import yaml
 
+from scripts.pipeline.governance.pr_execution_scope import profile_for_paths
+
 
 ROOT = Path(__file__).resolve().parents[4]
 PIPELINE_DOMAINS = {'analytics', 'artifacts', 'catalog', 'consumer_apps', 'governance', 'operations', 'release', 'runtime'}
@@ -99,11 +101,12 @@ class RepositoryLayoutTests(unittest.TestCase):
                    for path in (ROOT / directory).rglob('*')
                    if path.is_file() and path.suffix in ('.py', '.sh', '.yaml', '.cjs',
                                                          '.sha256', '.pub', '.txt', '.json', '.go', '.cs', '.java')]
-        for event in ('push', 'pull_request'):
-            for path in sources:
-                relative = path.relative_to(ROOT).as_posix()
-                self.assertTrue(any(fnmatchcase(relative, pattern)
-                                    for pattern in events[event]['paths']), (event, relative))
+        for path in sources:
+            relative = path.relative_to(ROOT).as_posix()
+            self.assertTrue(any(fnmatchcase(relative, pattern)
+                                for pattern in events['push']['paths']), ('push', relative))
+            # PRs run unfiltered; the resolver must still select validation.
+            self.assertNotEqual(profile_for_paths([relative]), 'NONE', ('pull_request', relative))
 
     def test_product_workflows_do_not_execute_legacy_script_paths(self):
         workflows = ROOT / '.github/workflows'

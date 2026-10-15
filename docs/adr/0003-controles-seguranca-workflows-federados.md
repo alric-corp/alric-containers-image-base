@@ -63,7 +63,7 @@ e do [contrato de consumo](../consumer-verification-contract.md).
 | Retry sem rebuild | [contract_evidence.py](../../scripts/pipeline/runtime/contract_evidence.py); mesmo run, framework/revisão, digest/plataformas e par aplicável, sem falha mais recente do producer relevante | Artifact expirado, ausente, inválido ou conflitante não vira aprovação; aceite hospedado específico P1-02 continua pendente |
 | Recuperação e quarentena | [recover-stable.yml](../../.github/workflows/recover-stable.yml) e [policy](../../policies/release/promotion-quarantine.json); verifica origem, re-scan e read-back, sem reconstrução | Quarentena exige alteração explícita revisada; não é bypass de CVE |
 | Trust de composição | [integração de CAs](../../.github/workflows/image-trust.yml), [Wolfi](../wolfi-signing-key.md), preflight local/pin e drift detect-only | CAs corporativas reais pendentes; chave Wolfi não é trust set exclusivo por causa de discovery/JWKS Apko |
-| Governança e operação | [ci.yml](../../.github/workflows/ci.yml), [CODEOWNERS](../../.github/CODEOWNERS), lints/pins e [saúde](../m11-m04-operational-health.md) | Proteções/aplicação corporativa a confirmar; enforce_admins=false é decisão do sandbox. Alerta externo e SLA ainda pendentes |
+| Governança e operação | [ci.yml](../../.github/workflows/ci.yml), [perfis de governança](../repository-governance.md), lints/pins e [saúde](../m11-m04-operational-health.md) | Sem CODEOWNERS ativo no LAB; proteções corporativas a confirmar; enforce_admins=false é decisão do sandbox. Alerta externo e SLA ainda pendentes |
 
 P1-01 hosted PASS; P1-02 e P1-03 PENDING preservados. Esta documentação não
 produz novo aceite hospedado, corporativo ou lote inteiro aprovado.
@@ -139,7 +139,7 @@ credencial, cache de resultado ou novo gate é implementado nesta fatia.
 
 | Responsável | Papel | Referências / limite |
 | --- | --- | --- |
-| Containers Products | Autoria, manutenção, testes, atualização das dependências, operação, triagem e sustentação da fábrica e de seus workflows | [Arquitetura](../repository-architecture.md), [CODEOWNERS](../../.github/CODEOWNERS), [saúde](../../policies/operations/health.json); responsáveis individuais/canal/SLA corporativos a definir |
+| Containers Products | Autoria, manutenção, testes, atualização das dependências, operação, triagem e sustentação da fábrica e de seus workflows | [Arquitetura](../repository-architecture.md), [template de CODEOWNERS](../../policies/governance/CODEOWNERS.template), [saúde](../../policies/operations/health.json); responsáveis individuais/canal/SLA corporativos a definir |
 | AppSec / Segurança | Confirmar requisitos aplicáveis, scanner aceito, controles adicionais, evidências e decisões/exceções sob sua competência | Pendências da [RFC](../../RFC-013-Image-Base-Completa-com-Mermaid.md) e [ADR-0002](0002-sigstore-trust-model.md); não se presume aprovação |
 | Cloud / IAM / Network / PKI | Prover e aprovar infraestrutura, acessos, conectividade e âncoras correspondentes | P0-03 e itens externos da RFC; autorização de autoria não cria recursos nem permissões |
 | Times consumidores | Build, testes, dependências, verificação/atualização das bases e controles das próprias aplicações | [Consumer Verification Contract](../consumer-verification-contract.md); responsabilidade não é transferida à fábrica |

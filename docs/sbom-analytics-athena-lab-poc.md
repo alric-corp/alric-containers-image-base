@@ -5,7 +5,9 @@
 > abaixo não estão mais ativos. Nomes, workflows e operação atuais:
 > [Distroless SBOM Analytics — operação](sbom-analytics-operations.md); transição:
 > [migração](sbom-analytics-migration.md). Caminhos de arquivos citados abaixo
-> refletem o layout histórico.
+> refletem o layout histórico. O bucket da POC foi excluído em 2026-10-12; o
+> workgroup e o database `poc_distroless_sbom` ainda existem, sem uso
+> operacional, e aguardam remoção autorizada.
 
 This increment prepares a caller and the external IAM contract. It does not
 apply IAM, provision resources, dispatch a query or report an Athena hosted proof.
