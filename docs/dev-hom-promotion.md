@@ -242,14 +242,22 @@ tentativa 1, concluído com sucesso, sem rerun nem segunda tentativa.
   por dispatch. Os índices de 01/10/2026 perderam `stable` e ficaram sujeitos à
   [expiração de 7 dias](ecr-retention.md); os de `r36822456149-a1` já tinham
   expirado. Uma falha futura se resolve com um candidate mais novo.
-- Pendente: a primeira promoção automática posterior ainda não foi observada.
-  Ela deve ocorrer no primeiro build do golden path em `develop` que validar
-  um candidate novo e precisa de observação independente, com os critérios de
-  aceite aplicados ao job `approve` desse build: release acima de
-  `[38705617503, 1]`, `release-outcome.json` com `PASS` (não `WAITING`),
-  `stable` igual aos digests do novo candidate e marca d'água avançada. Até
-  lá, a retomada está comprovada pelo `state` e pela seleção reexecutada, não
-  por uma promoção automática hospedada.
+- Primeiras promoções automáticas posteriores, registradas pelo próprio
+  pipeline em 15/10/2026. Os builds de push em `develop`
+  [38784464692](https://github.com/alric-corp/alric-containers-image-base/actions/runs/38784464692)
+  e
+  [38785513761](https://github.com/alric-corp/alric-containers-image-base/actions/runs/38785513761)
+  validaram candidates novos. O job `approve` de cada um gravou
+  `release-outcome.json` com `PASS` (não `WAITING`), às 18:48 e às 19:01 UTC,
+  para `r38784464692-a1` e `r38785513761-a1`, ambas acima da marca d'água
+  vigente; o read-back de `stable` devolveu os digests de cada candidate. O
+  recibo do segundo build partiu do `stable` e do `state` deixados pelo
+  primeiro, com marca d'água `[38784464692, 1]`.
+- Pendente: confirmar essas promoções por leitura independente do ECR, do
+  Store e do CloudTrail, com os
+  [critérios de aceite](#recovery-sem-pr-e-sem-rebuild). Até lá, a retomada
+  está comprovada pelo `state` e pela seleção reexecutada; as promoções
+  hospedadas estão registradas pelo pipeline, sem conferência independente.
 
 ## Provisionamento e ativação
 

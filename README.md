@@ -37,8 +37,9 @@ recursos e as identidades legadas.
 
 **Estado atual (13/10/2026; DEV `stable` relido em 15/10/2026):** a publicação
 DEV de `stable` foi retomada em 15/10/2026 com a release `r38705617503-a1`, o
-que encerrou o [incidente de 01/10/2026](docs/dev-hom-promotion.md#incidente-de-dev-stable-de-01102026-encerrado);
-a primeira promoção automática posterior ainda não foi observada. A promoção
+que encerrou o [incidente de 01/10/2026](docs/dev-hom-promotion.md#incidente-de-dev-stable-de-01102026-encerrado).
+No mesmo dia, o job `approve` de dois builds registrou as primeiras promoções
+automáticas posteriores, ainda sem confirmação independente. A promoção
 HOM está desabilitada. Resumo por domínio e documentos canônicos: [índice da documentação](docs/README.md).
 
 ## O que é uma imagem Distroless?
@@ -436,8 +437,9 @@ Estado em 13/10/2026 (DEV relido em 15/10/2026): `promote-hom.json` tem
 abertas pela tentativa `r36848114957-a1` (01/10/2026) mantiveram os builds em
 `WAITING` e o cron horário em `SKIPPED` até 15/10/2026, quando o dispatch
 `38759851987` promoveu `r38705617503-a1` e encerrou as pausas. A promoção DEV
-automática voltou a valer sob todos os gates; a primeira ainda não foi
-observada. Veja o [registro do incidente](docs/dev-hom-promotion.md#incidente-de-dev-stable-de-01102026-encerrado).
+automática voltou a valer sob todos os gates: no mesmo dia, o job `approve` dos
+builds `38784464692` e `38785513761` registrou `PASS` para as releases desses
+builds, ainda sem confirmação independente. Veja o [registro do incidente](docs/dev-hom-promotion.md#incidente-de-dev-stable-de-01102026-encerrado).
 
 Veja [DEV → HOM: operação, infraestrutura e ativação](docs/dev-hom-promotion.md)
 para os contratos, limites da atomicidade ECR e critérios de aceite hospedado.
