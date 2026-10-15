@@ -16,9 +16,12 @@ política: [`policies/operations/alerting.json`](../policies/operations/alerting
 | SLO/SLA | Nenhum aprovado; nenhum valor deste documento é compromisso |
 
 Detecção em verde ou em vermelho não prova atendimento. Este contrato não
-oculta alertas: os dois `stable_age_hours` do incidente G01 e o
+oculta alertas: os dois `stable_age_hours` do par Go 1.26 e o
 `execution_scope_review` vencido continuam eventos bloqueantes enquanto a
-condição existir. Mudar `review_by` exige decisão do owner, não do alerta.
+condição existir. O proxy de `stable_age_hours` lê a promoção HOM e o fluxo
+anterior, não a promoção DEV atual: esses dois alertas não medem o incidente
+DEV de 01/10/2026 e continuam depois da recuperação de 15/10/2026 enquanto HOM
+estiver desabilitado. Mudar `review_by` exige decisão do owner, não do alerta.
 
 ## 1. Ciclo do alerta
 
@@ -29,7 +32,7 @@ condição existir. Mudar `review_by` exige decisão do owner, não do alerta.
 | Encaminhar | Falha do job e resumo; notificação nativa do GitHub não verificada | `reports/alert-events.json` com os eventos; entrega externa `NOT_CONFIGURED` | Canal externo, destinatários e janela de atendimento |
 | Reconhecer | Nenhum registro | ACK exigido e sempre `NOT_PROVEN` sem registro humano | Onde e por quem o ACK é registrado |
 | Investigar | Runbook por classe de sinal (contrato operacional, seção 7) | `occurrence_id` liga o evento ao run e à tentativa | — |
-| Recuperar | Procedimentos existentes; holds e recovery são G01/G07 | Sem ação automática | Autorização de cada recuperação |
+| Recuperar | Procedimentos existentes; os holds DEV da G01 foram encerrados em 15/10/2026 e o recovery HOM é G07 | Sem ação automática | Autorização de cada recuperação |
 | Encerrar | O alerta some quando a condição deixa de existir | O evento deixa de ser emitido; não há notificação `resolved` sem estado entre runs | Registro humano de encerramento |
 
 No `pipeline-health.yml`, o passo `Build alert events without external
@@ -96,7 +99,7 @@ ACK humano exige um registro fora da fábrica, vinculado ao `event_id` e ao
 | --- | --- | --- |
 | Idade do último `stable` aprovado | Health (`stable_age_hours`, proxy por job); exato pelo Release Store e ECR | Proxy sim; exato não (exige leitura AWS) |
 | Idade de candidatos validados | `candidate.json` (`dev_validated_at`) no Release Store | Não pelo health |
-| Holds ativos e duração | `state/*.json` (`hold`, `pending_release`, `updated_at`) | Não pelo health; ligado à G01 |
+| Holds ativos e duração | `state/*.json` (`hold`, `pending_release`, `updated_at`) | Não pelo health; exige leitura AWS do Store, como na G01 |
 | Falhas de workflows relevantes | API de runs (build, promoção, health) | Parcial: o health mede lacunas, não taxa de falha |
 | Detecção → ciência do responsável | Registros de ACK | Não |
 | Incidente → recuperação | Registros de abertura e encerramento | Não |

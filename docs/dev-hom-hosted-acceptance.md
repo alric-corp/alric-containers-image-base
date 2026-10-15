@@ -1,8 +1,10 @@
 # Aceite hospedado DEV → HOM e recovery (G07) — procedimento proposto
 
-**Estado: NÃO EXECUTADO.** `G07_HOSTED_ACCEPTANCE=BLOCKED_BY_G01_AND_AUTHORIZATION`.
-Este procedimento só pode rodar depois do encerramento do incidente DEV (G01)
-e de uma autorização explícita do owner para cada escrita listada. O contrato
+**Estado: NÃO EXECUTADO.** `G07_HOSTED_ACCEPTANCE=BLOCKED_BY_PREREQUISITES_AND_AUTHORIZATION`.
+O incidente DEV (G01) foi encerrado em 15/10/2026
+([registro](dev-hom-promotion.md#incidente-de-dev-stable-de-01102026-encerrado)).
+Este procedimento ainda depende dos demais pré-requisitos da seção 8 e de uma
+autorização explícita do owner para cada escrita listada. O contrato
 do fluxo continua em [DEV → HOM por release](dev-hom-promotion.md); aqui fica
 somente o roteiro de aceite e o que conta como prova.
 
@@ -17,8 +19,8 @@ Regressões locais deste roteiro: `tests/unit/pipeline/release/test_lifecycle_ac
 
 Registrar antes de começar e conferir em cada run (logs e `GITHUB_SHA`):
 
-- SHA de `develop` integrado (contendo a correção da G01) e blob de
-  `scripts/pipeline/release/lifecycle.py`;
+- SHA de `develop` integrado, posterior ao encerramento da G01 (que não
+  alterou código), e blob de `scripts/pipeline/release/lifecycle.py`;
 - `dev-stable.yml`, `promote-stable.yml` e `recover-stable.yml` nesse SHA;
 - executor compartilhado pinado nos chamadores e SHA da action Trivy
   (`workflow_dependencies` verifica os dois);
@@ -52,7 +54,9 @@ esta frente**: o primeiro passo da janela é lê-las (seção 13).
 
 ## 4. Manifesto e release elegível
 
-Usar somente uma release produzida depois do encerramento da G01:
+Usar somente uma release produzida por build posterior ao encerramento da
+G01 (run `38759851987`, 15/10/2026); a release recuperada, `r38705617503-a1`,
+é anterior:
 
 - `releases/<release>/manifest.json` no Store DEV com `state=DEV_STABLE`,
   `dev_readback` igual aos digests das imagens e resultados consumidores das
@@ -91,9 +95,15 @@ workflows.
 ## 8. Pré-requisitos da G01
 
 - Holds de `go1-26` e `go1-26-dev` encerrados pela retomada autorizada da
-  Frente A; `stable` DEV igual ao `state/*.json` do Store DEV.
-- Um manifesto `DEV_STABLE` novo, criado depois da retomada.
+  Frente A; `stable` DEV igual ao `state/*.json` do Store DEV. Atendido em
+  15/10/2026 pelo run `38759851987`, conferido por leitura independente.
+- Um manifesto `DEV_STABLE` novo, criado depois da retomada. Pendente: virá da
+  primeira promoção automática posterior, que ainda precisa de observação
+  independente.
 - Health sem o alerta `stable_age_hours` desses membros, ou com causa conhecida.
+  Causa conhecida: o proxy lê a promoção HOM e o fluxo anterior, não a
+  promoção DEV atual, e o alerta continua enquanto HOM estiver desabilitado
+  ([contrato operacional](m11-m04-operational-health.md)).
 
 Sem isso, o aceite não começa.
 

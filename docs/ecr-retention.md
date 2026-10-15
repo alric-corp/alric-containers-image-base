@@ -27,6 +27,13 @@ da conta `712107929769`, região `us-east-1`:
 - os 14 repositórios fora do golden path não têm nenhuma imagem com tag.
   Os índices da certificação de 2026-10-04 já expiraram.
 
+Depois dessa leitura, em 2026-10-15, a recuperação do
+[incidente de DEV `stable`](dev-hom-promotion.md#incidente-de-dev-stable-de-01102026-encerrado)
+moveu `stable` para os índices de `r38705617503-a1`, publicados em
+2026-10-15. Os índices de 2026-10-01 perderam a tag e, com push de mais de
+7 dias, ficaram sujeitos à expiração pela regra de prioridade 2; não são
+destino de rollback.
+
 ## Regras efetivas em DEV
 
 | Prioridade | Seleção | Efeito |

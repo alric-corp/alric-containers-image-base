@@ -35,9 +35,12 @@ Desde o PR #121 (10/10/2026), os escopos DEV e `Infra - Apply` resolvem para
 essa role; HOM continua com a role própria da conta HOM. Terraform mantém os
 recursos e as identidades legadas.
 
-**Estado atual (13/10/2026):** a publicação DEV de `stable` está pausada por
-uma escrita incompleta de 01/10/2026 (incidente aberto); a promoção HOM está
-desabilitada. Resumo por domínio e documentos canônicos: [índice da documentação](docs/README.md).
+**Estado atual (13/10/2026; DEV `stable` relido em 15/10/2026):** a publicação
+DEV de `stable` foi retomada em 15/10/2026 com a release `r38705617503-a1`, o
+que encerrou o [incidente de 01/10/2026](docs/dev-hom-promotion.md#incidente-de-dev-stable-de-01102026-encerrado).
+No mesmo dia, o job `approve` de dois builds registrou as primeiras promoções
+automáticas posteriores, ainda sem confirmação independente. A promoção
+HOM está desabilitada. Resumo por domínio e documentos canônicos: [índice da documentação](docs/README.md).
 
 ## O que é uma imagem Distroless?
 
@@ -429,11 +432,14 @@ habilitação `enabled`, frameworks e soak de `policies/pipeline/promote-hom.jso
 A promoção DEV usa `policies/pipeline/promote-dev.json`, com soak inicial zero
 e retomada horária pelo mesmo digest quando houver espera configurada.
 
-Estado em 13/10/2026: `promote-hom.json` tem `"enabled": false`, então nenhuma
-promoção HOM ocorre. Em DEV, os dois membros do par estão pausados desde a
-tentativa `r36848114957-a1` (01/10/2026): builds novos publicam candidates e
-terminam em `WAITING`, e o cron horário termina em `SKIPPED`, sem mover
-`stable`. Veja o [incidente aberto](docs/dev-hom-promotion.md#estado-atual-de-dev-stable-incidente-aberto).
+Estado em 13/10/2026 (DEV relido em 15/10/2026): `promote-hom.json` tem
+`"enabled": false`, então nenhuma promoção HOM ocorre. Em DEV, as pausas
+abertas pela tentativa `r36848114957-a1` (01/10/2026) mantiveram os builds em
+`WAITING` e o cron horário em `SKIPPED` até 15/10/2026, quando o dispatch
+`38759851987` promoveu `r38705617503-a1` e encerrou as pausas. A promoção DEV
+automática voltou a valer sob todos os gates: no mesmo dia, o job `approve` dos
+builds `38784464692` e `38785513761` registrou `PASS` para as releases desses
+builds, ainda sem confirmação independente. Veja o [registro do incidente](docs/dev-hom-promotion.md#incidente-de-dev-stable-de-01102026-encerrado).
 
 Veja [DEV → HOM: operação, infraestrutura e ativação](docs/dev-hom-promotion.md)
 para os contratos, limites da atomicidade ECR e critérios de aceite hospedado.
@@ -453,10 +459,15 @@ todos os gates continuam obrigatórios. Promoção e recovery compartilham o loc
 HOM. Consulte o [runbook completo](docs/dev-hom-promotion.md#recovery-sem-pr-e-sem-rebuild).
 
 Em DEV não há recovery para release anterior: os bytes de uma release não
-promovida expiram em 7 dias ([retenção no ECR](docs/ecr-retention.md)). Uma
-escrita DEV interrompida é reconciliada por dispatch de `dev-stable.yml` com
-release explícita e `resume-automation=true`, sob todos os gates e com
-autorização do owner.
+promovida expiram em 7 dias ([retenção no ECR](docs/ecr-retention.md)), e a
+seleção recusa candidates abaixo da maior identidade já promovida
+(`high_watermark`), inclusive por dispatch. Uma escrita DEV interrompida é
+reconciliada por dispatch de `dev-stable.yml` com release explícita e
+`resume-automation=true`, sob todos os gates e com autorização do owner, e
+aceita por leitura independente
+([critérios](docs/dev-hom-promotion.md#recovery-sem-pr-e-sem-rebuild)). Foi
+assim que o [incidente de 01/10/2026](docs/dev-hom-promotion.md#incidente-de-dev-stable-de-01102026-encerrado)
+foi encerrado.
 
 ## Verificação: assinatura e build provenance
 
@@ -522,9 +533,9 @@ jobs:
 | `policies/pipeline/config.json` | todos os jobs AWS | arquivo versionado | sim | contas, regiões, roles, buckets e backend; [contrato](policies/pipeline/README.md) |
 | `promote-dev.json` / `promote-hom.json` | promoções | arquivos versionados | sim | `enabled`, `frameworks` e `soak_hours` por destino |
 | `frameworks` | build-base-images | input | sim | array JSON de pares completos do catálogo |
-| `release` | promote-stable / recover-stable | dispatch | recovery: sim | identidade exata `r<RUN>-a<ATTEMPT>` |
+| `release` | promote-stable / recover-stable / dev-stable | dispatch | recovery e retomada: sim | identidade exata `r<RUN>-a<ATTEMPT>` |
 | `soak-hours` | promote-stable | dispatch | não (`0` usa JSON) | horas após aprovação DEV stable, respeitando `soak_hours` de `promote-hom.json` |
-| `resume-automation` | promote-stable | dispatch | não (default `false`) | retoma membros pausados somente com release explícita |
+| `resume-automation` | promote-stable / dev-stable | dispatch | não (default `false`) | retoma membros pausados somente com release explícita |
 
 Pré-requisito de infraestrutura: provider OIDC e roles aprovados por Cloud/IAM, com trust restrita e permissões conforme o [contrato P1-04](docs/iam-permission-contract.md). Seus exemplos locais não alteram a policy ativa. A [Infra do produto](infra/README.md) provisiona os ECRs; o publicador é `PREPROVISIONED_ONLY`, sem administração de repositórios. `PutImage` no mesmo repositório não reserva `stable` exclusivamente ao promotor.
 
