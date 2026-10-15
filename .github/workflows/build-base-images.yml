@@ -124,7 +124,7 @@ jobs:
       - name: Download validated OCI artifact
         id: download
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: validated-oci-${{ matrix.framework }}
           path: image.oci
@@ -168,7 +168,7 @@ jobs:
 
       - name: Download current validated counterpart for pair digest binding
         if: steps.contract-plan.outputs.counterpart_framework != ''
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: validated-oci-${{ steps.contract-plan.outputs.counterpart_framework }}
           path: runtime-counterpart.oci
@@ -195,7 +195,7 @@ jobs:
         id: contract
         if: steps.contract-plan.outputs.required == 'true'
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: runtime-${{ steps.contract-plan.outputs.contract_framework }}-[0-9]*
           path: runtime-gate
@@ -423,7 +423,7 @@ jobs:
       # Só as evidências: os artifacts validated-oci-* têm centenas de MB e
       # não têm nada que a tabela use.
       - name: Download run evidence
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: evidence
           pattern: '{build-scans-*,publication-*,runtime-*,promotion-*}'

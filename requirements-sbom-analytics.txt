@@ -2,7 +2,7 @@
 PyYAML==6.0.3
 pyarrow==26.0.0
 boto3==1.43.111
-botocore==1.40.39
+botocore==1.43.111
 s3transfer==0.19.2
 jmespath==1.0.1
 python-dateutil==2.9.0.post0
