@@ -1,5 +1,10 @@
 # Central role: Stage A OIDC preflight
 
+> **Status (2026-10-13):** integrated by PR #120 on 2026-10-09; hosted preflight
+> run 37983556188 succeeded in `DEV` and `lab-image-base-infra`. This document
+> is the review record of that increment.
+
+
 This increment proves GitHub OIDC assumption of the existing external role
 `arn:aws:iam::712107929769:role/itau-github-repo-factory-distroless-v1`
 (RoleId `AROA2LTHQWCU2N3H2OE3L`). It does not change the operational resolver.

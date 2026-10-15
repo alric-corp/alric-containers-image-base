@@ -342,10 +342,10 @@ binding e stable recovery — nada disso existia na POC inicial.
 A formalização mais recente desse mecanismo — lifecycle de 7 dias com
 `stable` protegida por prioridade de regra, e o binding runtime/dev via
 `verify_promotion_pairs.py` — está em
-[ADR-0005](docs/adr/0005-stable-lifecycle-realinhamento-rfc013.md), proposto em
-16/09/2026 e ainda pendente de aceite; é a intenção original desta RFC,
-não uma invenção nova, mas vale conferir o estado corrente do ADR antes de
-citar como já aplicado em produção.
+[ADR-0005](docs/adr/0005-stable-lifecycle-realinhamento-rfc013.md), aceito; é a
+intenção original desta RFC, não uma invenção nova. A lifecycle está aplicada
+aos 16 ECRs DEV do LAB (leitura de 13/10/2026); o contrato vigente de
+retenção está em [Retenção no ECR](docs/ecr-retention.md).
 
 ### 8. Supply chain
 
@@ -404,17 +404,22 @@ mais ownership AWS ativo (ver [infra/README.md](infra/README.md)).
 ### 12. Lifecycle
 
 Não existe esse conceito de lifecycle de produto no repositório inicial —
-imagens publicadas se acumulam indefinidamente. Hoje, a policy aplicada
-(`policies/operations/ecr-lifecycle.json`) expira apenas imagens **sem
-tag** após 30 dias; toda imagem tagueada, incluindo build tags, é
-preservada. A refinaria proposta em
-[ADR-0005](docs/adr/0005-stable-lifecycle-realinhamento-rfc013.md) fecha essa
-lacuna: build tags expiram em 7 dias, e `stable` é protegida por prioridade
+imagens publicadas se acumulam indefinidamente. Nesta solução, a lifecycle
+aplicada pelo root `infra/ecr` aos 16 ECRs DEV do LAB é
+[`infra/ecr/policies/ecr-lifecycle-7-days.json`](infra/ecr/policies/ecr-lifecycle-7-days.json),
+conforme o [ADR-0005](docs/adr/0005-stable-lifecycle-realinhamento-rfc013.md):
+build tags expiram 7 dias após o push, e `stable` é protegida por prioridade
 de regra (a primeira regra reivindica qualquer imagem tagueada `stable`
 antes que a segunda possa expirá-la por idade) — não por exclusão de
 padrão de tag, já que uma mesma imagem pode ter as duas tags. Isso permite
 `stable` movível e build tags imutáveis, simultaneamente, versionado em
-Terraform.
+Terraform. Disponibilidade por ambiente e limites de recovery estão em
+[Retenção no ECR](docs/ecr-retention.md).
+
+*Histórico:* até a adoção do ADR-0005, a policy então aplicada
+(`policies/operations/ecr-lifecycle.json`, 10/09/2026) expirava apenas imagens
+**sem tag** após 30 dias e preservava toda imagem tagueada. Esse arquivo não é
+carregado por nenhum Terraform, script ou workflow atual.
 
 ### 13. Certificates
 
@@ -484,7 +489,7 @@ operacional que não existia antes.
 | `stable` | direto no build | promoção separada, com soak e re-scan |
 | Stable read-back | ❌ | ✅ |
 | Stable recovery | ❌ | ✅ |
-| Lifecycle | ❌ | ✅ 30 dias (sem tag); 7 dias com proteção por prioridade proposto em ADR-0005 |
+| Lifecycle | ❌ | ✅ build tags expiram em 7 dias; `stable` protegida por prioridade (ADR-0005, aplicado no LAB) |
 | Runtime/dev pair binding | ❌ | ✅ |
 | Retry sem rebuild | ❌ | ✅ |
 | Health | ❌ | ✅ |
@@ -567,10 +572,10 @@ entra no catálogo ativo.
   já provado no lab (ver [Corporate Production Readiness](docs/corporate-production-readiness.md)).
 - **Consumo** — `stable` oficial + build tag imutável + digest (ver
   [Consumer Verification Contract](docs/consumer-verification-contract.md)).
-- **Lifecycle** — 7 dias preservando `stable`; direção já formalizada em
-  [ADR-0005](docs/adr/0005-stable-lifecycle-realinhamento-rfc013.md), pendente
-  de aceite de code owner — não uma decisão do Tech Lead, ao contrário dos
-  pontos 1, 3 e 4 acima.
+- **Lifecycle** — 7 dias preservando `stable`, formalizado no
+  [ADR-0005](docs/adr/0005-stable-lifecycle-realinhamento-rfc013.md) e aplicado
+  no LAB; a janela corporativa ainda depende de decisão dos owners — não uma
+  decisão do Tech Lead, ao contrário dos pontos 1, 3 e 4 acima.
 
 ### Em uma frase
 
@@ -638,7 +643,7 @@ histórica permanece limitada ao commit/run em que foi obtida.
 | M14 | Timeouts / concorrência | IMPLEMENTED | Hardening e grupos por PR/framework; ARM usa emulação quando necessário |
 | M15 | Recovery | IMPLEMENTED | Verificação, re-scan e read-back sem bypass; quarentena exige PR explícito |
 | M16 | Hardening / revisão | PARTIAL | Lint e CODEOWNERS; sem alegar enforcement contra administrador no sandbox |
-| M09/M12 | Reusable workflows | IMPLEMENTED | SHA atual dos chamadores: 7a9b055a462eeb8552d3404c26538b44e8ccd83f; [origem revisada](policies/governance/reusable-workflows.json), checkout, contratos e referências Trivy conferidos localmente |
+| M09/M12 | Reusable workflows | IMPLEMENTED | SHA dos chamadores: o da linha "Biblioteca aprovada" logo abaixo, conferida por teste; [origem revisada](policies/governance/reusable-workflows.json), checkout, contratos e referências Trivy conferidos localmente. O SHA de uma action interna, como `setup-trivy`, é outro pin |
 | — | Requisitos de segurança / scanner | EXTERNAL — a confirmar | [P1-06](docs/adr/0003-controles-seguranca-workflows-federados.md); Trivy continua o gate vigente; aplicabilidade de integração adicional não presumida |
 
 Biblioteca aprovada: `alric-corp/alric-containers-reusable-workflows@fd44ef512cf2e3ef9c65d0c005a9aa878ee26a69`.
@@ -962,7 +967,7 @@ com scan e testes. Exemplos para Node.js, .NET e Java no [README](README.md#como
 - Publicação no ECR do sandbox; ECR corporativo e pull por Org IDs reais continuam externos.
 - Uma tag `stable` para consumo e tags imutáveis para rastreabilidade.
 - Retenção de evidências de CI por finalidade (OCI: 3 dias; Melange, SBOM e relatórios: 30 dias), versionada em `policies/operations/health.json` e conferida por lint contra os workflows. `retention-days` não é backup: novo build pode gerar outro digest; retry de publicação reutiliza o OCI existente sem reconstrução.
-- Lifecycle ECR: policy expira somente imagens sem tag após 30 dias; aplicação/preview no conjunto histórico de 15 repositórios documentados em 10/09, sem extrapolar para todos os ECRs atuais. Todas as releases com tag permanecem preservadas para recuperação. Reduzir a retenção de releases publicadas exige definir a janela de recuperação.
+- Lifecycle ECR (DEV LAB, verificado em 13/10/2026 nos 16 repositórios): build tags expiram 7 dias após o push e somente a imagem com `stable` é protegida. Uma release DEV que não está em `stable` não é retida para recuperação além dessa janela. HOM não tem expiração por idade; a janela corporativa não está definida. Contrato completo em [Retenção no ECR](docs/ecr-retention.md). O modelo de 10/09/2026 (só imagens sem tag após 30 dias) é histórico e não está aplicado.
 
 ## Repositórios
 

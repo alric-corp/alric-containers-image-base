@@ -1,6 +1,7 @@
 """Offline SPDX analytics CLI. Local projections confer no release authority."""
 import argparse
 from dataclasses import dataclass
+import errno
 import os
 from pathlib import Path
 import re
@@ -347,18 +348,150 @@ def export(projection, output):
         lock.unlink()
 
 
+# CLI diagnostic only: the core's own message formats select a stable code;
+# normalization rules and texts are unchanged. Anchors keep user paths inside
+# a message from selecting a rule. First match wins.
+FAILURES = tuple((re.compile(pattern), code, category) for pattern, code, category in (
+    (r'^batch writer busy', 'OUTPUT_BUSY', 'CONCURRENCY'),
+    (r'^only local output is supported$', 'OUTPUT_NOT_LOCAL', 'UNSAFE_PATH'),
+    (r'^symlink (?:output root|batch parent) refused$|^symlink in completed batch$', 'SYMLINK_REFUSED', 'UNSAFE_PATH'),
+    (r': regular local file required$|^special file in completed batch$', 'NOT_A_REGULAR_FILE', 'UNSAFE_PATH'),
+    (r'^invalid original source path$', 'UNSAFE_SOURCE_PATH', 'UNSAFE_PATH'),
+    (r': SPDX hash mismatch$', 'SPDX_HASH_MISMATCH', 'INTEGRITY'),
+    (r': subject checksum differs from expected OCI identity$|: subject SHA256 checksum required$'
+     r'|^sbom-[a-z0-9_]+\.spdx\.json does not describe its OCI subject ', 'SUBJECT_MISMATCH', 'INTEGRITY'),
+    (r': (?:validation|publication) record binding differs$|: candidate identity differs$'
+     r'|^published |^duplicate platform in published index$', 'RECORD_BINDING_MISMATCH', 'INTEGRITY'),
+    (r': invalid digest$|^imagem deve ser referenciada por digest', 'INVALID_DIGEST', 'INTEGRITY'),
+    (r'byte limit exceeded$|^JSON byte/type limit$|count(?:/type)? limit$', 'LIMIT_EXCEEDED', 'LIMITS'),
+    (r'(?:^|: )(?:invalid JSON: |duplicate JSON key: |non-finite JSON |JSON depth limit$'
+     r'|JSON document must be an object$)', 'INVALID_JSON', 'INPUT_JSON'),
+    (r': missing/unknown fields$', 'FIELDS_INVALID', 'CONTRACT'),
+))
+STAGE_FAILURES = dict(ARGUMENTS=('ARGUMENTS_INVALID', 'ARGUMENTS'), READ_CONTEXT=('INPUT_UNREADABLE', 'INPUT_FILE'),
+                      PARSE_CONTEXT=('CONTEXT_INVALID', 'CONTRACT'), VALIDATE=('CONTEXT_INVALID', 'CONTRACT'),
+                      EXPORT=('OUTPUT_CONFLICT', 'OUTPUT'))
+# An existing batch that fails verification is an output conflict, whatever its cause.
+EXPORT_CODES = ('OUTPUT_BUSY', 'OUTPUT_NOT_LOCAL', 'SYMLINK_REFUSED', 'LIMIT_EXCEEDED')
+SPDX_DOCUMENT = re.compile(r'^[^/: ]+/sbom-[a-z0-9_]+\.spdx\.json: ')
+
+
+def _diagnostic(status, stage, code, category=None, message=None, **values):
+    return dict(dict(diagnostic_version=1, tool='sbom-analytics-normalize', status=status, stage=stage, code=code,
+                     category=category, message=message, context={}, batch_id=None, complete=False, retryable=False,
+                     exit_code=0 if status == 'SUCCESS' else 1, cryptographic_authenticity='NOT_REVALIDATED',
+                     publication_authority=False), **values)
+
+
+def _failure(error, stage, redactions):
+    """Code, stage and a bounded message; never a traceback or an SDK/OS payload."""
+    context = dict(exception=type(error).__name__)
+    if isinstance(error, ImportError):
+        code, category, message = 'DEPENDENCY_UNAVAILABLE', 'DEPENDENCY', 'required module unavailable: ' + str(error.name)
+    elif isinstance(error, OSError):
+        code, category = 'FILESYSTEM_ERROR', 'FILESYSTEM'
+        context['errno'] = errno.errorcode.get(error.errno) if type(error.errno) is int else None
+        message = error.strerror or 'filesystem operation failed'
+    elif isinstance(error, (ValueError, KeyError, TypeError)):
+        message = str(error)
+        for path, label in sorted(redactions, key=lambda item: -len(item[0])):
+            message = message.replace(path, label)
+        message = ''.join(c if ' ' <= c <= '~' else '?' for c in ' '.join(message.split()))[:300]
+        code, category = next(((c, k) for pattern, c, k in FAILURES if pattern.search(message)), (None, None))
+        if code is None or (stage == 'EXPORT' and code not in EXPORT_CODES):
+            code, category = STAGE_FAILURES[stage]
+        if stage == 'VALIDATE' and category == 'CONTRACT' and SPDX_DOCUMENT.match(message):
+            code, category = 'SPDX_INCOMPATIBLE', 'SPDX_CONTRACT'
+    else:
+        code, category, message = 'NORMALIZER_INTERNAL_ERROR', 'INTERNAL', 'internal error (' + type(error).__name__ + ')'
+    return _diagnostic('ERROR', stage, code, category, message, context=context, retryable=code == 'OUTPUT_BUSY')
+
+
+def _report_sink(value, protected):
+    """Explicit local file outside the context file and the output root."""
+    require(type(value) is str and value and '://' not in value, 'report must be a local file')
+    path = Path(value)
+    require(not path.is_symlink() and not path.is_dir(), 'report must not be a symlink or directory')
+    resolved = path.resolve()
+    require(all(resolved != root and root not in resolved.parents for root in protected),
+            'report must be outside the context file and the output root')
+    return path
+
+
+def _write_report(value, protected, diagnostic):
+    path = _report_sink(value, protected)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.normalize-report-', delete=False) as stream:
+        temporary = Path(stream.name)
+        stream.write(canonical(diagnostic) + b'\n')
+    try:
+        _report_sink(value, protected)  # The sink may have changed while the batch was written.
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _option(argv, name):
+    values = [argv[i + 1] for i, value in enumerate(argv[:-1]) if value == name]
+    values += [value.split('=', 1)[1] for value in argv if value.startswith(name + '=')]
+    return values[0] if len(values) == 1 else None
+
+
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input', required=True, type=Path, help='local v1 context JSON; paths relative to this file')
     parser.add_argument('--output', required=True, help='private local output root (never an S3 URI)')
-    args = parser.parse_args(argv)
+    parser.add_argument('--report', help='optional local JSON diagnostic, written on success and failure; '
+                                         'never the context file or inside --output')
     try:
-        require('://' not in str(args.output), 'only local output is supported')
-        context = document(read_local(args.input, LIMITS['context_bytes']), limit=LIMITS['context_bytes'])
-        result = export(prepare(context, base_directory=args.input.resolve().parent), args.output)
-    except (OSError, ValueError, KeyError, TypeError, ImportError) as error:
+        args = parser.parse_args(argv)
+    except SystemExit as exit:
+        report = _option(argv, '--report')
+        if exit.code and report is not None:  # Usage errors keep argparse's exit status.
+            try:
+                protected = [Path(p).resolve() for p in (_option(argv, '--input'), _option(argv, '--output')) if p]
+                _write_report(report, protected, _diagnostic('ERROR', 'ARGUMENTS', 'ARGUMENTS_INVALID', 'ARGUMENTS',
+                                                             'invalid command-line arguments', exit_code=exit.code))
+            except (OSError, ValueError, RuntimeError):
+                print('SBOM analytics report not written', file=sys.stderr)
+        raise
+    try:
+        protected = [args.input.resolve(), Path(args.output).resolve()]
+        if args.report is not None:
+            _report_sink(args.report, protected)  # Before any work: a refused sink never follows a batch.
+    except (OSError, ValueError, RuntimeError) as error:
         print('SBOM analytics failed: ' + str(error), file=sys.stderr)
         return 1
+    stage, redactions = 'ARGUMENTS', [(str(protected[0].parent), '<context-directory>'), (str(protected[1]), '<output>')]
+    try:
+        require('://' not in str(args.output), 'only local output is supported')
+        stage = 'READ_CONTEXT'
+        raw = read_local(args.input, LIMITS['context_bytes'])
+        stage = 'PARSE_CONTEXT'
+        context = document(raw, limit=LIMITS['context_bytes'])
+        stage = 'VALIDATE'
+        projection = prepare(context, base_directory=args.input.resolve().parent)
+        stage = 'EXPORT'
+        result = export(projection, args.output)
+    except Exception as error:  # Known types keep their original text; others never print a traceback.
+        known = isinstance(error, (OSError, ValueError, KeyError, TypeError, ImportError))
+        print('SBOM analytics failed: ' + (str(error) if known else 'internal error (' + type(error).__name__ + ')'),
+              file=sys.stderr)
+        diagnostic = _failure(error, stage, redactions)
+        if args.report is not None:
+            try:
+                _write_report(args.report, protected, diagnostic)
+            except (OSError, ValueError, RuntimeError):
+                print('SBOM analytics report not written', file=sys.stderr)
+        return 1
+    if args.report is not None:
+        try:
+            _write_report(args.report, protected, _diagnostic(
+                'SUCCESS', 'EXPORT', 'BATCH_' + result['status'], batch_id=result['batch_id'], complete=True))
+        except (OSError, ValueError, RuntimeError):
+            print('SBOM analytics report not written', file=sys.stderr)
+            return 1
     print(canonical(result).decode())
     return 0
 

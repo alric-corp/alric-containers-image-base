@@ -1,5 +1,10 @@
 # Central operational role — Stage B activation review
 
+> **Status (2026-10-13):** integrated by PR #121 on 2026-10-10. DEV and the
+> protected Infra scopes resolve to the central role. This document is the
+> review record of that change, not a pending procedure.
+
+
 This PR prepares configuration resolution. It does not merge itself, dispatch
 operational workflows, change IAM or activate SBOM ingestion.
 

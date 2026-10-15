@@ -121,7 +121,7 @@ completo; **TO_VALIDATE** = depende do ambiente corporativo para ser provado.
 | Preflight fail-closed contra ECR fora do contrato — observado ao vivo rejeitando um repositório ainda não reconciliado | PROVEN |
 | `IMMUTABLE_WITH_EXCLUSION`, `stable` como única tag móvel, build tags imutáveis | PROVEN |
 | OCI index digest como identidade forte; `stable` e build tag como conveniência/versão | PROVEN |
-| Lifecycle de 7 dias com `stable` protegida por prioridade de regra | PROVEN a proteção (preview real, 0 selecionadas); expiração positiva `>7d` ainda não observada contra dado real — genuína limitação de tempo decorrido |
+| Lifecycle de 7 dias com `stable` protegida por prioridade de regra | PROVEN no LAB: em 13/10/2026 nenhuma build tag anterior a 06/10 restava nos 16 ECRs, e o índice `stable` de 01/10 permanecia ([Retenção no ECR](ecr-retention.md)); a janela corporativa não está definida |
 | Candidato → soak → re-scan → `stable` por referência → read-back (`observed == candidate`) → `promoted=true` | PROVEN |
 | Recovery para digest anterior com as mesmas verificações, sem rebuild; quarentena versionada | PROVEN |
 
@@ -144,7 +144,8 @@ completo; **TO_VALIDATE** = depende do ambiente corporativo para ser provado.
 | Separação lógica Infra / Containers: roles distintas, capability model corporate-like documentado | PROVEN o desenho e a operação; `IAM_ENFORCED_SEPARATION = NO` — a role Containers do LAB ainda pode mais do que o publicador faz (ver [contrato IAM](iam-permission-contract.md)) |
 | No-drift pós-publicação/promoção/recovery (`terraform plan` → `No changes.`) | PROVEN |
 | Permissões destrutivas fora da role permanente; concessão temporária one-off auditada (`drift-remediation/`) | PROVEN |
-| CODEOWNERS + revisão obrigatória de code owner + jobs `test`/`lint-workflows` + lints de hardening/pins/retenção/lote | PROVEN no LAB para contexts históricos; nomes exibidos agora `Unit & integration tests` / `Repository & workflow lint` exigem alinhamento dos required checks no merge autorizado. `enforce_admins` desligado por decisão do sandbox — **TO_VALIDATE** como controle corporativo |
+| Required checks `Unit & integration tests` / `Repository & workflow lint` + lints de hardening/pins/retenção/lote | PROVEN no LAB (API 13/10/2026) |
+| CODEOWNERS + revisão obrigatória de code owner + `enforce_admins` | **NOT_APPLIED no LAB**: 0 aprovações, sem CODEOWNERS (removido em `03165e6`), `enforce_admins` desligado por decisão do sandbox. Perfil corporativo proposto em [Governança do repositório](repository-governance.md) — **TO_VALIDATE** |
 | Health diário, drift Wolfi, resumo por framework, `execution_scope` visível | PROVEN a detecção; destino externo de alerta `null` e SLA — **TO_VALIDATE** |
 | Renovate/Dependabot configurados | DESIGNED; ativação depende do administrador |
 
@@ -161,7 +162,7 @@ completo; **TO_VALIDATE** = depende do ambiente corporativo para ser provado.
 | Release / promotion model (soak, `stable`, read-back) | READY |
 | Recovery model | READY |
 | Infrastructure-as-Code model (Terraform-owned ECR, preprovisioned-only) | READY |
-| Governance model (CODEOWNERS, gates, lints, ADRs) | READY |
+| Governance model (gates, lints, ADRs; revisão e CODEOWNERS só como perfil corporativo proposto) | PARTIAL |
 | Corporate IAM / OIDC | TO VALIDATE |
 | Corporate network / proxy / egress | TO VALIDATE |
 | Corporate CA / PKI | TO VALIDATE |

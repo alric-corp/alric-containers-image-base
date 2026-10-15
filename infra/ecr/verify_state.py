@@ -10,9 +10,9 @@ from pathlib import Path
 import sys
 
 if __package__:
-    from .verify_plan import catalog, expected_resources, managed_resources, LEGACY_ADDRESSES, S3_ADDRESSES
+    from .verify_plan import catalog, expected_resources, managed_resources, S3_ADDRESSES
 else:
-    from verify_plan import catalog, expected_resources, managed_resources, LEGACY_ADDRESSES, S3_ADDRESSES
+    from verify_plan import catalog, expected_resources, managed_resources, S3_ADDRESSES
 
 
 def verify(metadata, state, *, bucket, key, region, workspace, root):
@@ -26,12 +26,11 @@ def verify(metadata, state, *, bucket, key, region, workspace, root):
     ecr = set(expected_resources(catalog(Path(root).parent.parent / 'frameworks')))
     addresses = [r.get('address') for r in managed_resources(state.get('values', {}).get('root_module', {}))]
     if (len(set(addresses)) != len(addresses) or ecr - set(addresses)
-            or set(addresses) - ecr - set(S3_ADDRESSES) - set(LEGACY_ADDRESSES)):
+            or set(addresses) - ecr - set(S3_ADDRESSES)):
         raise ValueError('Selected state is missing an ECR address or contains an unexpected managed address')
     return dict(status='STATE_BOUNDARY_VERIFIED', workspace=workspace,
                 backend=expected, ecr_managed_count=len(ecr),
                 s3_managed_count=len(set(addresses) & set(S3_ADDRESSES)),
-                legacy_s3_managed_count=len(set(addresses) & set(LEGACY_ADDRESSES)),
                 managed_addresses=sorted(addresses))
 
 

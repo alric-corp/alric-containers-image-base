@@ -1,0 +1,185 @@
+{
+  "$comment": "Status de suporte de cada variante do catálogo; contrato em docs/catalog-support.md. Não habilita nem bloqueia build, publicação ou promoção. O teste de consistência compara com frameworks/*.yaml e com os pares runtime/dev.",
+  "schema_version": 1,
+  "owner": "Containers Products",
+  "reviewed_at": "2026-10-13",
+  "review_by": "2026-11-13",
+  "variants": {
+    "dotnet10": {
+      "family": "dotnet",
+      "series": "10",
+      "role": "runtime",
+      "package": "aspnet-10-runtime",
+      "status": "SUPPORTED",
+      "upstream": "https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core",
+      "evidence": ".NET 10 LTS, fim do suporte em 2028-11-14; Wolfi aspnet-10-runtime 10.0.112-r5 (2026-10-11), lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "dotnet10-dev": {
+      "family": "dotnet",
+      "series": "10",
+      "role": "dev",
+      "package": "dotnet-10-sdk",
+      "status": "SUPPORTED",
+      "upstream": "https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core",
+      "evidence": ".NET 10 LTS, fim do suporte em 2028-11-14; Wolfi dotnet-10-sdk 10.0.112-r5 (2026-10-11), lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "go1-25": {
+      "family": "go",
+      "series": "1.25",
+      "role": "runtime",
+      "package": null,
+      "status": "UPSTREAM_EOL",
+      "upstream": "https://go.dev/doc/devel/release",
+      "evidence": "Imagem sem toolchain Go (somente a base); segue o par go1-25-dev porque executa binários compilados por ele. Go 1.27.0 lançado em 2026-08-19, lido em 2026-10-13",
+      "decision": "AWAITING_OWNER_APPROVAL",
+      "migration_target": "go1-26"
+    },
+    "go1-25-dev": {
+      "family": "go",
+      "series": "1.25",
+      "role": "dev",
+      "package": "go-1.25",
+      "status": "UPSTREAM_EOL",
+      "upstream": "https://go.dev/doc/devel/release",
+      "evidence": "Go 1.27.0 lançado em 2026-08-19 encerrou o suporte da 1.25; último patch upstream 1.25.14 (2026-08-19). Wolfi go-1.25 1.25.12-r1 (2026-07-22) sem o 1.25.13 de 2026-08-13 (correções de segurança), lido em 2026-10-13",
+      "decision": "AWAITING_OWNER_APPROVAL",
+      "migration_target": "go1-26-dev"
+    },
+    "go1-26": {
+      "family": "go",
+      "series": "1.26",
+      "role": "runtime",
+      "package": null,
+      "status": "SUPPORTED",
+      "upstream": "https://go.dev/doc/devel/release",
+      "evidence": "Imagem sem toolchain Go (somente a base); a série 1.26 é suportada até o lançamento do Go 1.28, lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "go1-26-dev": {
+      "family": "go",
+      "series": "1.26",
+      "role": "dev",
+      "package": "go-1.26",
+      "status": "SUPPORTED",
+      "upstream": "https://go.dev/doc/devel/release",
+      "evidence": "Suportada até o lançamento do Go 1.28; Wolfi go-1.26 1.26.9-r0 (2026-10-08), mesmo patch upstream de 2026-10-08, lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "java21": {
+      "family": "java",
+      "series": "21",
+      "role": "runtime",
+      "package": "openjdk-21-jre",
+      "status": "SUPPORTED",
+      "upstream": "https://openjdk.org/projects/jdk/21/",
+      "evidence": "LTS sem data universal de fim; atualizações observadas no Wolfi openjdk-21-jre 21.0.12.1-r4 (2026-10-07), lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "java21-dev": {
+      "family": "java",
+      "series": "21",
+      "role": "dev",
+      "package": "openjdk-21",
+      "status": "SUPPORTED",
+      "upstream": "https://openjdk.org/projects/jdk/21/",
+      "evidence": "LTS sem data universal de fim; atualizações observadas no Wolfi openjdk-21 21.0.12.1-r4 (2026-10-07), lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "java25": {
+      "family": "java",
+      "series": "25",
+      "role": "runtime",
+      "package": "openjdk-25-jre",
+      "status": "SUPPORTED",
+      "upstream": "https://openjdk.org/projects/jdk/25/",
+      "evidence": "LTS sem data universal de fim; atualizações observadas no Wolfi openjdk-25-jre 25.0.4.1-r2 (2026-10-05), lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "java25-dev": {
+      "family": "java",
+      "series": "25",
+      "role": "dev",
+      "package": "openjdk-25",
+      "status": "SUPPORTED",
+      "upstream": "https://openjdk.org/projects/jdk/25/",
+      "evidence": "LTS sem data universal de fim; atualizações observadas no Wolfi openjdk-25 25.0.4.1-r2 (2026-10-05), lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "nodejs22": {
+      "family": "node",
+      "series": "22",
+      "role": "runtime",
+      "package": "nodejs-22",
+      "status": "SUPPORTED",
+      "upstream": "https://nodejs.org/en/about/previous-releases",
+      "evidence": "Linha LTS; upstream v22.23.3 (2026-09-23). Wolfi nodejs-22 22.23.2-r1 (2026-08-07): o último patch upstream ainda não aparecia no índice em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "nodejs22-dev": {
+      "family": "node",
+      "series": "22",
+      "role": "dev",
+      "package": "nodejs-22",
+      "status": "SUPPORTED",
+      "upstream": "https://nodejs.org/en/about/previous-releases",
+      "evidence": "Linha LTS; upstream v22.23.3 (2026-09-23). Wolfi nodejs-22 22.23.2-r1 (2026-08-07): o último patch upstream ainda não aparecia no índice em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "nodejs24": {
+      "family": "node",
+      "series": "24",
+      "role": "runtime",
+      "package": "nodejs-24",
+      "status": "SUPPORTED",
+      "upstream": "https://nodejs.org/en/about/previous-releases",
+      "evidence": "Linha LTS; upstream v24.21.0 (2026-09-07); Wolfi nodejs-24 24.21.0-r4 (2026-10-01), lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "nodejs24-dev": {
+      "family": "node",
+      "series": "24",
+      "role": "dev",
+      "package": "nodejs-24",
+      "status": "SUPPORTED",
+      "upstream": "https://nodejs.org/en/about/previous-releases",
+      "evidence": "Linha LTS; upstream v24.21.0 (2026-09-07); Wolfi nodejs-24 24.21.0-r4 (2026-10-01), lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "python3-13": {
+      "family": "python",
+      "series": "3.13",
+      "role": "runtime",
+      "package": "python-3.13",
+      "status": "SUPPORTED",
+      "upstream": "https://devguide.python.org/versions/",
+      "evidence": "Fase security, fim em 2029-10; Wolfi python-3.13 3.13.16_git20261009-r0 (2026-10-09), lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    },
+    "python3-14": {
+      "family": "python",
+      "series": "3.14",
+      "role": "runtime",
+      "package": "python-3.14",
+      "status": "SUPPORTED",
+      "upstream": "https://devguide.python.org/versions/",
+      "evidence": "Fase bugfix, fim em 2030-10; Wolfi python-3.14 3.14.8_git20261008-r1 (2026-10-09), lido em 2026-10-13",
+      "decision": null,
+      "migration_target": null
+    }
+  }
+}

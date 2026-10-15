@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "verification_level": "full-policy",
+  "registry": "712107929769.dkr.ecr.us-east-1.amazonaws.com",
+  "repository_prefix": "image-base-",
+  "source_repository": "alric-corp/alric-containers-image-base",
+  "signer_workflow": ".github/workflows/build-base-images.yml",
+  "signer_ref": "refs/heads/develop",
+  "oidc_issuer": "https://token.actions.githubusercontent.com",
+  "bases": {
+    "runtime": {"framework": "go1-26", "build_arg": "RUNTIME_IMAGE"},
+    "build": {"framework": "go1-26-dev", "build_arg": "BUILD_IMAGE"}
+  },
+  "require_sbom_attestation": true,
+  "verifier_timeout_seconds": 300,
+  "factory_checkout_commit": "<commit-revisado-da-factory>",
+  "verifier_script_sha256": "<sha256-do-verify-image.sh-desse-commit>"
+}

@@ -75,6 +75,18 @@ jobs:
             --markdown "$GITHUB_STEP_SUMMARY" \
             --json reports/operational-health.json
 
+      # G05: eventos do contrato de alertas, sem entrega externa
+      # (external_destination null por decisão do owner). Não decide o
+      # resultado do job: a falha abaixo continua sendo o alerta oficial.
+      - name: Build alert events without external delivery
+        id: alerts
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          python3 -B -m scripts.pipeline.operations.alert_events emit \
+            --health reports/operational-health.json --pins reports/tool-pins.json \
+            --json reports/alert-events.json --markdown "$GITHUB_STEP_SUMMARY"
+
       - name: Preserve health evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -91,8 +103,10 @@ jobs:
         env:
           PINS: ${{ steps.pins.outcome }}
           METRICS: ${{ steps.metrics.outcome }}
+          ALERTS: ${{ steps.alerts.outcome }}
         run: |
           set -eu
+          test "$ALERTS" = success || echo "::warning::eventos de alerta não gerados; o resultado do health não muda"
           test "$PINS" = success || echo "::error::pins indisponíveis, divergentes ou não conferidos"
           test "$METRICS" = success || echo "::error::limites de saúde operacional rompidos"
           test "$PINS" = success && test "$METRICS" = success

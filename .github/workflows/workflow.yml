@@ -24,25 +24,11 @@ on:
       - 'tests/runtime/**'
       - 'tests/consumer-apps/**'
       - 'Makefile'
-  pull_request:
-    paths:
-      - 'frameworks/**'
-      - 'distroless/**'
-      - 'melange/**'
-      - '.github/workflows/workflow.yml'
-      - '.github/workflows/build-base-images.yml'
-      - '.github/workflows/dev-stable.yml'
-      - '.github/workflows/validate-base-images.yml'
-      - '.github/workflows/test-runtime-images.yml'
-      - '.github/workflows/image-trust.yml'
-      - '.github/scripts/**'
-      - 'scripts/**'
-      - 'policies/**'
-      # O contrato funcional é gate de publicação (M08/M10): mudar um projeto
-      # mínimo ou um probe muda o que autoriza publicar.
-      - 'tests/runtime/**'
-      - 'tests/consumer-apps/**'
-      - 'Makefile'
+  # Sem filtro de paths: um required check de workflow filtrado ficaria
+  # pendente para sempre em PRs de outros caminhos. O resolvedor aplica a
+  # mesma allow-list do push e devolve NONE quando nenhum path a toca; o
+  # gate agregado abaixo reporta em todo PR.
+  pull_request: {}
   schedule:
     - cron: "23 3 * * *"   # build diário: 00:23 America/Sao_Paulo (03:23 UTC; fora do início da hora)
   workflow_dispatch:
@@ -74,14 +60,22 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CHANGED_PATHS: ${{ runner.temp }}/pr-changed-paths
+          RESOLVER: ${{ runner.temp }}/pr_execution_scope.py
         run: |
           set -euo pipefail
-          if ! git diff --name-only "$BASE_SHA" "$HEAD_SHA" > "$CHANGED_PATHS"; then
+          # --no-renames lists both sides of a move: moving a script out of
+          # the product still selects validation.
+          if ! git diff --no-renames --name-only "$BASE_SHA" "$HEAD_SHA" > "$CHANGED_PATHS"; then
             # Missing/unavailable history is ambiguous and must fail safe to FULL.
             printf '%s\n' '__unknown_changed_path__' > "$CHANGED_PATHS"
           fi
-          python3 -B -m scripts.pipeline.governance.pr_execution_scope \
-            --paths-file "$CHANGED_PATHS" >> "$GITHUB_OUTPUT"
+          # The base revision's resolver decides, so a PR cannot lower its own
+          # validation by editing the resolver; without one, FULL.
+          if git show "$BASE_SHA:scripts/pipeline/governance/pr_execution_scope.py" > "$RESOLVER"; then
+            python3 -I -B "$RESOLVER" --paths-file "$CHANGED_PATHS" >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' 'profile=FULL' 'frameworks=null' >> "$GITHUB_OUTPUT"
+          fi
 
   validate-pr:
     if: github.event_name == 'pull_request' && needs.pr_execution_scope.outputs.profile == 'P0_04'
@@ -105,6 +99,37 @@ jobs:
     uses: ./.github/workflows/validate-base-images.yml
     with:
       frameworks: '["dotnet10", "dotnet10-dev", "go1-25", "go1-25-dev", "go1-26", "go1-26-dev", "java21", "java21-dev", "java25", "java25-dev", "nodejs22", "nodejs22-dev", "nodejs24", "nodejs24-dev", "python3-13", "python3-14"]'
+
+  # Nome estável que reporta em todo PR (G02): exige o resultado da validação
+  # selecionada pelo perfil. Não faz checkout nem executa código do PR; só
+  # lê os resultados dos jobs acima. Torná-lo required é decisão de Settings.
+  validation-gate:
+    name: Factory PR validation gate
+    if: always() && github.event_name == 'pull_request'
+    needs: [pr_execution_scope, validate-pr, validate-pr-full]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the validation selected for this PR
+        env:
+          SCOPE: ${{ needs.pr_execution_scope.result }}
+          PROFILE: ${{ needs.pr_execution_scope.outputs.profile }}
+          P0_04: ${{ needs.validate-pr.result }}
+          FULL: ${{ needs.validate-pr-full.result }}
+        run: |
+          set -eu
+          fail() { echo "::error::$1" >&2; exit 1; }
+          echo "profile=${PROFILE:-none} scope=$SCOPE validate-pr=$P0_04 validate-pr-full=$FULL"
+          [ "$SCOPE" = success ] || fail "PR execution profile was not resolved ($SCOPE)"
+          case "$PROFILE" in
+            NONE) [ "$P0_04" = skipped ] && [ "$FULL" = skipped ] \
+                    || fail "NONE profile must not run image validation" ;;
+            P0_04) [ "$P0_04" = success ] && [ "$FULL" = skipped ] \
+                     || fail "P0_04 validation did not succeed ($P0_04)" ;;
+            FULL) [ "$FULL" = success ] && [ "$P0_04" = skipped ] \
+                    || fail "FULL validation did not succeed ($FULL)" ;;
+            *) fail "unknown PR execution profile: ${PROFILE:-empty}" ;;
+          esac
 
   build-base-images:
     if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.schedule == '23 3 * * *')

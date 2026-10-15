@@ -1,5 +1,14 @@
 # SQL proposto para Athena
 
+> **Estado em 13/10/2026:** o DDL deste diretório (`tables.sql` e `views.sql`, com
+> nomes por snapshot gerados por `scripts/pipeline/analytics/catalog.py`) e as
+> consultas `01`–`05` foram executados no Athena hospedado na rodada
+> `sbom-analytics-v1-r1`: plano `e9fb82327a8542486da0153229c79ec07fd17f790052375da84b985deefb354e`,
+> execução no run `38283191994`, 18/18 instruções verificadas e saldo zero. A
+> rodada está encerrada; uma consulta nova exige outra rodada e um plano
+> autorizado. Operação vigente em [Distroless SBOM Analytics — operação](../../docs/sbom-analytics-operations.md).
+> O restante deste arquivo é o contrato offline original.
+
 Nada neste diretório cria recursos ou executa consultas remotas.
 `tables.sql` propõe duas tabelas externas com os tipos explícitos do schema
 v1. São usados [Parquet SerDe](https://docs.aws.amazon.com/athena/latest/ug/parquet-serde.html)
@@ -83,9 +92,10 @@ arrays de PURL, não classificam dependências e não inferem CVEs.
 offline com Parquet previamente lido/conferido. O SQLite usa texto JSON
 para arrays/structs e troca apenas `CREATE OR REPLACE VIEW` por `CREATE VIEW`.
 Os SELECTs das cinco consultas são os mesmos arquivos propostos para Athena.
-São testados filtros, identidades, joins, deduplicação e contagens. DDL
-Athena, tipos aninhados nativos e leitura hospedada Parquet continuam
-**NOT_PROVEN / ATHENA_EXECUTED = NO**.
+São testados filtros, identidades, joins, deduplicação e contagens. A prova
+local não cobre DDL Athena, tipos aninhados nativos nem leitura hospedada de
+Parquet; esses pontos foram comprovados depois, na execução hospedada citada no
+início deste arquivo.
 
 O inventário conta registros SPDX não-root dos documentos de plataforma;
 inclui layers/fontes reportados. A consulta de imagens distintas conta

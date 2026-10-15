@@ -1,5 +1,11 @@
 # Distroless — visão da solução para o time
 
+> **Visão de 28/09/2026.** Explica o conceito para o time; não é o estado operacional
+> atual. No LAB, HOM é um GitHub Environment e uma conta AWS; o mapa de branches
+> citado abaixo vem do plano corporativo dessa data. Estado e documentos
+> canônicos: [índice da documentação](docs/README.md).
+
+
 > **Construir uma vez, testar a imagem produzida e publicar exatamente o que foi validado.**
 
 O `alric-containers-image-base` é uma **fábrica de imagens base para aplicações**. Ele reúne construção (build), testes, análise de segurança, publicação e controle de versões em um fluxo automatizado.
