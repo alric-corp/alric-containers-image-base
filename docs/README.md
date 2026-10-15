@@ -8,13 +8,14 @@ não descrevem a operação vigente.
 ## Estado atual
 
 Baseline: `develop` em `a90f57623aea70482e7fc1b6396473316a0c8182`, leituras de
-13/10/2026 no LAB (conta `712107929769`).
+13/10/2026 no LAB (conta `712107929769`). A linha DEV `stable` foi relida em
+15/10/2026, com `develop` em `90f10b91c4c814d25a204323fb39b9f21c4fe494`.
 
 | Domínio | Estado | Fonte |
 | --- | --- | --- |
 | Catálogo | 16 definições em `frameworks/`. O build automático publica somente o golden path `go1-26`/`go1-26-dev`; o catálogo completo é certificado por dispatch | [README](../README.md#imagens-disponíveis), [certificação do catálogo](catalog-certification.md) |
 | Suporte | Go 1.25 (`go1-25`, `go1-25-dev`) sem suporte upstream desde 19/08/2026; decisão do owner pendente | [Suporte do catálogo](catalog-support.md) |
-| DEV `stable` | Incidente aberto: os dois membros estão pausados desde a tentativa `r36848114957-a1` (01/10/2026); builds terminam em `WAITING` sem mover `stable` | [Incidente](dev-hom-promotion.md#estado-atual-de-dev-stable-incidente-aberto) |
+| DEV `stable` | Em 15/10/2026, par Go 1.26 na release `r38705617503-a1`, sem pausas e com marca d'água `[38705617503, 1]`; o incidente de 01/10/2026 foi encerrado e a automação DEV voltou a valer. A primeira promoção automática posterior ainda não foi observada | [Registro do incidente](dev-hom-promotion.md#incidente-de-dev-stable-de-01102026-encerrado) |
 | HOM | Promoção desabilitada (`"enabled": false`); promoção e recovery HOM sem prova hospedada nesta revisão | [DEV → HOM](dev-hom-promotion.md) |
 | Retenção ECR | Build tags expiram em 7 dias; somente a imagem com `stable` é protegida; janela corporativa não definida | [Retenção no ECR](ecr-retention.md) |
 | IAM | DEV e `Infra - Apply` usam a role central desde 10/10/2026. Os grants sobre o bucket SBOM histórico foram removidos e o state local de `infra/iam` foi reconciliado (serial 8, fora do Git) em 13/10/2026 | [Role central](factory-distroless-v1-iam-runbook.md), [reconciliação IAM](sbom-analytics-migration.md#reconciliação-iam) |
@@ -85,7 +86,6 @@ Baseline: `develop` em `a90f57623aea70482e7fc1b6396473316a0c8182`, leituras de
 | --- | --- |
 | Operar a fábrica e avaliar alertas, indicadores e SLO/SLA | [Contrato operacional](m11-m04-operational-health.md) |
 | Consultar o evento de alerta, entrega e reconhecimento | [Contrato operacional de alertas](operational-alerting-contract.md) |
-| Acompanhar o incidente aberto de DEV `stable` | [Estado atual de DEV stable](dev-hom-promotion.md#estado-atual-de-dev-stable-incidente-aberto) |
 | Diagnosticar uma imagem distroless em execução | Toolkit `alric-containers-troubleshooting` (produto independente) |
 | Executar os contratos sobre imagens reais | [Runtime](../tests/runtime/README.md) |
 
@@ -120,6 +120,7 @@ estado acima, vale o estado acima.
 
 | Documento | Data ou baseline | O que registra |
 | --- | --- | --- |
+| [Incidente de DEV `stable`](dev-hom-promotion.md#incidente-de-dev-stable-de-01102026-encerrado) | 01/10 a 15/10/2026 | Escrita incompleta, divergência entre `state` e ECR, pausas do par Go 1.26 e recuperação autorizada (run 38759851987) |
 | [Migração de branch do LAB](develop-as-dev.md) | Setembro de 2026 | Migração para `develop` e retirada da autorização de `main` |
 | [Preflight da role central](factory-central-role-preflight.md), [cutover da role central](factory-central-role-cutover.md) | PRs #120 e #121, 09–10/10/2026 | Revisões que levaram DEV e Infra para a role central |
 | [POC LAB do SBOM Analytics](sbom-analytics-lab-poc.md), [rodada Athena da POC](sbom-analytics-athena-lab-poc.md) | Até 11/10/2026 | Estrutura e rodada `lab-sbom-athena-v1` encerradas; os nomes não são operacionais |

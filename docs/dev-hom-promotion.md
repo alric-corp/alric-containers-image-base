@@ -139,28 +139,117 @@ o dispatch de `dev-stable.yml` com `release` explícita e
 O candidate persistido preserva as evidências da tentativa original; o cron
 não remove pausas. Quando a validação inicial ainda não persistiu um candidate,
 reexecute o build completo em nova tentativa se seus artifacts não existirem.
+A escolha da release e da janela e a autorização da escrita cabem ao owner.
+Limpar pausas manualmente não é procedimento.
 
-## Estado atual de DEV stable (incidente aberto)
+A seleção recusa candidates abaixo de `high_watermark` (a maior identidade já
+promovida), inclusive nesse dispatch, e releases que já têm manifesto
+`DEV_STABLE`. Com a [retenção de 7 dias](ecr-retention.md), a reconciliação
+DEV é sempre para frente: não há rollback para um candidate anterior.
 
-Leitura somente de API e Store em 13/10/2026; nenhum estado foi alterado.
+O `SUCCESS` do run não basta para aceitar uma reconciliação DEV. Confirme por
+leitura independente:
 
-- Em 01/10/2026, a promoção de `r36848114957-a1` gravou as pausas dos dois
-  membros, moveu `stable` de `go1-26` e de `go1-26-dev` e falhou no read-back de
-  `go1-26-dev` com `ambiguous stable read-back`. A mesma leitura, dois segundos
-  depois, já devolveu o digest novo. O lifecycle seguiu o contrato: não gravou
-  recibo de sucesso nem manifesto `DEV_STABLE` e manteve as pausas
-  (`events/r36848114957-a1/failed.json`).
-- O ECR aponta `stable` para os digests dessa tentativa. `state/go1-26.json` e
-  `state/go1-26-dev.json` ainda registram a release anterior `r36822456149-a1`,
-  com `hold=true` e `pending_release=r36848114957-a1`. Os digests da release
-  anterior já expiraram pela [lifecycle de 7 dias](ecr-retention.md).
-- Builds novos persistem candidates validados e terminam em `WAITING`; o cron
-  de `dev-stable.yml` termina em `SKIPPED`. Os workflows ficam verdes sem mover
-  `stable`, e o health acusa a idade de `stable`.
-- A saída suportada é o dispatch acima, com `release` explícita e
-  `resume-automation=true`, que repete trust, re-scan e read-back. A escolha da
-  release e da janela e a autorização da escrita cabem ao owner. Limpar pausas
-  manualmente não é procedimento.
+1. run de `dev-stable.yml` concluído com sucesso no SHA revisado de
+   `develop`, com o job `Promote validated DEV release` em sucesso;
+2. `release-outcome.json` do run com `status=PASS`, a release pedida e
+   escritas iguais aos digests do candidate;
+3. `events/r<RUN>-a<ATTEMPT>/completed.json` com `PASS` e nenhum `failed.json`;
+4. uma única imagem com `stable` em cada repositório, com o digest do
+   candidate;
+5. `state/<membro>.json` de todos os membros com `hold=false`, sem
+   `pending_release`, com a release, o digest, `high_watermark` e `event_key`
+   do run;
+6. `releases/<release>/manifest.json` com `state=DEV_STABLE` e `dev_readback`
+   igual aos digests;
+7. no CloudTrail, depois do atraso de entrega, somente as escritas `PutImage`
+   de `stable` desse run, uma por membro, feitas pela role central.
+
+## Incidente de DEV stable de 01/10/2026 (encerrado)
+
+Registro datado. O incidente foi aberto em 01/10/2026 e encerrado em
+15/10/2026 por uma única recuperação autorizada pelo owner. O estado anterior
+foi lido em 13/10/2026 e relido em 15/10/2026, antes da escrita; o resultado
+foi conferido por leitura independente do ECR, do Store e do CloudTrail.
+
+**Falha observada.** Em 01/10/2026, a promoção de `r36848114957-a1` gravou as
+pausas dos dois membros, moveu `stable` de `go1-26` e de `go1-26-dev` e falhou
+no read-back de `go1-26-dev` com `ambiguous stable read-back`: a consulta da
+tag `stable` não devolveu exatamente uma imagem com essa tag. A mesma leitura,
+dois segundos depois, já devolveu o digest novo. O lifecycle seguiu o
+contrato: não gravou recibo de sucesso nem manifesto `DEV_STABLE` e manteve as
+pausas (`events/r36848114957-a1/failed.json`). A causa da resposta do ECR não
+foi determinada; este registro descreve somente o comportamento observado.
+
+**Divergência até a recuperação.** Até 15/10/2026, o ECR apontou `stable`
+para os digests de `r36848114957-a1`, enquanto `state/go1-26.json` e
+`state/go1-26-dev.json` registravam a release anterior `r36822456149-a1`, com
+`hold=true` e `pending_release=r36848114957-a1`. Os digests dessa release
+anterior expiraram pela [lifecycle de 7 dias](ecr-retention.md). Builds novos
+persistiram candidates validados e terminaram em `WAITING`, e o cron de
+`dev-stable.yml` terminou em `SKIPPED`: os workflows ficaram verdes sem mover
+`stable`. O alerta `stable_age_hours` do health não acompanha a promoção DEV
+atual: o proxy lê o job HOM `Authorize and promote stable candidates` e os
+jobs do fluxo anterior ([contrato operacional](m11-m04-operational-health.md)).
+Ele não é sintoma deste incidente e continua enquanto HOM estiver
+desabilitado.
+
+**Recuperação (15/10/2026).** Um preflight somente de leitura, feito no
+máximo 15 minutos antes da escrita, conferiu o código de `develop`, as pausas,
+`stable`, o candidate, suas assinaturas e a ausência de execuções
+concorrentes. Em seguida houve um único dispatch de `dev-stable.yml` em
+`develop` (`90f10b91c4c814d25a204323fb39b9f21c4fe494`), com
+`release=r38705617503-a1` e `resume-automation=true`: run
+[38759851987](https://github.com/alric-corp/alric-containers-image-base/actions/runs/38759851987),
+tentativa 1, concluído com sucesso, sem rerun nem segunda tentativa.
+
+- Candidate: `r38705617503-a1`, do build diário
+  [38705617503](https://github.com/alric-corp/alric-containers-image-base/actions/runs/38705617503)
+  de 15/10/2026 (tag `151026-0533-r38705617503-a1`), validado em DEV, com
+  assinatura, provenance e três SPDX por imagem. Era o candidate elegível mais
+  novo; a release de 01/10/2026 não foi reutilizada.
+- Antes de qualquer escrita, o run repetiu a verificação de assinatura,
+  provenance e SPDX e o re-scan bloqueante do Trivy nos dois membros. Depois
+  gravou as pausas e `started.json`, moveu `stable` com read-back de cada
+  membro e gravou `completed.json`, o `state` final e o manifesto
+  `DEV_STABLE`.
+- `stable` confirmado, com uma única imagem por repositório: `go1-26` em
+  `sha256:d89d050abfa375bcd9f0d247ca29fcc6519d2c35a2e782d796054f164ceadbc0` e
+  `go1-26-dev` em
+  `sha256:7bcc4266cd818a986a3cea4467c7b523ea5e3b3789e99e344262a25a43af307a`.
+- Pausas encerradas pelo próprio lifecycle: os dois `state/*.json` registram
+  `r38705617503-a1` com `hold=false`, sem `pending_release`, e
+  `event_key=events/r38759851987-a1`. Nenhuma pausa foi limpa e nenhuma tag
+  foi movida fora do workflow.
+- A marca d'água (`high_watermark`) dos dois membros avançou para
+  `[38705617503, 1]`.
+- O CloudTrail registrou exatamente duas escritas `PutImage` de `stable`, uma
+  por repositório, feitas pela role central, com esses digests.
+- Duas leituras independentes, logo após o run e cerca de 20 minutos depois,
+  encontraram o mesmo estado. A segunda, já com os eventos do CloudTrail
+  entregues, atendeu a todos os
+  [critérios de aceite](#recovery-sem-pr-e-sem-rebuild).
+
+**Depois da recuperação.**
+
+- A automação DEV voltou a valer: sem pausas, o job `approve` dos builds e o
+  cron de `dev-stable.yml` promovem candidates mais novos que a marca d'água,
+  sob todos os gates. A reexecução offline do código de seleção sobre o
+  `state` novo confirmou que o cron não escolhe nenhum dos candidates
+  pendentes e escolheria um candidate mais novo.
+- Não há rollback para candidates antigos: os anteriores a
+  `r38705617503-a1` ficaram abaixo da marca d'água e são recusados inclusive
+  por dispatch. Os índices de 01/10/2026 perderam `stable` e ficaram sujeitos à
+  [expiração de 7 dias](ecr-retention.md); os de `r36822456149-a1` já tinham
+  expirado. Uma falha futura se resolve com um candidate mais novo.
+- Pendente: a primeira promoção automática posterior ainda não foi observada.
+  Ela deve ocorrer no primeiro build do golden path em `develop` que validar
+  um candidate novo e precisa de observação independente, com os critérios de
+  aceite aplicados ao job `approve` desse build: release acima de
+  `[38705617503, 1]`, `release-outcome.json` com `PASS` (não `WAITING`),
+  `stable` igual aos digests do novo candidate e marca d'água avançada. Até
+  lá, a retomada está comprovada pelo `state` e pela seleção reexecutada, não
+  por uma promoção automática hospedada.
 
 ## Provisionamento e ativação
 
