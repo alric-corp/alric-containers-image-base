@@ -12,7 +12,7 @@ const github = "https://www.github.com/";
 const alric = "alric-corp/";
 
 // Adicione o nome do seu repositório aqui
-const project = "alric-up2-doc-pipelines-doc";
+const project = "alric-containers-image-base";
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -37,8 +37,8 @@ const config = {
   baseUrl: "/", // IMPORTANTE: Não alterar essa informação
 
   // Customize sua documentação
-  title: "Pipelines Core", // Adicione título
-  tagline: "Documentação Interna do IU PIPES",
+  title: "Containers Products",
+  tagline: "Documentação das imagens base corporativas, EKS e ECS",
   favicon: "img/devops.ico", // Adicione o favicon
 
   onBrokenLinks: "warn",
@@ -59,7 +59,7 @@ const config = {
           showLastUpdateAuthor: false,
           showLastUpdateTime: false,
           sidebarPath: require.resolve("./sidebars.js"),
-          editUrl: github + alric + project + "/edit/main/",
+          editUrl: github + alric + project + "/edit/develop/docs/alric-users-doc-containers/",
         },
         blog: false,
         theme: {
@@ -77,7 +77,7 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       navbar: {
-        title: "Pipelines Core",
+        title: "Containers Products",
         logo: {
           alt: "Runners",
           src: "/img/logoEscura.png",

@@ -1,20 +1,11 @@
 import Link from "@docusaurus/Link";
 import Layout from "@theme/Layout";
+import MDXContent from "@theme/MDXContent";
+import TOC from "@theme/TOC";
 import React from "react";
 
+import ImageBaseContent, { toc } from "../content/image-base.md";
 import styles from "./image-base.module.css";
-
-const tableOfContents = [
-  "1. O que é a solução?",
-  "2. Por que usar as imagens corporativas?",
-  "3. Glossário rápido",
-  "4. O que você ganha?",
-  "5. Responsabilidades - matriz RACI",
-  "6. Qual imagem devo usar?",
-  "7. Runtime x -dev",
-  "8. Como usar no Dockerfile",
-  "9. Como funcionam atualizações e correções de CVE?",
-];
 
 function Chevron() {
   return <span className={styles.chevron} aria-hidden="true" />;
@@ -38,11 +29,11 @@ export default function ImageBase() {
   return (
     <Layout
       title="Factory Distroless - Imagens base corporativas"
-      description="Guia temporário para Image Base."
+      description="Guia de consumo das imagens base corporativas: catálogo, Dockerfile, atualizações, certificados e troubleshooting."
       noNavbar
       noFooter
     >
-      <div className={styles.page}>
+      <div className={styles.page} data-theme="dark">
         <header className={styles.topBar}>
           <div className={styles.topBarContent}>
             <Link className={styles.brand} to="/">
@@ -93,8 +84,8 @@ export default function ImageBase() {
             <h1>Factory Distroless - Imagens base corporativas</h1>
             <p className={styles.lead}>
               <strong>Menos manutenção da base. Mais foco na sua aplicação.</strong>
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sua equipe
-              mantém a aplicação e controla seu deploy.
+              Sua squad consome uma base no Dockerfile e acrescenta seu código
+              ou artefato compilado. Você mantém o controle da aplicação e do deploy.
             </p>
 
             <aside className={styles.notice}>
@@ -102,45 +93,24 @@ export default function ImageBase() {
               <div>
                 <strong>IMAGENS BASE DISPONÍVEIS PARA CONSUMO</strong>
                 <p>
-                  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Utilize
-                  esta página temporária como base para o conteúdo definitivo.
+                  Escolha a família e a versão compatíveis com sua aplicação no{" "}
+                  <a href="#catalogo">catálogo</a> e siga o{" "}
+                  <a href="#exemplos">guia de uso no Dockerfile</a>.
                 </p>
               </div>
             </aside>
 
             <hr />
 
-            <section>
-              <h2>1. O que é a solução?</h2>
-              <p>
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
-                eiusmod tempor incididunt ut labore et dolore magna aliqua.
-              </p>
-            </section>
-
-            <section>
-              <h2>2. Por que usar as imagens corporativas?</h2>
-              <p>
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Ut enim ad
-                minim veniam, quis nostrud exercitation ullamco laboris.
-              </p>
-            </section>
-
-            <section>
-              <h2>3. Glossário rápido</h2>
-              <p>
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis aute
-                irure dolor in reprehenderit in voluptate velit esse cillum dolore.
-              </p>
-            </section>
+            <div className={`${styles.markdown} markdown`}>
+              <MDXContent>
+                <ImageBaseContent />
+              </MDXContent>
+            </div>
           </article>
 
           <aside className={styles.tableOfContents} aria-label="Nesta página">
-            {tableOfContents.map((item) => (
-              <span className={item.startsWith("5.") ? styles.activeTocItem : undefined} key={item}>
-                {item}
-              </span>
-            ))}
+            <TOC toc={toc} minHeadingLevel={2} maxHeadingLevel={2} />
           </aside>
         </main>
       </div>
