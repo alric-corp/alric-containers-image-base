@@ -1,0 +1,348 @@
+/**
+ * Tema das páginas que usam o layout do Docusaurus: documentação, navbar,
+ * paginação e 404. A página inicial (src/pages/index.js) tem layout e cores
+ * próprios e esconde o navbar.
+ *
+ * Paleta herdada da antiga página /image-base: fundo grafite, acentos coral.
+ */
+
+html[data-theme="dark"] {
+  --cp-surface: #252b33;
+  --cp-surface-raised: #2c3440;
+  --cp-surface-topbar: #252b34;
+  --cp-surface-sidebar: #272d36;
+  --cp-surface-input: #15191f;
+  --cp-border: #3c4552;
+  --cp-border-strong: #45505f;
+  --cp-text: #d5dbe3;
+  --cp-text-strong: #f6f8fb;
+  --cp-text-muted: #a7b1bf;
+  --cp-text-subtle: #98a2af;
+  --cp-accent: #ff9364;
+  --cp-accent-strong: #ff8273;
+  --cp-link: #ffab83;
+  --cp-link-hover: #ffc8ad;
+  --cp-focus: #ffb38f;
+
+  --ifm-color-primary: #ff9364;
+  --ifm-color-primary-dark: #ff7a40;
+  --ifm-color-primary-darker: #ff6e2f;
+  --ifm-color-primary-darkest: #f84b00;
+  --ifm-color-primary-light: #ffac88;
+  --ifm-color-primary-lighter: #ffb899;
+  --ifm-color-primary-lightest: #ffddcf;
+
+  --ifm-background-color: var(--cp-surface);
+  --ifm-background-surface-color: var(--cp-surface-topbar);
+  --ifm-font-color-base: var(--cp-text);
+  --ifm-heading-color: var(--cp-text-strong);
+  --ifm-link-color: var(--cp-link);
+  --ifm-link-hover-color: var(--cp-link-hover);
+  --ifm-code-background: #343d4b;
+  --ifm-hr-background-color: #5a6472;
+  --ifm-table-border-color: var(--cp-border-strong);
+  --ifm-table-head-background: #303845;
+  --ifm-table-stripe-background: rgba(255, 255, 255, 0.02);
+  --ifm-toc-border-color: var(--cp-border);
+
+  --ifm-navbar-background-color: var(--cp-surface-topbar);
+  --ifm-navbar-link-color: var(--cp-text);
+  --ifm-navbar-link-hover-color: var(--cp-accent);
+  --ifm-navbar-search-input-background-color: var(--cp-surface-input);
+  --ifm-navbar-search-input-color: #cbd3dc;
+  --ifm-navbar-search-input-placeholder-color: var(--cp-text-muted);
+  --ifm-dropdown-background-color: #20262f;
+  --ifm-dropdown-link-color: #edf2f7;
+  --ifm-dropdown-hover-background-color: #313a46;
+
+  --ifm-menu-color: #c9d1db;
+  --ifm-menu-color-active: var(--cp-accent-strong);
+  --ifm-menu-color-background-active: #22272f;
+  --ifm-menu-color-background-hover: rgba(255, 255, 255, 0.05);
+  --ifm-breadcrumb-item-background-active: #342b32;
+  --ifm-breadcrumb-color-active: var(--cp-accent-strong);
+
+  --ifm-footer-background-color: #1d2229;
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.08);
+}
+
+/* Texto exclusivo para leitores de tela. */
+.cp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Navbar */
+
+.navbar {
+  border-bottom: 1px solid #3a414c;
+  box-shadow: none;
+}
+
+.navbar .navbar__brand {
+  color: #edf2f6;
+}
+
+.navbar .navbar__logo {
+  height: 1.75rem;
+  margin-right: 0.75rem;
+}
+
+.navbar .navbar__logo img {
+  width: auto;
+  height: 100%;
+}
+
+/* custom.css aplica gradiente ao título; a marca do portal usa texto sólido. */
+.navbar .navbar__title {
+  color: #edf2f6;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.navbar .navbar__item,
+.navbar .navbar__link {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Itens sem destino: texto, sem aparência de link. */
+.navbar .cp-navbar-static {
+  color: var(--cp-text-subtle);
+  cursor: default;
+}
+
+.navbar .dropdown__menu {
+  padding: 0.375rem;
+  border: 1px solid var(--cp-border-strong);
+  border-radius: 6px;
+}
+
+.navbar .dropdown__link {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.navbar .dropdown__link--active {
+  color: var(--cp-accent);
+  background-color: transparent;
+}
+
+/* No desktop, o Docusaurus não marca o rótulo do dropdown quando um item dele está ativo. */
+.navbar .dropdown:has(.dropdown__link--active) > .navbar__link {
+  color: var(--ifm-navbar-link-active-color);
+}
+
+.navbar .navbar__search-input {
+  width: 11rem;
+  border: 1px solid transparent;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.navbar .navbar__search-input:focus {
+  border-color: var(--cp-border-strong);
+}
+
+/* Bottlerocket, Ajuda, Contribua e Comunicados saem primeiro da barra quando falta
+   espaço; no menu móvel, Ajuda continua disponível. */
+@media (max-width: 1260px) {
+  .navbar__items .cp-navbar-optional {
+    display: none;
+  }
+}
+
+/* Telas estreitas: a barra mostra só o símbolo da marca, para caber a busca.
+   O nome continua acessível a leitores de tela e aparece no menu móvel. */
+@media (max-width: 560px) {
+  .navbar__inner .navbar__title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}
+
+/* Menu móvel: rótulos sem destino não entram na lista de navegação. */
+.navbar-sidebar .cp-navbar-static {
+  display: none;
+}
+
+/* Resultados da busca */
+
+.navbar .algolia-autocomplete .ds-dropdown-menu {
+  border: 1px solid var(--cp-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+html[data-theme="dark"] .navbar .algolia-autocomplete .ds-dropdown-menu [class^="ds-dataset-"],
+html[data-theme="dark"] .navbar .algolia-docsearch-suggestion,
+html[data-theme="dark"] .navbar .algolia-docsearch-suggestion--wrapper,
+html[data-theme="dark"] .navbar .algolia-docsearch-footer {
+  background: #20262f;
+}
+
+html[data-theme="dark"] .navbar .algolia-autocomplete .ds-dropdown-menu::before {
+  background: #20262f;
+  border-color: var(--cp-border-strong);
+}
+
+html[data-theme="dark"] .navbar .algolia-docsearch-suggestion--highlight {
+  color: var(--cp-accent);
+  background: rgba(255, 147, 100, 0.12);
+}
+
+html[data-theme="dark"] .navbar .ds-cursor .algolia-docsearch-suggestion--wrapper {
+  background: #313a46;
+}
+
+/* Barra lateral */
+
+html.docs-wrapper .theme-doc-sidebar-container {
+  background-color: var(--cp-surface-sidebar);
+}
+
+html.docs-wrapper .theme-doc-sidebar-menu .menu__link {
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+html.docs-wrapper .theme-doc-sidebar-menu .menu__link--sublist {
+  color: var(--cp-text-strong);
+  font-weight: 700;
+}
+
+html.docs-wrapper .theme-doc-sidebar-menu .menu__link--sublist.menu__link--active {
+  background-color: transparent;
+}
+
+html.docs-wrapper .theme-doc-sidebar-menu .menu__link--active:not(.menu__link--sublist) {
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--cp-accent-strong);
+}
+
+/* Conteúdo */
+
+/* custom.css fixa tamanhos com !important; a documentação usa escala menor. */
+html.docs-wrapper .theme-doc-markdown h1 {
+  font-size: 2rem !important;
+  font-weight: 800;
+  line-height: 1.22;
+}
+
+html.docs-wrapper .theme-doc-markdown h2 {
+  margin-top: 2.25rem;
+  font-size: 1.45rem !important;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+html.docs-wrapper .theme-doc-markdown h3 {
+  margin-top: 1.75rem;
+  font-size: 1.15rem !important;
+  line-height: 1.35;
+}
+
+html.docs-wrapper .theme-doc-markdown h2,
+html.docs-wrapper .theme-doc-markdown h3 {
+  scroll-margin-top: calc(var(--ifm-navbar-height) + 1rem);
+}
+
+html.docs-wrapper .theme-doc-markdown .cp-subtitle {
+  margin-top: -0.75rem;
+  color: var(--cp-text-muted);
+  font-size: 1.125rem !important;
+  font-weight: 600;
+}
+
+/* Links no texto: sublinhado discreto, para não depender só da cor. */
+html.docs-wrapper .theme-doc-markdown :is(p, li, td) a {
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 171, 131, 0.45);
+  text-underline-offset: 3px;
+}
+
+html.docs-wrapper .theme-doc-markdown :is(p, li, td) a:hover {
+  text-decoration-color: currentColor;
+}
+
+html.docs-wrapper .theme-doc-markdown :not(pre) > code {
+  padding: 0.1rem 0.35rem;
+  border: 0;
+  color: #e9edf2;
+  font-size: 0.875em;
+}
+
+html.docs-wrapper .theme-doc-markdown table {
+  font-size: 0.9375rem;
+}
+
+html.docs-wrapper .theme-doc-markdown th,
+html.docs-wrapper .theme-doc-markdown td {
+  padding: 0.6rem 0.75rem;
+  vertical-align: top;
+}
+
+/* Nomes de imagem não quebram no hífen; tabelas largas rolam dentro do próprio bloco. */
+html.docs-wrapper .theme-doc-markdown td code {
+  white-space: nowrap;
+}
+
+html.docs-wrapper .theme-doc-markdown details {
+  border: 1px solid var(--cp-border-strong);
+  background: var(--cp-surface-raised);
+}
+
+html.docs-wrapper .theme-doc-markdown .contains-task-list {
+  padding-left: 0;
+  list-style: none;
+}
+
+html.docs-wrapper .theme-doc-markdown .task-list-item input {
+  margin-right: 0.5rem;
+}
+
+html.docs-wrapper .docusaurus-mermaid-container {
+  overflow-x: auto;
+  text-align: center;
+}
+
+html.docs-wrapper .theme-admonition {
+  border-left-width: 4px;
+}
+
+/* Rodapé da página: editar e anterior/próxima */
+
+html.docs-wrapper .pagination-nav__link {
+  border-color: var(--cp-border-strong);
+}
+
+html.docs-wrapper .pagination-nav__link:hover {
+  border-color: var(--cp-accent);
+}
+
+/* Rodapé do site: .footer--dark do Infima define um cinza mais claro que a página. */
+html[data-theme="dark"] .footer--dark {
+  --ifm-footer-background-color: #1b1f26;
+  border-top: 1px solid #2c323b;
+}
+
+/* Foco visível em todos os controles da documentação e do navbar. */
+html.docs-wrapper :is(a, button, input, summary, [tabindex]):focus-visible,
+.navbar :is(a, button, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--cp-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

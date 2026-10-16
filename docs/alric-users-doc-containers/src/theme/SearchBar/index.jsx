@@ -90,7 +90,7 @@ const Search = (props) => {
         getSearchDoc(),
         getLunrIndex(),
         import("./DocSearch"),
-        import("./algolia.css"),
+        import("docusaurus-lunr-search/src/theme/SearchBar/algolia.css"),
       ]).then(([searchDocFile, searchIndex, { default: DocSearch }]) => {
         const { searchDocs, options } = searchDocFile;
         if (!searchDocs || searchDocs.length === 0) {
