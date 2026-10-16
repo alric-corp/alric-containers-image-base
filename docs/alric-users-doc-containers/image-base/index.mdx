@@ -1,0 +1,60 @@
+---
+title: Image Base
+sidebar_label: Visão geral
+description: Imagens corporativas hardened para a imagem da sua aplicação. Escolha uma imagem, use no Dockerfile e valide localmente, no EKS ou no ECS.
+---
+
+import ImageBaseLegacyAnchors from "@site/src/components/ImageBaseLegacyAnchors";
+
+<ImageBaseLegacyAnchors />
+
+<p className="cp-subtitle">Imagens corporativas hardened</p>
+
+Uma base mínima e verificável para a imagem da sua aplicação. O Containers Products mantém o runtime da linguagem, os componentes de sistema e a configuração de confiança TLS; sua squad acrescenta o código e continua no controle do build e do deploy.
+
+## Em resumo {#em-resumo}
+
+- **O Containers Products mantém as imagens base:** runtime da linguagem, componentes mínimos, testes nas duas arquiteturas e evidências de origem.
+- **Você escolhe** a imagem compatível com a linguagem e a versão da sua aplicação.
+- **Sua squad usa a imagem no `FROM`** do Dockerfile e acrescenta o código ou o artefato compilado.
+- **Sua squad continua responsável** por construir, testar, escanear e implantar a imagem final da aplicação.
+
+## Primeiros passos {#primeiros-passos}
+
+1. **[Escolha uma imagem](./catalogo/index.md)** pela linguagem e pela versão que sua aplicação já usa.
+2. **[Use no Dockerfile](./como-utilizar/dockerfile.mdx)**: runtime no estágio final e `-dev` apenas se compilar no Docker.
+3. **Execute e valide** [na sua máquina](./como-utilizar/ambiente-local.md), no [Amazon EKS](./como-utilizar/eks.md) ou no [Amazon ECS](./como-utilizar/ecs.md).
+4. **[Resolva problemas](./troubleshooting/index.md)** pelo sintoma, sem instalar ferramentas na imagem final.
+
+## Exemplo mínimo {#exemplo-minimo}
+
+Aplicação Go 1.26: o binário é compilado na variante `-dev` e copiado para o runtime.
+
+```dockerfile title="Dockerfile"
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-go1-26-dev:stable AS build
+ENV HOME=/tmp CGO_ENABLED=0
+WORKDIR /app
+COPY --chown=10000:10000 . .
+RUN go build -trimpath -o /app/servidor .
+
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-go1-26:stable
+COPY --from=build --chown=10000:10000 /app/servidor /app/servidor
+ENTRYPOINT ["/app/servidor"]
+```
+
+- O `FROM` aponta direto para o registry corporativo de Image Base. O acesso é feito pela esteira: você não precisa de credenciais nem de `docker pull` local. Veja [referência da imagem](./como-utilizar/dockerfile.mdx#referencia-da-imagem).
+- O estágio final roda como usuário não-root (UID 10000) e não tem shell: por isso o `ENTRYPOINT` usa o formato de lista.
+- Use sempre a tag `stable`: ela aponta para a versão atual da base disponibilizada pelo Containers Products.
+
+## Próximos passos {#proximos-passos}
+
+| Quero... | Leia |
+| --- | --- |
+| Comparar linguagens, versões e variantes | [Catálogo de imagens](./catalogo/index.md) |
+| Entender quando usar a variante `-dev` | [Runtime e -dev](./catalogo/runtime-dev.md) |
+| Rodar e testar na minha máquina | [Ambiente local](./como-utilizar/ambiente-local.md) |
+| Publicar no EKS ou no ECS | [Amazon EKS](./como-utilizar/eks.md) · [Amazon ECS](./como-utilizar/ecs.md) |
+| Diagnosticar uma falha | [Diagnóstico por sintoma](./troubleshooting/index.md) |
+| Receber correções de segurança | [Atualizações e CVEs](./seguranca/atualizacoes.md) |
+| Saber o que é da plataforma e o que é da squad | [Responsabilidades](./referencia/responsabilidades.md) |
+| Avaliar a adoção pelo time | [Por que usar Image Base](./por-que-usar.md) |
