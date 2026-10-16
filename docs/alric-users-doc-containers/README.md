@@ -26,8 +26,8 @@ a ordem anterior/próxima, está em [`sidebars-image-base.js`](sidebars-image-ba
 | `image-base/catalogo/` | Catálogo de imagens e runtime × `-dev` |
 | `image-base/como-utilizar/` | Dockerfile, ambiente local, Amazon EKS e Amazon ECS |
 | `image-base/troubleshooting/` | Diagnóstico por sintoma, EKS e ECS |
-| `image-base/seguranca/` | Validações, atualizações, certificados e responsabilidades |
-| `image-base/referencia/` | Arquiteturas, glossário e perguntas frequentes |
+| `image-base/seguranca/` | Validações, atualizações e certificados |
+| `image-base/referencia/` | Arquiteturas, responsabilidades (RACI), glossário e perguntas frequentes |
 
 Para criar uma página, adicione o arquivo com `title`, `sidebar_label` e
 `description` no front matter e inclua o id do documento em

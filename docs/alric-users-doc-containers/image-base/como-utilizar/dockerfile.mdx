@@ -12,13 +12,13 @@ O consumo de Image Base é uma linha `FROM` no Dockerfile da aplicação. A imag
 ## Referência da imagem {#referencia-da-imagem}
 
 ```text
-<registry-image-base>/image-base-<framework>:stable
-<registry-image-base>/image-base-<framework>@sha256:<digest-do-indice>
+758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-<framework>:stable
 ```
 
 - **`<framework>`** é o nome da imagem no [catálogo](../catalogo/index.md), como `java21`, `go1-26-dev` ou `python3-13`.
-- **`<registry-image-base>`** é o endereço do registry de Image Base (Amazon ECR) do seu ambiente. Ele é configurado na esteira da squad, junto com o acesso de leitura. Se a sua esteira ainda não consome Image Base, solicite a habilitação pelo [canal de suporte](../suporte.md).
-- O acesso ao registry é feito pela esteira: não coloque credenciais no Dockerfile e não crie tags nos repositórios `image-base-*`.
+- **`758421218117.dkr.ecr.sa-east-1.amazonaws.com`** é o registry corporativo de Image Base (Amazon ECR, região `sa-east-1`). O `FROM` aponta direto para ele.
+- O acesso ao registry de Image Base é feito pela esteira: você não precisa de credenciais nem de `docker pull` local. Se a sua esteira ainda não consome Image Base, solicite a habilitação pelo [canal de suporte](../suporte.md).
+- Não coloque credenciais no Dockerfile e não crie tags nos repositórios `image-base-*`.
 
 ## Artefato pronto: somente runtime {#artefato-pronto}
 
@@ -28,7 +28,7 @@ Quando a esteira já compila a aplicação, o Dockerfile apenas copia o resultad
 <TabItem value="go" label="Go">
 
 ```dockerfile title="Dockerfile"
-FROM <registry-image-base>/image-base-go1-26:stable
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-go1-26:stable
 COPY --chown=10000:10000 servidor /app/servidor
 ENTRYPOINT ["/app/servidor"]
 ```
@@ -39,7 +39,7 @@ O binário precisa ser estático (`CGO_ENABLED=0`) e compilado para a arquitetur
 <TabItem value="java" label="Java">
 
 ```dockerfile title="Dockerfile"
-FROM <registry-image-base>/image-base-java21:stable
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-java21:stable
 COPY --chown=10000:10000 target/app.jar /app/app.jar
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 ```
@@ -50,7 +50,7 @@ O JAR precisa ter sido compilado para a versão do Java da imagem ou anterior.
 <TabItem value="dotnet" label=".NET">
 
 ```dockerfile title="Dockerfile"
-FROM <registry-image-base>/image-base-dotnet10:stable
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-dotnet10:stable
 COPY --chown=10000:10000 publish/ /app/
 ENTRYPOINT ["dotnet", "/app/MinhaApp.dll"]
 ```
@@ -61,7 +61,7 @@ Publique para o .NET 10 sem runtime embutido: `dotnet publish -c Release --no-se
 <TabItem value="node" label="Node.js">
 
 ```dockerfile title="Dockerfile"
-FROM <registry-image-base>/image-base-nodejs24:stable
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-nodejs24:stable
 COPY --chown=10000:10000 dist/ /app/
 ENTRYPOINT ["/usr/bin/node", "/app/server.js"]
 ```
@@ -72,7 +72,7 @@ Se o bundle não inclui as dependências, copie também o `node_modules` de prod
 <TabItem value="python" label="Python">
 
 ```dockerfile title="Dockerfile"
-FROM <registry-image-base>/image-base-python3-13:stable
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-python3-13:stable
 COPY --chown=10000:10000 deps/ /app/deps/
 COPY --chown=10000:10000 src/ /app/
 ENV PYTHONPATH=/app/deps
@@ -92,13 +92,13 @@ Use quando a compilação ou a instalação de dependências acontece dentro do 
 <TabItem value="go" label="Go">
 
 ```dockerfile title="Dockerfile"
-FROM <registry-image-base>/image-base-go1-26-dev:stable AS build
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-go1-26-dev:stable AS build
 ENV HOME=/tmp CGO_ENABLED=0
 WORKDIR /app
 COPY --chown=10000:10000 . .
 RUN go build -trimpath -o /app/servidor .
 
-FROM <registry-image-base>/image-base-go1-26:stable
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-go1-26:stable
 COPY --from=build --chown=10000:10000 /app/servidor /app/servidor
 ENTRYPOINT ["/app/servidor"]
 ```
@@ -109,13 +109,13 @@ Os módulos vêm do `GOPROXY` configurado na esteira, que deve apontar para a fo
 <TabItem value="java" label="Java">
 
 ```dockerfile title="Dockerfile"
-FROM <registry-image-base>/image-base-java21-dev:stable AS build
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-java21-dev:stable AS build
 ENV HOME=/tmp
 WORKDIR /app
 COPY --chown=10000:10000 . .
 RUN ./mvnw -B package
 
-FROM <registry-image-base>/image-base-java21:stable
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-java21:stable
 COPY --from=build --chown=10000:10000 /app/target/app.jar /app/app.jar
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 ```
@@ -126,14 +126,14 @@ A `-dev` traz o shell que os wrappers `mvnw` e `gradlew` exigem. Com Gradle, use
 <TabItem value="dotnet" label=".NET">
 
 ```dockerfile title="Dockerfile"
-FROM <registry-image-base>/image-base-dotnet10-dev:stable AS build
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-dotnet10-dev:stable AS build
 ENV HOME=/tmp DOTNET_CLI_HOME=/tmp NUGET_PACKAGES=/tmp/nuget \
     DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 WORKDIR /app
 COPY --chown=10000:10000 . .
 RUN dotnet publish -c Release -o /app/out --no-self-contained
 
-FROM <registry-image-base>/image-base-dotnet10:stable
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-dotnet10:stable
 COPY --from=build --chown=10000:10000 /app/out /app/out
 ENTRYPOINT ["dotnet", "/app/out/MinhaApp.dll"]
 ```
@@ -144,14 +144,14 @@ O `dotnet publish` também restaura os pacotes, usando o `NuGet.config` do conte
 <TabItem value="node" label="Node.js">
 
 ```dockerfile title="Dockerfile"
-FROM <registry-image-base>/image-base-nodejs24-dev:stable AS build
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-nodejs24-dev:stable AS build
 ENV HOME=/tmp npm_config_cache=/tmp/npm-cache
 WORKDIR /app
 COPY --chown=10000:10000 package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --chown=10000:10000 . .
 
-FROM <registry-image-base>/image-base-nodejs24:stable
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-nodejs24:stable
 COPY --from=build --chown=10000:10000 /app /app
 ENTRYPOINT ["/usr/bin/node", "/app/server.js"]
 ```
@@ -176,24 +176,9 @@ Python não tem variante `-dev`. Prepare as dependências fora da imagem e use o
 - **Dependências** de Maven, Gradle, npm, NuGet, pip e módulos Go vêm das fontes corporativas autorizadas.
 - **Tokens** de registries de dependências entram pelo mecanismo de secrets da esteira ou do BuildKit, nunca por `ARG`, `ENV` ou URL com senha. Veja [build secrets](https://docs.docker.com/build/building/secrets/).
 
-## Fixar a versão da base {#fixar-digest}
-
-`:stable` é uma referência móvel: acompanha as promoções da base, e dois builds em momentos diferentes podem usar bases diferentes. Para builds reproduzíveis e consumo auditado, fixe o **digest do índice** de cada estágio:
-
-```dockerfile title="Dockerfile"
-FROM <registry-image-base>/image-base-go1-26-dev@sha256:<digest-do-indice-dev> AS build
-# ...
-FROM <registry-image-base>/image-base-go1-26@sha256:<digest-do-indice-runtime>
-```
-
-- Com acesso de leitura autorizado, o digest atual de uma tag aparece em `docker buildx imagetools inspect <registry-image-base>/image-base-go1-26:stable`, na linha `Digest`.
-- Use o digest de um índice **promovido**. Digests não promovidos, e índices que deixaram de ser `stable`, podem ser removidos pela política de retenção do registry.
-- Um digest fixo não recebe correções sozinho: defina como a squad atualiza o digest, por revisão periódica ou automação aprovada.
-- Se a sua política exige consumo auditado, verifique assinatura e provenance do digest antes de usá-lo. Veja [Validações e garantias](../seguranca/validacoes.md#evidencias).
-
 ## Reconstruir após atualizações da base {#reconstruir}
 
-Uma nova versão da base só chega à aplicação quando ela é reconstruída com a base atualizada, testada e implantada. Com `:stable`, o build precisa consultar a versão atual da tag (`docker build --pull` ou o equivalente da esteira); `--no-cache` não substitui `--pull`. Com digest fixo, atualize o digest. Detalhes em [Atualizações e CVEs](../seguranca/atualizacoes.md).
+Uma nova versão da base só chega à aplicação quando ela é reconstruída com a base atualizada, testada e implantada. O build precisa consultar a versão atual da tag `stable` (`docker build --pull` ou o equivalente da esteira); `--no-cache` não substitui `--pull`. Detalhes em [Atualizações e CVEs](../seguranca/atualizacoes.md).
 
 ## A imagem final é da squad {#imagem-final}
 

@@ -26,7 +26,7 @@ A base define o usuário UID/GID `10000`. Raiz somente leitura e restrições de
 ```yaml title="spec.template.spec do Deployment (trecho)"
 containers:
   - name: minha-app
-    image: <registry-da-aplicacao>/minha-app@sha256:<digest>
+    image: <registry-da-aplicacao>/minha-app:<tag>
     ports:
       - containerPort: 8080
     securityContext:

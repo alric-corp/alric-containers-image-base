@@ -14,8 +14,8 @@ Valide localmente a imagem final da aplicação antes de enviá-la pela esteira.
 Com acesso autorizado, autentique o Docker no Amazon ECR do registry de Image Base:
 
 ```bash
-aws ecr get-login-password --region <regiao> \
-  | docker login --username AWS --password-stdin <registry-image-base>
+aws ecr get-login-password --region sa-east-1 \
+  | docker login --username AWS --password-stdin 758421218117.dkr.ecr.sa-east-1.amazonaws.com
 ```
 
 :::note Sem acesso local ao registry

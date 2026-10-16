@@ -10,29 +10,21 @@ description: Respostas rápidas sobre consumo, runtime, diagnóstico, segurança
 
 Não. Para consumir, use a imagem correspondente no Dockerfile e siga o [fluxo de uso](../como-utilizar/dockerfile.mdx).
 
-### Onde encontro o endereço do registry? {#endereco-do-registry}
-
-Ele é configurado na esteira da squad junto com o acesso de leitura. Se a sua esteira ainda não consome Image Base, solicite a habilitação pelo [canal de suporte](../suporte.md).
-
 ### Preciso da imagem `-dev` se meu pipeline já compila? {#dev-com-pipeline}
 
 Não necessariamente. Você pode copiar o artefato pronto para o runtime, desde que ele seja compatível com a versão, o sistema, as bibliotecas e a arquitetura de destino.
 
 ### Uso `:stable` nos dois estágios? {#stable-nos-dois-estagios}
 
-Se você compila com a `-dev`, use a mesma referência nos dois estágios, sempre da mesma família e versão. Para builds reproduzíveis, fixe o digest de cada estágio separadamente. Veja [Fixar a versão da base](../como-utilizar/dockerfile.mdx#fixar-digest).
+Sim. Se você compila com a `-dev` no estágio de build, use `stable` nele e no runtime, sempre da mesma família e versão.
 
 ### Posso usar a `-dev` como imagem final? {#dev-como-final}
 
-Não é o padrão recomendado. A `-dev` é para o estágio de construção; o estágio final usa o runtime. `-dev` descreve a função da imagem, não um ambiente.
+Não. A `-dev` é usada somente no estágio de build, e a imagem final da aplicação usa sempre a variante runtime. A `-dev` traz toolchain e shell, que não devem chegar à produção. Ela também não serve para contornar a ausência de ferramentas no runtime: `-dev` descreve a função da imagem, não um ambiente.
 
 ### A imagem vem com todas as bibliotecas da minha aplicação? {#bibliotecas-da-aplicacao}
 
 Não. Spring, dependências npm, Python e NuGet e bibliotecas internas pertencem à aplicação. A base não é um ambiente de desenvolvimento completo.
-
-### Posso usar Go 1.25? {#go-1-25}
-
-Não em novas adoções: a série não recebe mais correções do projeto Go. Migre para Go 1.26, como descrito no [catálogo](../catalogo/index.md#go-1-25).
 
 ## Runtime e diagnóstico {#runtime}
 
@@ -54,10 +46,6 @@ Não. Seu código, suas dependências e seus arquivos acrescentam conteúdo que 
 
 Não. É necessário reconstruir a aplicação com a base corrigida, testar e fazer deploy da nova imagem final. Veja [Atualizações e CVEs](../seguranca/atualizacoes.md).
 
-### Como faço rollback? {#rollback}
+### Preciso configurar os certificados corporativos? {#cas-corporativas}
 
-Pelo processo de release da aplicação, usando uma imagem final anterior retida e autorizada. Mudanças na `stable` da base não alteram deployments existentes nem substituem o rollback da squad.
-
-### As imagens já confiam nas CAs corporativas? {#cas-corporativas}
-
-Ainda não: as imagens publicadas confiam nas autoridades públicas do bundle padrão, e a inclusão das CAs corporativas depende de aprovação. Veja [Certificados e HTTPS](../seguranca/certificados.md#cas-corporativas).
+Não. A base já inclui o CA bundle com as autoridades necessárias às aplicações corporativas. Veja [Certificados e HTTPS](../seguranca/certificados.md#trust-store).

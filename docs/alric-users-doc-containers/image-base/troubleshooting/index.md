@@ -31,10 +31,10 @@ Não compartilhe dumps completos de `docker inspect`, task definitions ou manife
 
 O build falha ao baixar a base com `manifest unknown`, `not found` ou `failed to resolve source metadata`.
 
-- **Causas prováveis:** nome do repositório diferente de `image-base-<framework>`; tag ou digest inexistente no ambiente, já que nem toda variante tem `stable` em todos os ambientes; digest não promovido que expirou; registry ou região diferentes dos configurados na esteira.
-- **Como verificar:** compare o nome com o [catálogo](../catalogo/index.md) e confira a [disponibilidade](../catalogo/index.md#disponibilidade) da variante. Com acesso autorizado, `docker buildx imagetools inspect <referencia>` mostra se a referência existe.
-- **Como corrigir:** use o nome exato e `stable` ou o digest de um índice promovido. Não crie tags nos repositórios `image-base-*`.
-- **Quando acionar o suporte:** a variante de que você precisa não está publicada no seu ambiente, ou um digest aprovado deixou de existir.
+- **Causas prováveis:** nome do repositório diferente de `image-base-<framework>`; tag diferente de `stable`; registry ou região diferentes dos configurados na esteira.
+- **Como verificar:** compare o nome com o [catálogo](../catalogo/index.md). Com acesso autorizado, `docker buildx imagetools inspect <referencia>` mostra se a referência existe.
+- **Como corrigir:** use o nome exato do repositório com a tag `stable`. Não crie tags nos repositórios `image-base-*`.
+- **Quando acionar o suporte:** a imagem com a tag `stable` não é encontrada no registry de Image Base.
 
 ## Acesso negado ao registry {#acesso-negado}
 
@@ -77,7 +77,7 @@ O container encerra logo após iniciar, ou falha com `exec /app/<binario>: no su
 A aplicação falha com `UnsupportedClassVersionError` (Java), `was compiled against a different Node.js version using NODE_MODULE_VERSION` (Node.js), `You must install or update .NET to run this application` (.NET) ou erro de importação de extensão nativa (Python).
 
 - **Causas prováveis:** artefato compilado para uma versão diferente da versão da imagem; dependência nativa compilada para outra versão, arquitetura ou biblioteca C.
-- **Como verificar:** compare a versão usada no build com a da imagem no [catálogo](../catalogo/index.md). Para ver a versão da base, execute o binário diretamente, por exemplo `docker run --rm --entrypoint java <registry-image-base>/image-base-java21:stable -version`.
+- **Como verificar:** compare a versão usada no build com a da imagem no [catálogo](../catalogo/index.md). Para ver a versão da base, execute o binário diretamente, por exemplo `docker run --rm --entrypoint java 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-java21:stable -version`.
 - **Como corrigir:** use a `-dev` e o runtime da mesma família e versão; recompile as dependências nativas no estágio `-dev`.
 - **Quando acionar o suporte:** a versão do runtime na imagem diverge do catálogo.
 
@@ -85,7 +85,7 @@ A aplicação falha com `UnsupportedClassVersionError` (Java), `was compiled aga
 
 Chamadas HTTPS falham com `x509: certificate signed by unknown authority` (Go), `PKIX path building failed` (Java), `CERTIFICATE_VERIFY_FAILED` (Python), `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` ou `SELF_SIGNED_CERT_IN_CHAIN` (Node.js) ou `The remote certificate is invalid` (.NET).
 
-- **Causas prováveis:** serviço com certificado emitido por CA corporativa, ainda não incluída nas imagens publicadas; cadeia incompleta no servidor; hostname diferente do certificado; certificado expirado ou relógio incorreto; aplicação usando um trust store próprio.
+- **Causas prováveis:** CA do serviço ausente do bundle da base; cadeia incompleta no servidor; hostname diferente do certificado; certificado expirado ou relógio incorreto; aplicação usando um trust store próprio.
 - **Como verificar:** de uma máquina com ferramentas, `openssl s_client -connect <host>:443 -servername <host> -showcerts` mostra a cadeia apresentada. Confira também qual trust store o cliente usa, como `-Djavax.net.ssl.trustStore` ou `REQUESTS_CA_BUNDLE`.
 - **Como corrigir:** remova trust stores próprios desnecessários e corrija hostname, cadeia ou validade no servidor. **Não** desabilite a verificação (`curl -k`, `verify=False`, `NODE_TLS_REJECT_UNAUTHORIZED=0` ou callbacks que aceitam qualquer certificado).
 - **Quando acionar o suporte:** a CA corporativa de que o serviço precisa está ausente, ou a falha se reproduz com a configuração padrão da base. Veja [Certificados e HTTPS](../seguranca/certificados.md).

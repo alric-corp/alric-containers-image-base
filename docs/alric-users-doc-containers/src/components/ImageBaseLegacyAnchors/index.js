@@ -15,7 +15,7 @@ export const LEGACY_ANCHORS = {
   glossario: "/image-base/referencia/glossario",
   beneficios: "/image-base/por-que-usar#beneficios",
   "os-termos-de-segurança-sem-complicação": "/image-base/seguranca/validacoes#evidencias",
-  responsabilidades: "/image-base/seguranca/responsabilidades",
+  responsabilidades: "/image-base/referencia/responsabilidades",
   catalogo: "/image-base/catalogo",
   "runtime-dev": "/image-base/catalogo/runtime-dev",
   exemplos: "/image-base/como-utilizar/dockerfile",

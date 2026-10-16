@@ -30,21 +30,27 @@ kubectl get events -n <namespace> --sort-by=.lastTimestamp
 
 ## Container efêmero de diagnóstico {#container-efemero}
 
-Um container efêmero acrescenta ferramentas ao Pod em execução sem alterar a imagem da aplicação:
+Para diagnóstico interativo em Kubernetes, use o toolkit corporativo de troubleshooting. O container efêmero fornece ferramentas separadamente (`kubectl`, `helm`, `tcpdump`, `curl`, `jq` etc.) e não exige transformar a aplicação em uma imagem de troubleshooting.
+
+**Itaú EV3 Container K8S Tools** é a imagem Alpine Linux com toolkit completo para troubleshooting. Inclui ferramentas de rede, Kubernetes, AWS CLI, certificados corporativos pré-configurados e autocomplete habilitado. Consulte o repositório para instruções completas de uso com Deployment, Ephemeral Container ou Docker:
+
+**Repositório:** [itau-corp/itau-ev3-container-k8s-tools](https://github.com/itau-corp/itau-ev3-container-k8s-tools)
+
+**Exemplo rápido — Ephemeral Container:**
 
 ```bash
-kubectl debug -it <pod> -n <namespace> \
-  --image=<imagem-de-diagnostico-autorizada> \
-  --target=<container>
+kubectl debug -it <POD_NAME> -n <namespace> \
+  --image=itau-ev3-docker.artifactory.prod.aws.cloud.ihf/itau-corp-itau-ev3-container-k8s-tools:v0.2.0-f7df65b \
+  --target=<CONTAINER_NAME>
 ```
 
 - `--target` recebe o **nome do container**, que pode ser diferente do nome do Pod, e permite ver os processos desse container quando o runtime do cluster oferece suporte.
-- `--profile` define as permissões do container de diagnóstico: `general` (padrão), `baseline`, `restricted`, `netadmin` ou `sysadmin`. Use o perfil mínimo necessário, como `netadmin` para captura de rede, e `sysadmin` somente com autorização. O `kubectl debug` não tem a opção `--privileged`.
+- `--profile` define as permissões do container de diagnóstico: `general` (padrão), `baseline`, `restricted`, `netadmin` ou `sysadmin`. Use o perfil mínimo necessário, como `netadmin` para captura `tcpdump`. O equivalente a privilegiado é `--profile=sysadmin`, somente se necessário e autorizado pelas políticas do cluster: o `kubectl debug` não tem a opção `--privileged`.
 - Quando o Pod inteiro roda com usuário não-root, algumas capabilities concedidas pelo perfil podem não funcionar.
 - Containers efêmeros não podem ser removidos: permanecem até o Pod ser recriado.
 - O uso depende de autorização, como RBAC para `pods/ephemeralcontainers`, e das políticas de segurança do cluster.
 
-Use a imagem de diagnóstico autorizada para o seu cluster, como o toolkit corporativo de troubleshooting, mantido como produto separado das imagens base, com ferramentas de rede, Kubernetes, AWS CLI e certificados corporativos. Confirme a referência e a versão autorizadas com o suporte da plataforma.
+Confira a versão da imagem no repositório. Acesse o README do repositório para instruções detalhadas sobre deployment privilegiado, captura `tcpdump` e lista completa de ferramentas.
 
 Referência: [Kubernetes: debug de Pods em execução](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/).
 

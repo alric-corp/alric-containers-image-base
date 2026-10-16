@@ -24,7 +24,7 @@ Trecho de uma task definition no Fargate:
   "containerDefinitions": [
     {
       "name": "minha-app",
-      "image": "<registry-da-aplicacao>/minha-app@sha256:<digest>",
+      "image": "<registry-da-aplicacao>/minha-app:<tag>",
       "essential": true,
       "portMappings": [{ "containerPort": 8080 }],
       "logConfiguration": {

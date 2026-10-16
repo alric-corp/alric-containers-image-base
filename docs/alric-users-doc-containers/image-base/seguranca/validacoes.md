@@ -22,13 +22,11 @@ description: O que significa hardened, o que a plataforma valida antes de public
 
 | Evidência | O que prova | O que não prova |
 | --- | --- | --- |
-| **Assinatura** | Que o índice foi publicado pela identidade do workflow de publicação da plataforma. | Que a imagem está livre de vulnerabilidades ou que houve aprovação humana. |
+| **Assinatura** | Que a imagem base foi publicada pela identidade do workflow de publicação da plataforma. | Que a imagem está livre de vulnerabilidades ou que houve aprovação humana. |
 | **Provenance** | De qual repositório, workflow e commit a imagem veio. | Que o código é seguro ou que todos os controles foram executados. |
 | **SBOM** | Quais componentes estão na **base** publicada. | O que sua aplicação acrescenta: suas dependências não aparecem no SBOM da base. |
 
-Essas evidências se referem ao **digest do índice da base**, não à imagem final da sua aplicação. Scan, SBOM e assinatura da imagem final são feitos pela esteira da squad.
-
-Se a política do seu time exige consumo auditado, verifique a assinatura e a provenance do digest antes de usá-lo e fixe esse mesmo digest no build. O [exemplo de consumo auditado](https://github.com/alric-corp/alric-containers-image-base/tree/develop/examples/audited-consumer) mostra o fluxo completo em uma esteira.
+Essas evidências se referem à **imagem base publicada**, não à imagem final da sua aplicação. Scan, SBOM e assinatura da imagem final são feitos pela esteira da squad.
 
 **CVE** é o identificador de uma vulnerabilidade conhecida. **Trivy** é o scanner: identifica vulnerabilidades segundo a política configurada, mas não aplica correções. Outros termos estão no [glossário](../referencia/glossario.md).
 

@@ -13,7 +13,7 @@ Ao partir de uma distribuição genérica, o time também precisa decidir quais 
 | Sem uma base comum | Com Image Base |
 | --- | --- |
 | Cada squad escolhe e adapta sua fundação. | Existe um catálogo comum de runtimes e variantes. |
-| Certificados e componentes básicos seguem estratégias diferentes. | A plataforma mantém o contrato da base e sua configuração de confiança. |
+| Certificados e componentes básicos seguem estratégias diferentes. | A plataforma mantém o contrato da base e sua integração de confiança. |
 | Ferramentas de compilação podem acabar no container final. | O modelo separa a construção da aplicação da execução. |
 | A origem e o conteúdo da base exigem controles próprios. | A base é publicada com identidade e evidências verificáveis. |
 
@@ -41,7 +41,7 @@ flowchart LR
 | **Manutenção centralizada da base** | Você não repete a composição do runtime e dos componentes básicos em cada projeto. |
 | **Menos componentes desnecessários** | Shell, gerenciador de pacotes e ferramentas de compilação ficam fora da imagem final. |
 | **Correções disponibilizadas pela plataforma** | Novas versões da base incorporam as correções disponíveis; sua aplicação as recebe ao ser reconstruída com a base atualizada. |
-| **Confiança TLS padronizada** | O trust store da base é configurado no build e testado em Java, Go, .NET, Node.js e Python, sem ajuste no Dockerfile. |
+| **Certificados padronizados** | A integração de confiança da base deixa de ser uma solução improvisada em cada Dockerfile. |
 | **Duas arquiteturas** | As bases contemplam `linux/amd64` e `linux/arm64`; sua aplicação ainda precisa ser construída e testada para a arquitetura de destino. |
 | **Testes além do scan** | Os contratos verificam execução, versão, usuário do processo, filesystem e confiança TLS em cada família. |
 | **Conteúdo e origem verificáveis** | Cada base é publicada com assinatura, SBOM e provenance. |

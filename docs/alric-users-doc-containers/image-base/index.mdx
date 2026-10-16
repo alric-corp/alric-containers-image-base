@@ -28,23 +28,23 @@ Uma base mínima e verificável para a imagem da sua aplicação. O Containers P
 
 ## Exemplo mínimo {#exemplo-minimo}
 
-Aplicação Go 1.26, a referência principal do catálogo: o binário é compilado na variante `-dev` e copiado para o runtime.
+Aplicação Go 1.26: o binário é compilado na variante `-dev` e copiado para o runtime.
 
 ```dockerfile title="Dockerfile"
-FROM <registry-image-base>/image-base-go1-26-dev:stable AS build
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-go1-26-dev:stable AS build
 ENV HOME=/tmp CGO_ENABLED=0
 WORKDIR /app
 COPY --chown=10000:10000 . .
 RUN go build -trimpath -o /app/servidor .
 
-FROM <registry-image-base>/image-base-go1-26:stable
+FROM 758421218117.dkr.ecr.sa-east-1.amazonaws.com/image-base-go1-26:stable
 COPY --from=build --chown=10000:10000 /app/servidor /app/servidor
 ENTRYPOINT ["/app/servidor"]
 ```
 
-- `<registry-image-base>` é o endereço do registry de Image Base do seu ambiente, configurado na esteira da squad. Veja [referência da imagem](./como-utilizar/dockerfile.mdx#referencia-da-imagem).
+- O `FROM` aponta direto para o registry corporativo de Image Base. O acesso é feito pela esteira: você não precisa de credenciais nem de `docker pull` local. Veja [referência da imagem](./como-utilizar/dockerfile.mdx#referencia-da-imagem).
 - O estágio final roda como usuário não-root (UID 10000) e não tem shell: por isso o `ENTRYPOINT` usa o formato de lista.
-- `:stable` acompanha as atualizações da base. Para builds reproduzíveis, [fixe o digest](./como-utilizar/dockerfile.mdx#fixar-digest).
+- Use sempre a tag `stable`: ela aponta para a versão atual da base disponibilizada pelo Containers Products.
 
 ## Próximos passos {#proximos-passos}
 
@@ -56,5 +56,5 @@ ENTRYPOINT ["/app/servidor"]
 | Publicar no EKS ou no ECS | [Amazon EKS](./como-utilizar/eks.md) · [Amazon ECS](./como-utilizar/ecs.md) |
 | Diagnosticar uma falha | [Diagnóstico por sintoma](./troubleshooting/index.md) |
 | Receber correções de segurança | [Atualizações e CVEs](./seguranca/atualizacoes.md) |
-| Saber o que é da plataforma e o que é da squad | [Responsabilidades](./seguranca/responsabilidades.md) |
+| Saber o que é da plataforma e o que é da squad | [Responsabilidades](./referencia/responsabilidades.md) |
 | Avaliar a adoção pelo time | [Por que usar Image Base](./por-que-usar.md) |

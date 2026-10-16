@@ -1,14 +1,16 @@
 ---
 title: Certificados e HTTPS
 sidebar_label: Certificados e HTTPS
-description: Como a base configura a confiança TLS em cada linguagem, a situação das CAs corporativas e como investigar erros de certificado sem desabilitar validações.
+description: O CA bundle corporativo da base, como cada linguagem lê a confiança TLS e como investigar erros de certificado sem desabilitar validações.
 ---
 
 Uma **CA** (autoridade certificadora) é uma raiz ou intermediária de confiança usada na validação de certificados. **TLS** protege conexões como HTTPS. O **trust store** é o conjunto de autoridades que o cliente aceita.
 
 ## O que a base configura {#trust-store}
 
-A base traz um bundle de CAs em `/etc/ssl/certs/ca-certificates.crt`, e os contratos da plataforma validam HTTPS em Java, Go, .NET, Node.js e Python usando a confiança instalada na imagem, sem nenhuma configuração no Dockerfile. Um servidor com CA desconhecida deve ser rejeitado.
+A base já inclui o **CA bundle do Itaú**, com as autoridades necessárias às aplicações corporativas: você não precisa configurar certificados manualmente. Isso não significa confiar em qualquer servidor interno: a cadeia apresentada precisa ser válida, corresponder ao hostname e estar coberta pelas autoridades aprovadas.
+
+O bundle fica em `/etc/ssl/certs/ca-certificates.crt`, e os contratos da plataforma validam HTTPS em Java, Go, .NET, Node.js e Python usando a confiança instalada na imagem, sem nenhuma configuração no Dockerfile.
 
 | Linguagem | Onde a confiança é lida |
 | --- | --- |
@@ -19,13 +21,7 @@ A base traz um bundle de CAs em `/etc/ssl/certs/ca-certificates.crt`, e os contr
 
 Não aplique uma única variável de ambiente a todas as linguagens esperando comportamento idêntico. Uma aplicação que configura um trust store próprio, por exemplo com `-Djavax.net.ssl.trustStore`, deixa de usar o da base.
 
-## CAs corporativas {#cas-corporativas}
-
-:::warning Situação atual
-As imagens publicadas confiam nas autoridades **públicas** do bundle padrão. A base já tem o mecanismo para incluir CAs corporativas aprovadas, mas a fonte e a lista corporativas ainda dependem de aprovação de PKI e Segurança. Até lá, uma aplicação que chama serviços com certificado emitido por CA corporativa pode falhar na validação TLS: valide antes de migrar e, se for o seu caso, [acione o suporte](../suporte.md).
-:::
-
-A plataforma integra CAs aprovadas, mas não é a autoridade emissora delas. Incluir uma CA não faz o cliente confiar em qualquer servidor interno: a cadeia apresentada precisa ser válida, corresponder ao hostname e estar coberta pelas autoridades aprovadas.
+A plataforma integra as CAs aprovadas, em conjunto com a PKI, mas não é a autoridade emissora delas.
 
 ## Investigar erros TLS {#diagnostico}
 
