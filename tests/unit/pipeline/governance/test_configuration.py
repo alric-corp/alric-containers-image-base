@@ -281,7 +281,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(dev['frameworks'], ['go1-26', 'go1-26-dev'])
         self.assertEqual(hom['frameworks'], dev['frameworks'])
         self.assertEqual((dev['soak_hours'], hom['soak_hours']), (0, 6))
-        self.assertEqual((dev['enabled'], hom['enabled']), (True, False))
+        self.assertEqual((dev['enabled'], hom['enabled']), (True, True))
         self.assertNotIn('minimum_soak_hours', self.cfg)
         self.assertNotIn('promotion_authorized', self.cfg)
 
