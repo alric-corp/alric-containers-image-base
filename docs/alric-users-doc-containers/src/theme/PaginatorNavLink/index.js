@@ -1,30 +1,22 @@
 import React from "react";
 import clsx from "clsx";
-import './index.css';
-import { useHistory } from "@docusaurus/router";
+import Link from "@docusaurus/Link";
+import "./index.css";
 
+// Link real (não botão): permite abrir em nova aba e é anunciado como link.
 export default function PaginatorNavLink(props) {
   const { permalink, title, subLabel, isNext } = props;
-  const ariaLabel = isNext ? 'Ir para próxima página' : 'Ir para página anterior';
-  const history = useHistory();
-
-  const navigateToPage = () => {
-    history.push(permalink);
-  };
 
   return (
-    <button
-      aria-label={ariaLabel + ' ' + title}
-      type="button"
-      onClick={navigateToPage}
+    <Link
       className={clsx(
-        'botoes-rodape',
-        'paginator-nav-link',
-        isNext ? 'pagination-nav__link--next' : 'pagination-nav__link--prev'
+        "pagination-nav__link",
+        isNext ? "pagination-nav__link--next" : "pagination-nav__link--prev"
       )}
+      to={permalink}
     >
-      {subLabel && <p className='paginator-nav-link__sub-label'>{subLabel}</p>}
-      {title}
-    </button>
+      {subLabel && <div className="pagination-nav__sublabel">{subLabel}</div>}
+      <div className="pagination-nav__label">{title}</div>
+    </Link>
   );
 }

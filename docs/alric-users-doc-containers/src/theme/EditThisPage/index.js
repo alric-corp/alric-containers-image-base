@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "@docusaurus/Link";
 import { ThemeClassNames } from "@docusaurus/theme-common";
 import IconEdit from "@theme/Icon/Edit";
 import "./index.css";
@@ -6,16 +7,9 @@ import "./index.css";
 export default function EditThisPage({ editUrl }) {
   return (
     <div className="botoes-rodape">
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          window.location.href = editUrl;
-        }}
-        className={ThemeClassNames.common.editThisPage}
-        type="button"
-      >
+      <Link to={editUrl} className={ThemeClassNames.common.editThisPage}>
         <IconEdit /> Editar esta página
-      </button>
+      </Link>
     </div>
   );
 }
