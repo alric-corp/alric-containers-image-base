@@ -5,13 +5,6 @@ seguida, cada domínio indica o documento canônico (primeira linha da tabela) e
 os complementares. Documentos históricos ficam no fim, com data ou baseline, e
 não descrevem a operação vigente.
 
-## Portal para consumidores
-
-O portal Docusaurus foi movido para o repositório privado
-[alric-containers-docs-external](https://github.com/alric-corp/alric-containers-docs-external).
-Acesso exige permissão no repositório. O código do portal e os comandos de build
-ficam na raiz do novo repositório; os contratos e runbooks da fábrica continuam aqui.
-
 ## Estado atual
 
 Baseline: `develop` em `a90f57623aea70482e7fc1b6396473316a0c8182`, leituras de
@@ -31,6 +24,13 @@ em `01e95afd064193366be790eeb193e56a4a0ff572`.
 | SBOM Analytics | Prova hospedada S3 + Athena encerrada (rodada `sbom-analytics-v1-r1`). O workgroup e o database históricos ainda existem, sem uso operacional; a remoção depende de autorização | [Operação](sbom-analytics-operations.md), [migração](sbom-analytics-migration.md) |
 | HGC-04 | `TEST_ONLY`: núcleo offline testado, sem custódia produtiva integrada | [Custódia de evidências](hgc04-evidence-custody.md) |
 | Corporativo | Não homologado; o LAB é a implementação de referência | [Corporate Production Readiness](corporate-production-readiness.md) |
+
+## Portal para consumidores
+
+O portal Docusaurus foi movido para o repositório privado
+[alric-containers-docs-external](https://github.com/alric-corp/alric-containers-docs-external).
+Acesso exige permissão no repositório. O código do portal e os comandos de build
+ficam na raiz do novo repositório; os contratos e runbooks da fábrica continuam aqui.
 
 ## Produto e catálogo
 
