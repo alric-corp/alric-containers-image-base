@@ -1,7 +1,7 @@
 # Explicit SDK environment for the personal deployment; corporate installs these through its approved channel.
 PyYAML==6.0.3
 pyarrow==26.0.0
-boto3==1.43.111
+boto3==1.43.114
 botocore==1.43.111
 s3transfer==0.19.2
 jmespath==1.0.1
